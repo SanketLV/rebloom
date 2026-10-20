@@ -59,6 +59,8 @@ export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: B
   // The bar's layout box includes the raised part of the Scan circle, so the
   // whole circle is tappable (Android drops touches outside a parent's bounds).
   // The visible bar is drawn underneath, starting SCAN_LIFT down.
+  // Trade-off: screens end SCAN_LIFT above the visible bar, so scroll content
+  // stops there instead of sliding under it. Revisit with the first long list.
   return (
     <View
       testID="tab-bar"
