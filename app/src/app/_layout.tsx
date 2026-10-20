@@ -1,18 +1,49 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { useFonts } from 'expo-font';
+import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { fontAssets, fonts } from '@/theme/fonts';
+import { colors } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+// Light only until the Night Greenhouse dark mode exists.
+const theme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: colors.bg,
+    card: colors.surface,
+    text: colors.text,
+    border: colors.line,
+    primary: colors.primary,
+  },
+};
+
+export default function RootLayout() {
+  const [loaded, error] = useFonts(fontAssets);
+  const ready = loaded || !!error;
+
+  useEffect(() => {
+    // On a font error, carry on with system fonts rather than block the app.
+    if (ready) SplashScreen.hideAsync();
+  }, [ready]);
+
+  if (!ready) return null;
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+    <ThemeProvider value={theme}>
+      <StatusBar style="dark" />
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal', headerShown: false }} />
+        <Stack.Screen
+          name="settings"
+          options={{ title: 'Settings', headerTitleStyle: { fontFamily: fonts.body700 }, headerTintColor: colors.text }}
+        />
+      </Stack>
     </ThemeProvider>
   );
 }
