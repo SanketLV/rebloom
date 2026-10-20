@@ -32,7 +32,7 @@ export function Placeholder({ title, artboard, action, insetTop = true }: Props)
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.xl - spacing.xs, gap: spacing.sm },
+  content: { padding: spacing.lg, gap: spacing.sm },
   header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
   title: { flexShrink: 1, color: colors.text },
   note: { color: colors.textSecondary },

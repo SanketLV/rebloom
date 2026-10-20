@@ -41,7 +41,13 @@ export default function RootLayout() {
         <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal', headerShown: false }} />
         <Stack.Screen
           name="settings"
-          options={{ title: 'Settings', headerTitleStyle: { fontFamily: fonts.body700 }, headerTintColor: colors.text }}
+          options={{
+            title: 'Settings',
+            // Without this, iOS labels the back button with the hidden "(tabs)" group name.
+            headerBackTitle: 'Back',
+            headerTitleStyle: { fontFamily: fonts.body700 },
+            headerTintColor: colors.text,
+          }}
         />
       </Stack>
     </ThemeProvider>

@@ -1,10 +1,11 @@
+import type { ReactNode } from 'react';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 // Stroke icons from the design canvas. Decorative: the pressable that holds
 // an icon carries the accessibility label.
 type IconProps = { color: string; size?: number; strokeWidth?: number };
 
-function Icon({ color, size = 24, strokeWidth = 2, children }: IconProps & { children: React.ReactNode }) {
+function Icon({ color, size = 24, strokeWidth = 2, children }: IconProps & { children: ReactNode }) {
   return (
     <Svg
       width={size}

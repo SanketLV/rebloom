@@ -54,15 +54,20 @@ export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: B
     </Pressable>
   );
 
-  const middle = Math.ceil(tabs.length / 2);
+  const [first, ...rest] = tabs;
 
+  // The bar's layout box includes the raised part of the Scan circle, so the
+  // whole circle is tappable (Android drops touches outside a parent's bounds).
+  // The visible bar is drawn underneath, starting SCAN_LIFT down.
   return (
     <View
       testID="tab-bar"
+      accessibilityRole="tablist"
       style={[styles.bar, { paddingBottom: spacing.sm + Math.max(insets.bottom, spacing.sm) }]}>
-      {tabs.slice(0, middle)}
+      <View testID="tab-bar-background" pointerEvents="none" style={styles.background} />
+      {first}
       {scan}
-      {tabs.slice(middle)}
+      {rest}
     </View>
   );
 }
@@ -72,10 +77,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'flex-end',
-    paddingTop: spacing.sm,
     paddingHorizontal: spacing.lg,
+  },
+  background: {
+    position: 'absolute',
+    top: SCAN_LIFT,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: colors.surface,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 1,
     borderTopColor: colors.line,
   },
   item: {
@@ -88,7 +99,6 @@ const styles = StyleSheet.create({
     width: SCAN_SIZE,
     height: SCAN_SIZE,
     borderRadius: SCAN_SIZE / 2,
-    marginTop: -SCAN_LIFT,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary,

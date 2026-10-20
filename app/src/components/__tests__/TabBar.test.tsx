@@ -71,6 +71,12 @@ test('a prevented tabPress does not navigate', async () => {
   expect(navigateToTab).not.toHaveBeenCalled();
 });
 
+test('Scan circle sits inside the bar layout, above the visible background', async () => {
+  await renderBar();
+  expect(screen.getByTestId('tab-bar')).toHaveProp('accessibilityRole', 'tablist');
+  expect(screen.getByTestId('tab-bar-background')).toHaveStyle({ top: 28 });
+});
+
 test('bottom padding clears the home indicator', async () => {
   await renderBar({ bottomInset: 34 });
   expect(screen.getByTestId('tab-bar')).toHaveStyle({ paddingBottom: 42 });
