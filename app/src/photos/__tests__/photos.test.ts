@@ -1,7 +1,15 @@
 import { CACHE, DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
 import { mockManipulator } from '@/testing/nativeMocks';
 
-import { deletePhoto, MAX_SIDE, persistPhoto, photoUri, preparePhoto, sweepTempPhotos } from '../photos';
+import {
+  deleteCachedPhoto,
+  deletePhoto,
+  MAX_SIDE,
+  persistPhoto,
+  photoUri,
+  preparePhoto,
+  sweepTempPhotos,
+} from '../photos';
 
 const camera = (width: number, height: number, name = 'shot.jpg') => {
   const uri = `${CACHE}/Camera/${name}`;
@@ -102,4 +110,13 @@ test('sweepTempPhotos empties cache/scans and touches nothing else', async () =>
 
 test('sweepTempPhotos is fine when there is nothing to sweep', () => {
   expect(() => sweepTempPhotos()).not.toThrow();
+});
+
+test('deleteCachedPhoto deletes cache files only', () => {
+  fakeFs.put(`${CACHE}/Camera/a.jpg`);
+  fakeFs.put(`${DOCUMENT}/photos/keep.jpg`);
+  deleteCachedPhoto(`${CACHE}/Camera/a.jpg`);
+  deleteCachedPhoto(`${DOCUMENT}/photos/keep.jpg`);
+  deleteCachedPhoto('content://media/external/images/1');
+  expect(fakeFs.uris()).toEqual([`${DOCUMENT}/photos/keep.jpg`]);
 });

@@ -48,8 +48,14 @@ export async function preparePhoto(sourceUri: string, scanId: string): Promise<P
     throw error;
   }
 
-  if (isInCache(sourceUri) && sourceUri !== target.uri) deletePhoto(sourceUri);
+  if (sourceUri !== target.uri) deleteCachedPhoto(sourceUri);
   return { uri: target.uri, width: output.width, height: output.height, sizeBytes: target.size };
+}
+
+// Deletes a photo only if it's an app-cache file, so a user's own photo
+// (e.g. a gallery original) can never be deleted.
+export function deleteCachedPhoto(uri: string): void {
+  if (isInCache(uri)) deletePhoto(uri);
 }
 
 // Copies a temp photo to permanent storage. `created` is false when an earlier
