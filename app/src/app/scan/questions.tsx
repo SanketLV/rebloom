@@ -1,5 +1,5 @@
-import { Redirect, useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import { BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,6 +17,8 @@ export default function QuestionsScreen() {
   const session = useScanSession();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
+  // Set once "See my diagnosis" navigates, so a double tap opens one Result.
+  const leaving = useRef(false);
 
   const { diagnosis, answers, photo } = session.state;
   const question = QUESTIONS[step];
@@ -35,6 +37,13 @@ export default function QuestionsScreen() {
     }, [step]),
   );
 
+  // Back on Result lands here again: allow "See my diagnosis" once more.
+  useFocusEffect(
+    useCallback(() => {
+      leaving.current = false;
+    }, []),
+  );
+
   if (!diagnosis) return <Redirect href="/scan" />;
 
   const next = () => {
@@ -42,9 +51,13 @@ export default function QuestionsScreen() {
       setStep(step + 1);
       return;
     }
+    if (leaving.current) return;
+    leaving.current = true;
     session.finish();
     router.push('/scan/result');
   };
+
+  const back = () => (step === 0 ? router.back() : setStep(step - 1));
 
   const notSure = () => {
     session.answer(question.id, 'not_sure');
@@ -53,24 +66,16 @@ export default function QuestionsScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
+      {/* The iOS back swipe would skip the earlier questions; only allow it on the first. */}
+      <Stack.Screen options={{ gestureEnabled: step === 0 }} />
       <View style={styles.top}>
-        {step === 0 ? (
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Back to camera"
-            style={styles.back}>
-            <ChevronLeftIcon color={colors.text} />
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={() => setStep(step - 1)}
-            accessibilityRole="button"
-            accessibilityLabel="Previous question"
-            style={styles.back}>
-            <ChevronLeftIcon color={colors.text} />
-          </Pressable>
-        )}
+        <Pressable
+          onPress={back}
+          accessibilityRole="button"
+          accessibilityLabel={step === 0 ? 'Back to camera' : 'Previous question'}
+          style={styles.back}>
+          <ChevronLeftIcon color={colors.text} />
+        </Pressable>
         <View
           style={styles.bars}
           accessible

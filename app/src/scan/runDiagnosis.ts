@@ -27,7 +27,8 @@ type RunInput = { scanId: string; sourceUri: string | null; prepared: PreparedPh
 type RunOptions = {
   diagnoser: Diagnoser;
   signal?: AbortSignal;
-  onStep?: (step: Step) => void;
+  // `photo` is the prepared photo: from 'prepared' on, the caller owns that file.
+  onStep?: (step: Step, photo: PreparedPhoto) => void;
   timeoutMs?: number;
   minMs?: number;
 };
@@ -64,7 +65,7 @@ export async function runDiagnosis(
       }
       photo = prepared;
     }
-    onStep?.('prepared');
+    onStep?.('prepared', photo);
 
     let diagnosis: Diagnosis;
     try {
@@ -72,8 +73,8 @@ export async function runDiagnosis(
     } catch (cause) {
       throw new DiagnosisError('diagnose', photo, { cause });
     }
-    if (signal?.aborted) throw new DiagnosisError('aborted', photo);
-    onStep?.('diagnosed');
+    if (gone()) throw new DiagnosisError('aborted', photo);
+    onStep?.('diagnosed', photo);
     return { photo, diagnosis };
   };
 

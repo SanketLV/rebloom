@@ -508,3 +508,41 @@ describe('end to end', () => {
     expect(await rows('plants')).toHaveLength(1);
   });
 });
+
+describe('review round 1', () => {
+  test('a double tap on "See my diagnosis" opens one Result', async () => {
+    const view = await reachQuestions();
+    await answerQuestion('Every 2–3 days');
+    await answerQuestion('Bright, indirect light');
+    await fireEvent.press(screen.getByRole('radio', { name: 'Repotted it' }));
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'See my diagnosis' }));
+      fireEvent.press(screen.getByRole('button', { name: 'See my diagnosis' }));
+    });
+    await waitFor(() => expect(view).toHavePathname('/scan/result'));
+    expect(scanStack(view)?.filter((name) => name === 'result')).toHaveLength(1);
+  });
+
+  test('Analyzing shows the prepared photo, not the deleted full-size one', async () => {
+    mockDiagnose.mockReturnValue(new Promise(() => {}));
+    await shoot();
+    await waitFor(() => expect(fakeFs.under(`${CACHE}/scans`)).toHaveLength(1));
+    const [prepared] = fakeFs.under(`${CACHE}/scans`);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Your photo being analyzed').props.source).toEqual({
+        uri: prepared,
+      }),
+    );
+  });
+
+  test('Back after the photo is prepared leaves no temp photo once the scan closes', async () => {
+    mockDiagnose.mockReturnValue(new Promise(() => {}));
+    const view = await shoot();
+    await waitFor(() => expect(fakeFs.under(`${CACHE}/scans`)).toHaveLength(1));
+    await act(async () => router.back());
+    expect(view).toHavePathname('/scan');
+    await act(async () => router.dismissTo('/'));
+    await waitFor(() => expect(view).toHavePathname('/'));
+    expect(fakeFs.under(CACHE)).toEqual([]);
+  });
+});

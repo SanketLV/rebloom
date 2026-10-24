@@ -146,3 +146,12 @@ describe('taking a photo', () => {
     expect(screen.getByText('Runs on your phone · works offline')).toBeOnTheScreen();
   });
 });
+
+test('cancelling the gallery while the camera is still blocked shows the permission sheet again', async () => {
+  mockCamera.setPermission('denied', false);
+  mockPicker.next = undefined;
+  await openScan();
+  await fireEvent.press(screen.getByRole('button', { name: 'Choose a photo instead' }));
+  expect(mockPicker.launch).toHaveBeenCalled();
+  expect(await screen.findByText('Rebloom needs your camera to scan leaves')).toBeOnTheScreen();
+});

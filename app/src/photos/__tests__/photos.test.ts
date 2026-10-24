@@ -4,6 +4,7 @@ import { mockManipulator } from '@/testing/nativeMocks';
 import {
   deleteCachedPhoto,
   deletePhoto,
+  isInAppCache,
   MAX_SIDE,
   persistPhoto,
   photoUri,
@@ -125,4 +126,22 @@ test('deleteCachedPhoto deletes cache files only', () => {
   deleteCachedPhoto(`${DOCUMENT}/photos/keep.jpg`);
   deleteCachedPhoto('content://media/external/images/1');
   expect(fakeFs.uris()).toEqual([`${DOCUMENT}/photos/keep.jpg`]);
+});
+
+test('a copy that fails half-way leaves no partial photo behind', async () => {
+  const photo = await preparePhoto(camera(4000, 3000), 'scan-1');
+  fakeFs.failNext('copy', new Error('disk full'), { partial: true });
+  await expect(persistPhoto(photo.uri, 'scan-1')).rejects.toThrow('disk full');
+  expect(fakeFs.has(`${DOCUMENT}/photos/scan-1.jpg`)).toBe(false);
+});
+
+test.each([
+  [`${CACHE}/Camera/a.jpg`, true],
+  [`${CACHE}/`, false],
+  [`${DOCUMENT}/photos/a.jpg`, false],
+  [`${CACHE}/../document/photos/a.jpg`, false],
+  [`${CACHE}/Camera/./../../document/a.jpg`, false],
+  ['content://media/external/images/1', false],
+])('isInAppCache(%s) is %s', (uri, expected) => {
+  expect(isInAppCache(uri)).toBe(expected);
 });

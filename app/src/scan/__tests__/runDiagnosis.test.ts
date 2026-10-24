@@ -163,3 +163,39 @@ test('a photo prepared after cancelling is deleted', async () => {
   expect(mockManipulator.manipulate).toHaveBeenCalledTimes(2);
   expect(fakeFs.under(`${CACHE}/scans`)).toEqual([]);
 });
+
+test('the "prepared" step hands over the prepared photo before diagnosing', async () => {
+  const handed: (PreparedPhoto | undefined)[] = [];
+  let diagnosedWith: PreparedPhoto | undefined;
+  const diagnoser: Diagnoser = {
+    id: 'x',
+    diagnose: async (photo) => {
+      diagnosedWith = photo;
+      expect(handed).toHaveLength(1);
+      return result;
+    },
+  };
+  await runDiagnosis(
+    { scanId: 's1', sourceUri: shot(), prepared: null },
+    { ...fast, diagnoser, onStep: (step, photo) => step === 'prepared' && handed.push(photo) },
+  );
+  expect(handed[0]).toMatchObject({ uri: `${CACHE}/scans/s1.jpg` });
+  expect(diagnosedWith).toBe(handed[0]);
+});
+
+test('a run that already timed out reports no further steps', async () => {
+  jest.useFakeTimers();
+  let finish!: (d: Diagnosis) => void;
+  const steps: string[] = [];
+  const diagnoser: Diagnoser = { id: 'x', diagnose: () => new Promise((r) => (finish = r)) };
+  const run = runDiagnosis(
+    { scanId: 's1', sourceUri: shot(), prepared: null },
+    { diagnoser, minMs: 0, onStep: (s) => steps.push(s) },
+  ).catch((e) => e);
+  await jest.advanceTimersByTimeAsync(10_000);
+  expect((await run).kind).toBe('timeout');
+  finish(result);
+  await jest.advanceTimersByTimeAsync(0);
+  expect(steps).toEqual(['prepared']);
+  jest.useRealTimers();
+});

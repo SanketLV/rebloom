@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { useState } from 'react';
+import { useEffect } from 'react';
 
 import { sweepTempPhotos } from '@/photos/photos';
 import { ScanSessionProvider } from '@/scan/session';
@@ -7,12 +7,11 @@ import { ScanSessionProvider } from '@/scan/session';
 // The scan flow: camera → analyzing → questions → result, inside the
 // full-screen modal. The session lives exactly as long as this layout.
 export default function ScanLayout() {
-  // Sweep before anything renders: no photo of this scan exists yet, so a
-  // leftover from a killed app or a late write is all it can hit.
-  useState(() => {
+  // On open, before the user can take a photo: no photo of this scan exists
+  // yet, so a leftover from a killed app or a late write is all it can hit.
+  useEffect(() => {
     sweepTempPhotos();
-    return true;
-  });
+  }, []);
 
   return (
     <ScanSessionProvider>

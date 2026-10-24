@@ -111,3 +111,12 @@ test('"Not now" closes the sheet', async () => {
   await fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
   expect(onClose).toHaveBeenCalled();
 });
+
+test('starting a new room clears the room picked before, so a blank new room saves no room', async () => {
+  const { view, onSave } = renderSheet();
+  await view;
+  await fireEvent.press(screen.getByRole('button', { name: 'Bedroom' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'New room' }));
+  await fireEvent.press(saveButton());
+  expect(onSave).toHaveBeenCalledWith({ name: 'My plant', room: null });
+});

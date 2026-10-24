@@ -13,7 +13,18 @@ const scansDir = () => new Directory(Paths.cache, 'scans');
 const photosDir = () => new Directory(Paths.document, 'photos');
 
 const withoutTrailingSlash = (uri: string) => uri.replace(/\/+$/, '');
-const isInCache = (uri: string) => uri.startsWith(`${withoutTrailingSlash(Paths.cache.uri)}/`);
+
+// True only for a file inside the app cache. Any "." or ".." segment is
+// refused outright, so a crafted path can't climb out of the cache.
+export function isInAppCache(uri: string): boolean {
+  const prefix = `${withoutTrailingSlash(Paths.cache.uri)}/`;
+  if (!uri.startsWith(prefix)) return false;
+  const rest = uri.slice(prefix.length).split('/');
+  return (
+    rest.length > 0 &&
+    rest.every((segment) => segment !== '' && segment !== '.' && segment !== '..')
+  );
+}
 
 // Best-effort delete: cleanup must never turn a success into an error.
 export function deletePhoto(uri: string): void {
@@ -57,7 +68,7 @@ export async function preparePhoto(sourceUri: string, scanId: string): Promise<P
 // Deletes a photo only if it's an app-cache file, so a user's own photo
 // (e.g. a gallery original) can never be deleted.
 export function deleteCachedPhoto(uri: string): void {
-  if (isInCache(uri)) deletePhoto(uri);
+  if (isInAppCache(uri)) deletePhoto(uri);
 }
 
 // Copies a temp photo to permanent storage. `created` is false when an earlier
@@ -71,7 +82,13 @@ export async function persistPhoto(
   const target = new File(dir, `${scanId}.jpg`);
   if (target.exists) return { path, created: false };
   if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
-  await new File(tempUri).copy(target);
+  try {
+    await new File(tempUri).copy(target);
+  } catch (error) {
+    // A half-written copy would look like a stored photo on the next try.
+    deletePhoto(target.uri);
+    throw error;
+  }
   return { path, created: true };
 }
 

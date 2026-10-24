@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { launchImageLibraryAsync } from 'expo-image-picker';
-import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useIsFocused, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -43,12 +43,9 @@ export default function CameraScreen() {
     return () => subscription.remove();
   }, [getPermission]);
 
-  // The preview stops while another scan screen is on top; wait for it again on return.
-  useFocusEffect(
-    useCallback(() => {
-      return () => setReady(false);
-    }, []),
-  );
+  // `ready` is not reset when another scan screen covers the preview: if
+  // onCameraReady didn't fire again on return, the shutter would stay dead.
+  // A shot taken before the camera is back fails and shows the retry message.
 
   async function takePhoto() {
     const picture = await camera.current?.takePictureAsync();
@@ -65,7 +62,11 @@ export default function CameraScreen() {
     setFailed(false);
     try {
       const uri = source === 'camera' ? await takePhoto() : await pickPhoto();
-      if (!uri) return;
+      if (!uri) {
+        // Cancelled the gallery with the camera still off: offer the camera again.
+        if (!granted) setSheetClosed(false);
+        return;
+      }
       session.startScan(uri);
       router.push('/scan/analyzing');
     } catch {

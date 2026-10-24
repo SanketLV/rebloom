@@ -7,6 +7,7 @@ import { hiddenBehindSheet } from '@/components/BottomSheet';
 import { CheckIcon, LockIcon } from '@/components/icons';
 import { isDemoDiagnoser, isLowConfidence } from '@/diagnosis/confidence';
 import { diagnoser } from '@/diagnosis/engine';
+import type { PreparedPhoto } from '@/diagnosis/types';
 import { DemoTag } from '@/scan/components/DemoTag';
 import { ErrorState } from '@/scan/components/ErrorState';
 import { LowConfidenceSheet } from '@/scan/components/LowConfidenceSheet';
@@ -33,7 +34,12 @@ export default function AnalyzingScreen() {
   const hasPhoto = state.sourceUri !== null || state.photo !== null;
 
   const run = useEffectEvent((signal: AbortSignal) => {
-    const onStep = (step: Step) => setDone(step === 'prepared' ? 1 : 2);
+    const onStep = (step: Step, photo: PreparedPhoto) => {
+      // The session owns the prepared photo from here on: it shows on screen
+      // and gets deleted if the user leaves, even mid-diagnosis.
+      if (step === 'prepared') session.setPrepared(photo);
+      setDone(step === 'prepared' ? 1 : 2);
+    };
     runDiagnosis(
       { scanId: state.scanId, sourceUri: state.sourceUri, prepared: state.photo },
       { diagnoser, signal, onStep },
@@ -59,9 +65,8 @@ export default function AnalyzingScreen() {
     const controller = new AbortController();
     run(controller.signal);
     return () => controller.abort();
-    // `hasPhoto` only gates the first run; a retry is driven by `attempt`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attempt]);
+    // `hasPhoto` never changes while this screen is up; `attempt` drives retries.
+  }, [attempt, hasPhoto]);
 
   if (!hasPhoto) return <Redirect href="/scan" />;
 

@@ -7,7 +7,8 @@ type Op = 'copy' | 'delete' | 'move';
 
 const files = new Map<string, Entry>();
 const dirs = new Set<string>();
-let failures: { op: Op; error: Error }[] = [];
+// `partial`: the operation writes a truncated target before it fails, like a full disk.
+let failures: { op: Op; error: Error; partial?: boolean }[] = [];
 
 export const CACHE = 'file:///cache';
 export const DOCUMENT = 'file:///document';
@@ -22,10 +23,11 @@ function join(parts: Part[]): string {
   return `file:///${path}`;
 }
 
-function takeFailure(op: Op) {
+function takeFailure(op: Op, onPartial?: () => void) {
   const index = failures.findIndex((f) => f.op === op);
   if (index === -1) return;
-  const [{ error }] = failures.splice(index, 1);
+  const [{ error, partial }] = failures.splice(index, 1);
+  if (partial) onPartial?.();
   throw error;
 }
 
@@ -52,11 +54,11 @@ export class FakeFile {
     files.delete(this.uri);
   }
   async copy(destination: FakeFile | FakeDirectory) {
-    takeFailure('copy');
     const entry = files.get(this.uri);
-    if (!entry) throw new Error(`File not found: ${this.uri}`);
     const target =
       destination instanceof FakeDirectory ? join([destination, this.name]) : destination.uri;
+    takeFailure('copy', () => files.set(target, { size: 1 }));
+    if (!entry) throw new Error(`File not found: ${this.uri}`);
     files.set(target, { ...entry });
   }
   async move(destination: FakeFile | FakeDirectory) {
@@ -126,7 +128,7 @@ export const fakeFs = {
   under(prefix: string) {
     return [...files.keys()].filter((uri) => uri.startsWith(prefix)).sort();
   },
-  failNext(op: Op, error = new Error(`${op} failed`)) {
-    failures.push({ op, error });
+  failNext(op: Op, error = new Error(`${op} failed`), { partial = false } = {}) {
+    failures.push({ op, error, partial });
   },
 };

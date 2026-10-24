@@ -86,7 +86,10 @@ export function SaveSheet({ visible, rooms, onSave, onClose }: Props) {
           })}
           {!addingRoom && (
             <Pressable
-              onPress={() => setAddingRoom(true)}
+              onPress={() => {
+                setRoom(null);
+                setAddingRoom(true);
+              }}
               accessibilityRole="button"
               accessibilityLabel="New room"
               style={[styles.chip, styles.newChip]}>
