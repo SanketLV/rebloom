@@ -10,7 +10,10 @@ import { LowConfidenceSheet } from '../LowConfidenceSheet';
 import { PermissionSheet } from '../PermissionSheet';
 import { TipsSheet } from '../TipsSheet';
 
-const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
+const metrics = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 0, left: 0, right: 0, bottom: 0 },
+};
 
 // Promises the app can't keep yet (spec "copy changes").
 const BROKEN_PROMISES = [/second look/i, /blurry/i, /closer look/i, /sent/i, /trial/i, /monstera/i];

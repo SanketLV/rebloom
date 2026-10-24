@@ -19,7 +19,9 @@ export function LowConfidenceSheet({ visible, onRetake, onUseAnyway }: Props) {
         <Text accessibilityRole="header" style={[type.sheetTitle, styles.title]}>
           {TITLE}
         </Text>
-        <Text style={[type.caption, styles.body]}>A sharper photo gives a more confident diagnosis.</Text>
+        <Text style={[type.caption, styles.body]}>
+          A sharper photo gives a more confident diagnosis.
+        </Text>
       </View>
       <PhotoTips />
       <Button label="Retake photo" onPress={onRetake} />

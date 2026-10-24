@@ -4,7 +4,10 @@ import { renderRouter } from 'expo-router/testing-library';
 import { mockCamera } from '@/testing/nativeMocks';
 
 // The real route tree from src/app, with fonts treated as loaded.
-jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), useFonts: () => [true, null] }));
+jest.mock('expo-font', () => ({
+  ...jest.requireActual('expo-font'),
+  useFonts: () => [true, null],
+}));
 
 // Navigation, not permissions, is under test here.
 beforeEach(() => mockCamera.setPermission('granted'));

@@ -7,7 +7,10 @@ import RootLayout from '@/app/_layout';
 import { mockSqlite } from '@/testing/nativeMocks';
 
 let mockFontState: [boolean, Error | null] = [true, null];
-jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), useFonts: () => mockFontState }));
+jest.mock('expo-font', () => ({
+  ...jest.requireActual('expo-font'),
+  useFonts: () => mockFontState,
+}));
 jest.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: jest.fn(() => Promise.resolve()),
   hideAsync: jest.fn(() => Promise.resolve()),
@@ -54,7 +57,9 @@ test('the database is migrated before any screen shows', async () => {
   mockFontState = [true, null];
   await renderRouter({ _layout: RootLayout, index: Child });
   await screen.findByText('child screen');
-  expect(await mockSqlite.db().getFirstAsync('PRAGMA user_version', [])).toEqual({ user_version: 1 });
+  expect(await mockSqlite.db().getFirstAsync('PRAGMA user_version', [])).toEqual({
+    user_version: 1,
+  });
 });
 
 test('a database that fails to open shows a start error with Retry, never a blank app', async () => {

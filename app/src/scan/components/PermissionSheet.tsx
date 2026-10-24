@@ -19,7 +19,14 @@ const FOOTNOTE = "You can change this any time in your phone's Settings.";
 
 // PermissionSheet artboard. Nothing is uploaded, so the copy only says scans
 // run on the phone.
-export function PermissionSheet({ visible, canAskAgain, onAllow, onOpenSettings, onChoosePhoto, onClose }: Props) {
+export function PermissionSheet({
+  visible,
+  canAskAgain,
+  onAllow,
+  onOpenSettings,
+  onChoosePhoto,
+  onClose,
+}: Props) {
   return (
     <BottomSheet visible={visible} label="Camera access" onClose={onClose}>
       <View style={styles.header}>

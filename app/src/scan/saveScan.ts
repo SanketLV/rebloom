@@ -4,7 +4,13 @@ import { deleteStoredPhoto, persistPhoto } from '@/photos/photos';
 import { validateName, validateRoom } from '@/plants/validation';
 import type { Db } from '@/storage/db';
 import { insertPlant } from '@/storage/plantsRepo';
-import { persistScan, replaceFeedback, type ScanInput, type UserGuess, type Verdict } from '@/storage/scansRepo';
+import {
+  persistScan,
+  replaceFeedback,
+  type ScanInput,
+  type UserGuess,
+  type Verdict,
+} from '@/storage/scansRepo';
 
 import type { ScanState } from './session';
 
@@ -39,7 +45,11 @@ function scanInput(state: ScanState, photoPath: string, plantId: string | null):
 // Copies the photo, then runs `write` in one transaction. If the write fails,
 // the copy is removed only when this call made it and no stored scan points
 // at it yet; a photo an earlier save stored is never deleted.
-async function withStoredPhoto(db: Db, state: ScanState, write: (photoPath: string) => Promise<void>): Promise<void> {
+async function withStoredPhoto(
+  db: Db,
+  state: ScanState,
+  write: (photoPath: string) => Promise<void>,
+): Promise<void> {
   assertSavable(state);
   const { path, created } = await persistPhoto(state.photo.uri, state.scanId);
   try {

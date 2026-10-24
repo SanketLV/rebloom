@@ -35,7 +35,9 @@ export async function preparePhoto(sourceUri: string, scanId: string): Promise<P
   if (Math.max(decoded.width, decoded.height) > MAX_SIDE) {
     context.resize(decoded.width >= decoded.height ? { width: MAX_SIDE } : { height: MAX_SIDE });
   }
-  const output = await (await context.renderAsync()).saveAsync({ format: SaveFormat.JPEG, compress: JPEG_QUALITY });
+  const output = await (
+    await context.renderAsync()
+  ).saveAsync({ format: SaveFormat.JPEG, compress: JPEG_QUALITY });
 
   const dir = scansDir();
   if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
@@ -60,7 +62,10 @@ export function deleteCachedPhoto(uri: string): void {
 
 // Copies a temp photo to permanent storage. `created` is false when an earlier
 // save already stored it, so a failed save knows not to delete it.
-export async function persistPhoto(tempUri: string, scanId: string): Promise<{ path: string; created: boolean }> {
+export async function persistPhoto(
+  tempUri: string,
+  scanId: string,
+): Promise<{ path: string; created: boolean }> {
   const path = `photos/${scanId}.jpg`;
   const dir = photosDir();
   const target = new File(dir, `${scanId}.jpg`);

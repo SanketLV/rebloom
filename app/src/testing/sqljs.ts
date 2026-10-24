@@ -5,8 +5,10 @@ import type { Database, SqlJsStatic } from 'sql.js';
 
 import type { Db, SqlValue } from '@/storage/db';
 
+type InitSqlJs = (config?: object) => Promise<SqlJsStatic>;
+// The single-file build has no types or ES module entry of its own.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const initSqlJs: (config?: object) => Promise<SqlJsStatic> = require('sql.js/dist/sql-wasm-inline.js');
+const initSqlJs: InitSqlJs = require('sql.js/dist/sql-wasm-inline.js');
 
 let engine: Promise<SqlJsStatic> | undefined;
 

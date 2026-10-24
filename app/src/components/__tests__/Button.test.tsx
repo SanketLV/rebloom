@@ -20,7 +20,9 @@ test('a busy button is disabled, says so, and ignores presses', async () => {
 });
 
 test('a disabled button can show a different label', async () => {
-  await render(<Button label="Continue" disabledLabel="Pick an answer" disabled onPress={jest.fn()} />);
+  await render(
+    <Button label="Continue" disabledLabel="Pick an answer" disabled onPress={jest.fn()} />,
+  );
   expect(screen.getByRole('button', { name: 'Pick an answer' })).toBeDisabled();
 });
 

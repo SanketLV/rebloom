@@ -71,7 +71,10 @@ test('a failed resize rejects, keeps the source and leaves no scan file', async 
 
 test('persistPhoto copies into document/photos and reports that it created the copy', async () => {
   const photo = await preparePhoto(camera(4000, 3000), 'scan-1');
-  await expect(persistPhoto(photo.uri, 'scan-1')).resolves.toEqual({ path: 'photos/scan-1.jpg', created: true });
+  await expect(persistPhoto(photo.uri, 'scan-1')).resolves.toEqual({
+    path: 'photos/scan-1.jpg',
+    created: true,
+  });
   expect(fakeFs.has(`${DOCUMENT}/photos/scan-1.jpg`)).toBe(true);
   expect(fakeFs.has(photo.uri)).toBe(true);
 });
@@ -79,7 +82,10 @@ test('persistPhoto copies into document/photos and reports that it created the c
 test('persistPhoto again is a no-op that says it did not create anything', async () => {
   const photo = await preparePhoto(camera(4000, 3000), 'scan-1');
   await persistPhoto(photo.uri, 'scan-1');
-  await expect(persistPhoto(photo.uri, 'scan-1')).resolves.toEqual({ path: 'photos/scan-1.jpg', created: false });
+  await expect(persistPhoto(photo.uri, 'scan-1')).resolves.toEqual({
+    path: 'photos/scan-1.jpg',
+    created: false,
+  });
 });
 
 test('photoUri resolves a stored path inside the document folder', () => {

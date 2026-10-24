@@ -66,7 +66,12 @@ test('saving a plant stores the photo, the plant and its scan', async () => {
   expect(out).toEqual({ plantId: 'id-1', photoStored: true, persisted: true });
   expect(fakeFs.has(storedPhoto)).toBe(true);
   expect(await listPlants(db)).toEqual([
-    expect.objectContaining({ id: 'id-1', name: 'Fern', room: 'Kitchen', photoPath: 'photos/scan-1.jpg' }),
+    expect.objectContaining({
+      id: 'id-1',
+      name: 'Fern',
+      room: 'Kitchen',
+      photoPath: 'photos/scan-1.jpg',
+    }),
   ]);
 });
 
@@ -76,19 +81,27 @@ test('the name and room are trimmed, and a blank room is stored as none', async 
 });
 
 test('an invalid name is refused before anything is written', async () => {
-  await expect(saveAsPlant(db, state(), { name: '   ', room: null }, options())).rejects.toThrow(/name/i);
+  await expect(saveAsPlant(db, state(), { name: '   ', room: null }, options())).rejects.toThrow(
+    /name/i,
+  );
   expect(fakeFs.has(storedPhoto)).toBe(false);
   expect(await count(db, 'plants')).toBe(0);
 });
 
 test('a scan without a photo or result cannot be saved', async () => {
-  await expect(saveAsPlant(db, state({ photo: null }), { name: 'Fern', room: null }, options())).rejects.toThrow();
-  await expect(saveAsPlant(db, state({ result: null }), { name: 'Fern', room: null }, options())).rejects.toThrow();
+  await expect(
+    saveAsPlant(db, state({ photo: null }), { name: 'Fern', room: null }, options()),
+  ).rejects.toThrow();
+  await expect(
+    saveAsPlant(db, state({ result: null }), { name: 'Fern', room: null }, options()),
+  ).rejects.toThrow();
 });
 
 test('a failed insert deletes the photo copy it made and leaves no rows', async () => {
   await failNextInsertInto(db, 'scans');
-  await expect(saveAsPlant(db, state(), { name: 'Fern', room: null }, options())).rejects.toThrow('disk full');
+  await expect(saveAsPlant(db, state(), { name: 'Fern', room: null }, options())).rejects.toThrow(
+    'disk full',
+  );
   expect(fakeFs.has(storedPhoto)).toBe(false);
   expect(await count(db, 'plants')).toBe(0);
   expect(await count(db, 'scans')).toBe(0);
@@ -108,7 +121,12 @@ test('feedback first, then a failing save: the photo the feedback scan uses surv
   await saveFeedback(db, state(), { verdict: 'yes', userGuess: null }, options());
   await failNextInsertInto(db, 'plants');
   await expect(
-    saveAsPlant(db, state({ persisted: true, photoStored: true }), { name: 'Fern', room: null }, options()),
+    saveAsPlant(
+      db,
+      state({ persisted: true, photoStored: true }),
+      { name: 'Fern', room: null },
+      options(),
+    ),
   ).rejects.toThrow('disk full');
   expect(fakeFs.has(storedPhoto)).toBe(true);
   expect(await db.getAllAsync('SELECT photo_path, plant_id FROM scans', [])).toEqual([
@@ -122,10 +140,16 @@ test('feedback, then changed answers, then save: one scan with the new answers a
     persisted: true,
     photoStored: true,
     answers: { watering: 'water_2_weeks' },
-    result: { diagnoserId: 'fake-v1', candidates: [{ conditionId: 'underwatering', confidence: 0.6 }] },
+    result: {
+      diagnoserId: 'fake-v1',
+      candidates: [{ conditionId: 'underwatering', confidence: 0.6 }],
+    },
   });
   const { plantId } = await saveAsPlant(db, changed, { name: 'Fern', room: null }, options());
-  const rows = await db.getAllAsync<{ answers: string; plant_id: string }>('SELECT answers, plant_id FROM scans', []);
+  const rows = await db.getAllAsync<{ answers: string; plant_id: string }>(
+    'SELECT answers, plant_id FROM scans',
+    [],
+  );
   expect(rows).toHaveLength(1);
   expect(JSON.parse(rows[0].answers)).toEqual({ watering: 'water_2_weeks' });
   expect(rows[0].plant_id).toBe(plantId);
@@ -133,13 +157,17 @@ test('feedback, then changed answers, then save: one scan with the new answers a
 
 test('a failed feedback save deletes the copy it made', async () => {
   await failNextInsertInto(db, 'scan_feedback');
-  await expect(saveFeedback(db, state(), { verdict: 'yes', userGuess: null }, options())).rejects.toThrow('disk full');
+  await expect(
+    saveFeedback(db, state(), { verdict: 'yes', userGuess: null }, options()),
+  ).rejects.toThrow('disk full');
   expect(fakeFs.has(storedPhoto)).toBe(false);
   expect(await count(db, 'scans')).toBe(0);
 });
 
 test('a failed photo copy writes nothing to the database', async () => {
   fakeFs.failNext('copy');
-  await expect(saveAsPlant(db, state(), { name: 'Fern', room: null }, options())).rejects.toThrow('copy failed');
+  await expect(saveAsPlant(db, state(), { name: 'Fern', room: null }, options())).rejects.toThrow(
+    'copy failed',
+  );
   expect(await count(db, 'plants')).toBe(0);
 });

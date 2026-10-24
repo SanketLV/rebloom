@@ -18,13 +18,10 @@ export type PlantSummary = {
 
 // Call inside a transaction together with the plant's scan.
 export async function insertPlant(db: Db, plant: PlantInput, now: string): Promise<void> {
-  await db.runAsync('INSERT INTO plants (id, name, room, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [
-    plant.id,
-    plant.name,
-    plant.room,
-    now,
-    now,
-  ]);
+  await db.runAsync(
+    'INSERT INTO plants (id, name, room, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    [plant.id, plant.name, plant.room, now, now],
+  );
 }
 
 type Row = {
@@ -57,7 +54,9 @@ export async function listPlants(db: Db): Promise<PlantSummary[]> {
     room: row.room,
     createdAt: row.created_at,
     photoPath: row.photo_path,
-    conditionId: row.final_result ? (parseCandidates(row.final_result)[0]?.conditionId ?? null) : null,
+    conditionId: row.final_result
+      ? (parseCandidates(row.final_result)[0]?.conditionId ?? null)
+      : null,
     diagnoserId: row.diagnoser_id,
   }));
 }

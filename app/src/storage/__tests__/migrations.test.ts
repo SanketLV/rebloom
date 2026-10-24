@@ -20,7 +20,9 @@ test('creates plants, scans and scan_feedback and sets user_version', async () =
   const db = await createTestDb();
   await migrate(db);
   expect(await tables(db)).toEqual(['plants', 'scan_feedback', 'scans']);
-  expect(await db.getFirstAsync('PRAGMA user_version', [])).toEqual({ user_version: SCHEMA_VERSION });
+  expect(await db.getFirstAsync('PRAGMA user_version', [])).toEqual({
+    user_version: SCHEMA_VERSION,
+  });
   expect(SCHEMA_VERSION).toBe(1);
 });
 

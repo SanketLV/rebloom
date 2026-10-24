@@ -48,7 +48,11 @@ describe.each(TABLE)('%s', (option, boosts, lowers) => {
 test('watering every 2–3 days moves overwatering above underwatering', () => {
   const before = diagnosis(['underwatering', 0.45], ['overwatering', 0.35], ['low_light', 0.1]);
   const after = applyAnswers(before, { watering: 'water_2_3_days' });
-  expect(after.candidates.map((c) => c.conditionId)).toEqual(['overwatering', 'underwatering', 'low_light']);
+  expect(after.candidates.map((c) => c.conditionId)).toEqual([
+    'overwatering',
+    'underwatering',
+    'low_light',
+  ]);
 });
 
 test('keeps the same 3 conditions, the same total, values in [0, 1], sorted', () => {
@@ -58,7 +62,11 @@ test('keeps the same 3 conditions, the same total, values in [0, 1], sorted', ()
     light: 'light_low',
     recent_change: 'change_repotted',
   });
-  expect(after.candidates.map((c) => c.conditionId).sort()).toEqual(['low_light', 'overwatering', 'root_rot']);
+  expect(after.candidates.map((c) => c.conditionId).sort()).toEqual([
+    'low_light',
+    'overwatering',
+    'root_rot',
+  ]);
   expect(sum(after)).toBeCloseTo(sum(before), 9);
   for (const c of after.candidates) {
     expect(c.confidence).toBeGreaterThanOrEqual(0);
@@ -70,8 +78,14 @@ test('keeps the same 3 conditions, the same total, values in [0, 1], sorted', ()
 
 test.each<[string, Answers]>([
   ['no answers', {}],
-  ['"I\'m not sure" everywhere', { watering: 'not_sure', light: 'not_sure', recent_change: 'not_sure' }],
-  ['answers with no rule', { watering: 'water_weekly', light: 'light_medium', recent_change: 'change_none' }],
+  [
+    '"I\'m not sure" everywhere',
+    { watering: 'not_sure', light: 'not_sure', recent_change: 'not_sure' },
+  ],
+  [
+    'answers with no rule',
+    { watering: 'water_weekly', light: 'light_medium', recent_change: 'change_none' },
+  ],
 ])('%s changes nothing', (_label, answers) => {
   const before = diagnosis(['overwatering', 0.5], ['root_rot', 0.3], ['low_light', 0.15]);
   expect(applyAnswers(before, answers)).toEqual(before);

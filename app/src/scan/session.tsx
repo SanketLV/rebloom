@@ -91,7 +91,9 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
     },
     finish() {
       update((current) =>
-        current.diagnosis ? { ...current, result: applyAnswers(current.diagnosis, current.answers) } : current,
+        current.diagnosis
+          ? { ...current, result: applyAnswers(current.diagnosis, current.answers) }
+          : current,
       );
     },
     markPhotoStored() {

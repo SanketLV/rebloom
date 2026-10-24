@@ -22,7 +22,13 @@ export function StartError({ onRetry }: { onRetry: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, justifyContent: 'center', gap: spacing.md, padding: spacing.xxl, backgroundColor: colors.bg },
+  wrap: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: spacing.md,
+    padding: spacing.xxl,
+    backgroundColor: colors.bg,
+  },
   center: { textAlign: 'center' },
   title: { color: colors.text },
   body: { color: colors.textSecondary },

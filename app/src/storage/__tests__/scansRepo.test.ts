@@ -48,8 +48,14 @@ test('inserts a scan with snake_case JSON and the low-confidence flag', async ()
     updated_at: T1,
     deleted_at: null,
   });
-  expect(JSON.parse(row.final_result as string)[0]).toEqual({ condition_id: 'overwatering', confidence: 0.55 });
-  expect(JSON.parse(row.model_result as string)[0]).toEqual({ condition_id: 'underwatering', confidence: 0.45 });
+  expect(JSON.parse(row.final_result as string)[0]).toEqual({
+    condition_id: 'overwatering',
+    confidence: 0.55,
+  });
+  expect(JSON.parse(row.model_result as string)[0]).toEqual({
+    condition_id: 'underwatering',
+    confidence: 0.45,
+  });
   expect(JSON.parse(row.answers as string)).toEqual({
     watering: 'water_2_3_days',
     light: 'not_sure',
@@ -88,13 +94,19 @@ test('changed answers update the stored scan', async () => {
   );
   const [row] = await rows(db, 'scans');
   expect(JSON.parse(row.answers as string)).toEqual({ watering: 'water_2_weeks' });
-  expect(JSON.parse(row.final_result as string)).toEqual([{ condition_id: 'underwatering', confidence: 0.45 }]);
+  expect(JSON.parse(row.final_result as string)).toEqual([
+    { condition_id: 'underwatering', confidence: 0.45 },
+  ]);
   expect(row.low_confidence).toBe(1);
 });
 
 test('feedback is stored with its verdict and guess', async () => {
   await persistScan(db, scan(), T1);
-  await replaceFeedback(db, { id: 'fb-1', scanId: 'scan-1', verdict: 'no', userGuess: 'root_rot' }, T2);
+  await replaceFeedback(
+    db,
+    { id: 'fb-1', scanId: 'scan-1', verdict: 'no', userGuess: 'root_rot' },
+    T2,
+  );
   expect(await rows(db, 'scan_feedback')).toEqual([
     {
       id: 'fb-1',
@@ -111,10 +123,20 @@ test('feedback is stored with its verdict and guess', async () => {
 test('answering again replaces the earlier feedback: one live row, the old one soft-deleted', async () => {
   await persistScan(db, scan(), T1);
   await replaceFeedback(db, { id: 'fb-1', scanId: 'scan-1', verdict: 'yes', userGuess: null }, T2);
-  await replaceFeedback(db, { id: 'fb-2', scanId: 'scan-1', verdict: 'no', userGuess: 'something_else' }, T3);
-  const live = await db.getAllAsync<Row>('SELECT id FROM scan_feedback WHERE deleted_at IS NULL', []);
+  await replaceFeedback(
+    db,
+    { id: 'fb-2', scanId: 'scan-1', verdict: 'no', userGuess: 'something_else' },
+    T3,
+  );
+  const live = await db.getAllAsync<Row>(
+    'SELECT id FROM scan_feedback WHERE deleted_at IS NULL',
+    [],
+  );
   expect(live).toEqual([{ id: 'fb-2' }]);
-  const old = await db.getFirstAsync<Row>('SELECT deleted_at, updated_at FROM scan_feedback WHERE id = ?', ['fb-1']);
+  const old = await db.getFirstAsync<Row>(
+    'SELECT deleted_at, updated_at FROM scan_feedback WHERE id = ?',
+    ['fb-1'],
+  );
   expect(old).toEqual({ deleted_at: T3, updated_at: T3 });
 });
 
@@ -133,10 +155,13 @@ describe('parseCandidates', () => {
     ]);
   });
 
-  test.each(['not json', '{}', 'null', '[{"condition_id":"made_up","confidence":0.7}]', '[{"condition_id":"sunburn"}]'])(
-    'returns an empty list for a corrupt value %j instead of throwing',
-    (raw) => {
-      expect(parseCandidates(raw)).toEqual([]);
-    },
-  );
+  test.each([
+    'not json',
+    '{}',
+    'null',
+    '[{"condition_id":"made_up","confidence":0.7}]',
+    '[{"condition_id":"sunburn"}]',
+  ])('returns an empty list for a corrupt value %j instead of throwing', (raw) => {
+    expect(parseCandidates(raw)).toEqual([]);
+  });
 });

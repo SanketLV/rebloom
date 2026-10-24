@@ -5,7 +5,10 @@ import { AppState, Linking } from 'react-native';
 import { CACHE, DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
 import { mockCamera, mockPicker } from '@/testing/nativeMocks';
 
-jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), useFonts: () => [true, null] }));
+jest.mock('expo-font', () => ({
+  ...jest.requireActual('expo-font'),
+  useFonts: () => [true, null],
+}));
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -60,7 +63,9 @@ describe('camera permission', () => {
     mockCamera.setPermission('denied', false);
     const view = await openScan();
     await fireEvent.press(screen.getByRole('button', { name: 'Choose a photo instead' }));
-    expect(mockPicker.launch).toHaveBeenCalledWith(expect.objectContaining({ mediaTypes: ['images'] }));
+    expect(mockPicker.launch).toHaveBeenCalledWith(
+      expect.objectContaining({ mediaTypes: ['images'] }),
+    );
     expect(view).toHavePathname('/scan/analyzing');
   });
 

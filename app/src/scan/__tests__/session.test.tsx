@@ -6,7 +6,9 @@ import { CACHE, fakeFs } from '@/testing/fileSystemFake';
 
 import { ScanSessionProvider, useScanSession } from '../session';
 
-const wrapper = ({ children }: { children: ReactNode }) => <ScanSessionProvider>{children}</ScanSessionProvider>;
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <ScanSessionProvider>{children}</ScanSessionProvider>
+);
 
 const shot = (name: string) => {
   const uri = `${CACHE}/Camera/${name}.jpg`;
@@ -36,7 +38,13 @@ async function setup() {
 
 test('starts empty', async () => {
   const { session } = await setup();
-  expect(session().state).toMatchObject({ sourceUri: null, photo: null, diagnosis: null, result: null, answers: {} });
+  expect(session().state).toMatchObject({
+    sourceUri: null,
+    photo: null,
+    diagnosis: null,
+    result: null,
+    answers: {},
+  });
 });
 
 test('a new photo starts a new scan with a new id', async () => {

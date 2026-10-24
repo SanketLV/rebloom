@@ -29,7 +29,9 @@ test('app is light-only until dark mode is designed', () => {
 type PluginEntry = string | [string, Record<string, unknown>];
 
 function pluginOptions(name: string) {
-  const entry = (appJson.expo.plugins as PluginEntry[]).find((p) => (Array.isArray(p) ? p[0] : p) === name);
+  const entry = (appJson.expo.plugins as PluginEntry[]).find(
+    (p) => (Array.isArray(p) ? p[0] : p) === name,
+  );
   return Array.isArray(entry) ? entry[1] : undefined;
 }
 

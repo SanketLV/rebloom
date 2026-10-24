@@ -26,14 +26,18 @@ test('the file-system fake copies, sizes, deletes and checks existence', async (
 test('the file-system fake can fail an operation on demand', async () => {
   fakeFs.put('file:///cache/a.jpg');
   fakeFs.failNext('copy');
-  await expect(new File('file:///cache/a.jpg').copy(new File(Paths.document, 'b.jpg'))).rejects.toThrow('copy failed');
+  await expect(
+    new File('file:///cache/a.jpg').copy(new File(Paths.document, 'b.jpg')),
+  ).rejects.toThrow('copy failed');
 });
 
 function Rows() {
   const db = useSQLiteContext();
   const [count, setCount] = useState<number | null>(null);
   useEffect(() => {
-    db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM t', []).then((row) => setCount(row?.n ?? 0));
+    db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM t', []).then((row) =>
+      setCount(row?.n ?? 0),
+    );
   }, [db]);
   return <Text>{count === null ? 'loading' : `rows: ${count}`}</Text>;
 }
@@ -59,6 +63,8 @@ test('the SQLite provider reports an init failure to onError', async () => {
       <Rows />
     </SQLiteProvider>,
   );
-  await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'disk I/O error' })));
+  await waitFor(() =>
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'disk I/O error' })),
+  );
   expect(screen.queryByText(/rows/)).toBeNull();
 });

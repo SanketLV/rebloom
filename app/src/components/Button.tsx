@@ -23,7 +23,11 @@ export function Button({ label, onPress, busy = false, disabled = false, disable
       accessibilityRole="button"
       accessibilityLabel={text}
       accessibilityState={{ disabled: off, busy }}
-      style={({ pressed }) => [styles.button, disabled && styles.disabled, pressed && styles.pressed]}>
+      style={({ pressed }) => [
+        styles.button,
+        disabled && styles.disabled,
+        pressed && styles.pressed,
+      ]}>
       {busy ? (
         <ActivityIndicator color={colors.onPrimary} />
       ) : (
@@ -34,7 +38,11 @@ export function Button({ label, onPress, busy = false, disabled = false, disable
 }
 
 // A secondary action as a text link ("Not now", "Retake photo").
-export function TextButton({ label, onPress, disabled = false }: Pick<Props, 'label' | 'onPress' | 'disabled'>) {
+export function TextButton({
+  label,
+  onPress,
+  disabled = false,
+}: Pick<Props, 'label' | 'onPress' | 'disabled'>) {
   return (
     <Pressable
       onPress={onPress}
@@ -62,6 +70,11 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
   text: { color: colors.onPrimary },
   disabledText: { color: colors.textSecondary },
-  textButton: { minHeight: touchTarget, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xs },
+  textButton: {
+    minHeight: touchTarget,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xs,
+  },
   link: { color: colors.primary, fontFamily: type.button.fontFamily },
 });

@@ -10,7 +10,13 @@ export type ConditionId =
 export type Severity = 'none' | 'mild' | 'moderate' | 'severe';
 
 // `shortName` reads mid-sentence: "Overwatering or root rot?".
-export type Condition = { id: ConditionId; name: string; shortName: string; subtitle: string; severity: Severity };
+export type Condition = {
+  id: ConditionId;
+  name: string;
+  shortName: string;
+  subtitle: string;
+  severity: Severity;
+};
 
 export type Candidate = { conditionId: ConditionId; confidence: number };
 

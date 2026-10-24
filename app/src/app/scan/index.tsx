@@ -80,7 +80,12 @@ export default function CameraScreen() {
       <View style={styles.screen} {...hiddenBehindSheet(sheetOpen)}>
         <View style={styles.preview}>
           {granted ? (
-            <CameraView ref={camera} style={StyleSheet.absoluteFill} active={focused} onCameraReady={() => setReady(true)} />
+            <CameraView
+              ref={camera}
+              style={StyleSheet.absoluteFill}
+              active={focused}
+              onCameraReady={() => setReady(true)}
+            />
           ) : (
             permission !== null &&
             !permissionSheetOpen && (
@@ -117,7 +122,11 @@ export default function CameraScreen() {
         </View>
 
         <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.lg }]}>
-          {failed && <Text style={[type.small, styles.caption]}>{"Couldn't get that photo. Try again."}</Text>}
+          {failed && (
+            <Text style={[type.small, styles.caption]}>
+              {"Couldn't get that photo. Try again."}
+            </Text>
+          )}
           <View style={styles.controls}>
             <Pressable
               onPress={() => start.run('gallery')}
@@ -170,7 +179,11 @@ export default function CameraScreen() {
 // Lime framing corners from the artboard. Decorative.
 function Corners() {
   return (
-    <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.frame}>
+    <View
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={styles.frame}>
       <View style={[styles.corner, styles.topLeft]} />
       <View style={[styles.corner, styles.topRight]} />
       <View style={[styles.corner, styles.bottomLeft]} />
@@ -181,7 +194,12 @@ function Corners() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: cameraColors.ground },
-  preview: { flex: 1, backgroundColor: cameraColors.preview, alignItems: 'center', justifyContent: 'center' },
+  preview: {
+    flex: 1,
+    backgroundColor: cameraColors.preview,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   off: { alignSelf: 'stretch', padding: spacing.xxl, gap: spacing.md },
   offTitle: { color: cameraColors.text, textAlign: 'center' },
   top: {
@@ -216,9 +234,26 @@ const styles = StyleSheet.create({
   corner: { position: 'absolute', width: CORNER, height: CORNER, borderColor: colors.reward },
   topLeft: { left: 0, top: 0, borderLeftWidth: 4, borderTopWidth: 4, borderTopLeftRadius: 18 },
   topRight: { right: 0, top: 0, borderRightWidth: 4, borderTopWidth: 4, borderTopRightRadius: 18 },
-  bottomLeft: { left: 0, bottom: 0, borderLeftWidth: 4, borderBottomWidth: 4, borderBottomLeftRadius: 18 },
-  bottomRight: { right: 0, bottom: 0, borderRightWidth: 4, borderBottomWidth: 4, borderBottomRightRadius: 18 },
-  bottom: { backgroundColor: cameraColors.ground, paddingTop: spacing.xl, gap: spacing.md + 2, alignItems: 'center' },
+  bottomLeft: {
+    left: 0,
+    bottom: 0,
+    borderLeftWidth: 4,
+    borderBottomWidth: 4,
+    borderBottomLeftRadius: 18,
+  },
+  bottomRight: {
+    right: 0,
+    bottom: 0,
+    borderRightWidth: 4,
+    borderBottomWidth: 4,
+    borderBottomRightRadius: 18,
+  },
+  bottom: {
+    backgroundColor: cameraColors.ground,
+    paddingTop: spacing.xl,
+    gap: spacing.md + 2,
+    alignItems: 'center',
+  },
   controls: {
     alignSelf: 'stretch',
     flexDirection: 'row',

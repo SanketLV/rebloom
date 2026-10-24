@@ -92,7 +92,9 @@ function useCameraPermissions() {
   }, []);
   const request = async () => {
     mockCamera.request();
-    const canAsk = mockCamera.permission === 'undetermined' || (mockCamera.permission === 'denied' && mockCamera.canAskAgain);
+    const canAsk =
+      mockCamera.permission === 'undetermined' ||
+      (mockCamera.permission === 'denied' && mockCamera.canAskAgain);
     if (canAsk) {
       mockCamera.permission = mockCamera.answer;
       mockCamera.canAskAgain = mockCamera.answer !== 'denied';
@@ -111,7 +113,10 @@ function useCameraPermissions() {
 type CameraProps = { active?: boolean; onCameraReady?: () => void; children?: ReactNode };
 type CameraHandle = { takePictureAsync: () => Promise<Shot> };
 
-const CameraView = forwardRef<CameraHandle, CameraProps>(function CameraView({ active = true, onCameraReady }, ref) {
+const CameraView = forwardRef<CameraHandle, CameraProps>(function CameraView(
+  { active = true, onCameraReady },
+  ref,
+) {
   useImperativeHandle(ref, () => ({ takePictureAsync: () => mockCamera.takePicture() }));
   useEffect(() => {
     if (!active || !onCameraReady) return;
@@ -137,7 +142,16 @@ export const mockPicker = {
     fakeFs.put(uri, { size: 2_000_000, ...size });
     return {
       canceled: false,
-      assets: [{ uri, ...size, type: 'image', fileName: null, fileSize: 2_000_000, mimeType: 'image/jpeg' }],
+      assets: [
+        {
+          uri,
+          ...size,
+          type: 'image',
+          fileName: null,
+          fileSize: 2_000_000,
+          mimeType: 'image/jpeg',
+        },
+      ],
     };
   }),
   reset() {
@@ -181,7 +195,11 @@ class FakeImageRef {
   async saveAsync(): Promise<ImageResult> {
     const uri = `${CACHE}/ImageManipulator/out-${++saved}.jpg`;
     // Deterministic file size, so the fake diagnoser gives stable results.
-    fakeFs.put(uri, { size: Math.round((this.width * this.height) / 7), width: this.width, height: this.height });
+    fakeFs.put(uri, {
+      size: Math.round((this.width * this.height) / 7),
+      width: this.width,
+      height: this.height,
+    });
     return { uri, width: this.width, height: this.height };
   }
 }
@@ -195,7 +213,8 @@ class FakeContext {
     return this;
   }
   async renderAsync() {
-    if (mockManipulator.hang) await new Promise<void>((resume) => mockManipulator.pending.push(resume));
+    if (mockManipulator.hang)
+      await new Promise<void>((resume) => mockManipulator.pending.push(resume));
     if (mockManipulator.failNext) {
       const error = mockManipulator.failNext;
       mockManipulator.failNext = undefined;
@@ -207,7 +226,8 @@ class FakeContext {
 
 function manipulate(source: string | FakeImageRef) {
   mockManipulator.manipulate(source);
-  if (source instanceof FakeImageRef) return new FakeContext({ width: source.width, height: source.height });
+  if (source instanceof FakeImageRef)
+    return new FakeContext({ width: source.width, height: source.height });
   const entry = fakeFs.get(source);
   if (!entry?.width || !entry.height) throw new Error(`Not an image: ${source}`);
   return new FakeContext({ width: entry.width, height: entry.height });

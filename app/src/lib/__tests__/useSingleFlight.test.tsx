@@ -49,7 +49,10 @@ test('busy is true while running and false after', async () => {
 });
 
 test('a throwing action rethrows and frees the button again', async () => {
-  const action = jest.fn().mockRejectedValueOnce(new Error('disk full')).mockResolvedValueOnce('ok');
+  const action = jest
+    .fn()
+    .mockRejectedValueOnce(new Error('disk full'))
+    .mockResolvedValueOnce('ok');
   const { result } = await renderHook(() => useSingleFlight(action));
 
   await act(async () => {

@@ -37,7 +37,13 @@ type RunOptions = {
 // timed out is deleted, so nothing is left behind.
 export async function runDiagnosis(
   input: RunInput,
-  { diagnoser, signal, onStep, timeoutMs = DIAGNOSIS_TIMEOUT_MS, minMs = ANALYZING_MIN_MS }: RunOptions,
+  {
+    diagnoser,
+    signal,
+    onStep,
+    timeoutMs = DIAGNOSIS_TIMEOUT_MS,
+    minMs = ANALYZING_MIN_MS,
+  }: RunOptions,
 ): Promise<{ photo: PreparedPhoto; diagnosis: Diagnosis }> {
   let timedOut = false;
   let photo = input.prepared;

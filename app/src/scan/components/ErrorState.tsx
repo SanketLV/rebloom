@@ -26,7 +26,13 @@ export function ErrorState({ onRetry, onScanAnother }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, justifyContent: 'center', gap: spacing.md, padding: spacing.xxl, backgroundColor: colors.bg },
+  wrap: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: spacing.md,
+    padding: spacing.xxl,
+    backgroundColor: colors.bg,
+  },
   center: { textAlign: 'center' },
   title: { color: colors.text },
   body: { color: colors.textSecondary },

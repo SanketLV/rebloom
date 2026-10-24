@@ -7,7 +7,10 @@ test('runs queries with bound params', async () => {
   expect(run.changes).toBe(1);
   await db.runAsync('INSERT INTO t (id, n) VALUES (?, ?)', ['b', 2]);
   expect(await db.getFirstAsync('SELECT n FROM t WHERE id = ?', ['b'])).toEqual({ n: 2 });
-  expect(await db.getAllAsync('SELECT id FROM t ORDER BY id', [])).toEqual([{ id: 'a' }, { id: 'b' }]);
+  expect(await db.getAllAsync('SELECT id FROM t ORDER BY id', [])).toEqual([
+    { id: 'a' },
+    { id: 'b' },
+  ]);
   expect(await db.getFirstAsync('SELECT n FROM t WHERE id = ?', ['missing'])).toBeNull();
 });
 

@@ -21,7 +21,11 @@ export const QUESTIONS: Question[] = [
     text: 'How much light does it get?',
     options: [
       { id: 'light_direct_sun', label: 'Direct sun for hours', chip: 'Hours of direct sun' },
-      { id: 'light_bright_indirect', label: 'Bright, indirect light', chip: 'Bright, indirect light' },
+      {
+        id: 'light_bright_indirect',
+        label: 'Bright, indirect light',
+        chip: 'Bright, indirect light',
+      },
       { id: 'light_medium', label: 'Medium light', chip: 'Medium light' },
       { id: 'light_low', label: 'Low light, dark corner', chip: 'Low light' },
     ],

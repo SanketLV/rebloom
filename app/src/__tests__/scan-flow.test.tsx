@@ -9,7 +9,10 @@ import { mockCamera, mockManipulator } from '@/testing/nativeMocks';
 
 afterEach(() => jest.restoreAllMocks());
 
-jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), useFonts: () => [true, null] }));
+jest.mock('expo-font', () => ({
+  ...jest.requireActual('expo-font'),
+  useFonts: () => [true, null],
+}));
 
 // A diagnoser each test controls.
 const mockDiagnose = jest.fn<Promise<Diagnosis>, unknown[]>();
@@ -88,7 +91,10 @@ describe('Analyzing', () => {
     await waitFor(() => expect(view).toHavePathname('/scan/questions'));
     // The diagnoser reads the prepared photo, not the full-size capture.
     expect(mockDiagnose).toHaveBeenCalledWith(
-      expect.objectContaining({ uri: expect.stringMatching(/^file:\/\/\/cache\/scans\/.+\.jpg$/), width: 800 }),
+      expect.objectContaining({
+        uri: expect.stringMatching(/^file:\/\/\/cache\/scans\/.+\.jpg$/),
+        width: 800,
+      }),
     );
   });
 
@@ -128,7 +134,9 @@ describe('Analyzing', () => {
   test('a photo that cannot be read shows the error, and Try again recovers', async () => {
     mockManipulator.failNext = new Error('decode failed');
     const view = await shoot();
-    expect(await screen.findByRole('header', { name: "We couldn't read this photo" })).toBeOnTheScreen();
+    expect(
+      await screen.findByRole('header', { name: "We couldn't read this photo" }),
+    ).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(view).toHavePathname('/scan/questions'));
   });
@@ -137,7 +145,9 @@ describe('Analyzing', () => {
     mockTimeoutMs = 50;
     mockDiagnose.mockReturnValue(new Promise(() => {}));
     await shoot();
-    expect(await screen.findByRole('header', { name: "We couldn't read this photo" })).toBeOnTheScreen();
+    expect(
+      await screen.findByRole('header', { name: "We couldn't read this photo" }),
+    ).toBeOnTheScreen();
   });
 
   test('Try again after a diagnose failure reuses the prepared photo', async () => {
@@ -286,11 +296,17 @@ function scanStack(view: { getRouterState(): unknown }): string[] | null {
   return find(view.getRouterState() as NavState);
 }
 
-async function reachResult(answers: string[] = ['Every 2–3 days', 'Bright, indirect light', 'Repotted it']) {
+async function reachResult(
+  answers: string[] = ['Every 2–3 days', 'Bright, indirect light', 'Repotted it'],
+) {
   const view = await reachQuestions();
   for (const [i, answer] of answers.entries()) {
     await fireEvent.press(screen.getByRole('radio', { name: answer }));
-    await fireEvent.press(screen.getByRole('button', { name: i === answers.length - 1 ? 'See my diagnosis' : 'Continue' }));
+    await fireEvent.press(
+      screen.getByRole('button', {
+        name: i === answers.length - 1 ? 'See my diagnosis' : 'Continue',
+      }),
+    );
   }
   await screen.findByText('Most likely');
   return view;
@@ -302,7 +318,9 @@ describe('Result', () => {
     expect(screen.getByRole('header', { name: 'Overwatering' })).toBeOnTheScreen();
     expect(screen.getByText('Moderate')).toBeOnTheScreen();
     expect(screen.getByText('Roots stressed by soggy soil')).toBeOnTheScreen();
-    expect(screen.getByRole('progressbar', { name: 'Confidence' }).props.accessibilityValue.now).toBeGreaterThanOrEqual(50);
+    expect(
+      screen.getByRole('progressbar', { name: 'Confidence' }).props.accessibilityValue.now,
+    ).toBeGreaterThanOrEqual(50);
     expect(screen.getByText('Underwatering')).toBeOnTheScreen();
     expect(screen.getByText('Not enough light')).toBeOnTheScreen();
   });
@@ -332,7 +350,8 @@ describe('Result', () => {
     const view = await shoot();
     await fireEvent.press(await screen.findByRole('button', { name: 'Use it anyway' }));
     await screen.findByText('How often do you water it?');
-    for (let i = 0; i < 3; i++) await fireEvent.press(screen.getByRole('button', { name: "I'm not sure" }));
+    for (let i = 0; i < 3; i++)
+      await fireEvent.press(screen.getByRole('button', { name: "I'm not sure" }));
     await waitFor(() => expect(view).toHavePathname('/scan/result'));
     expect(await screen.findByText("We're not sure yet")).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'See treatment plan' })).toBeNull();

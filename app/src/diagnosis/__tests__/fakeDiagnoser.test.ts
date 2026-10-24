@@ -3,7 +3,12 @@ import { CONDITION_IDS } from '../conditions';
 import { FAKE_FIXTURES, fakeDiagnoser } from '../fakeDiagnoser';
 import type { PreparedPhoto } from '../types';
 
-const photo = (width: number, height: number, sizeBytes: number, uri = 'file:///cache/scans/a.jpg'): PreparedPhoto => ({
+const photo = (
+  width: number,
+  height: number,
+  sizeBytes: number,
+  uri = 'file:///cache/scans/a.jpg',
+): PreparedPhoto => ({
   uri,
   width,
   height,
@@ -28,12 +33,16 @@ test('the uri (which holds a random scan id) has no effect', async () => {
 
 test('has 8 fixtures, 2 of them low confidence (about 1 in 4)', () => {
   expect(FAKE_FIXTURES).toHaveLength(8);
-  expect(FAKE_FIXTURES.filter((f) => isLowConfidence({ diagnoserId: 'x', candidates: f }))).toHaveLength(2);
+  expect(
+    FAKE_FIXTURES.filter((f) => isLowConfidence({ diagnoserId: 'x', candidates: f })),
+  ).toHaveLength(2);
 });
 
 test('across many photos both low and normal results come up, each a valid top 3', async () => {
   const results = await Promise.all(
-    Array.from({ length: 100 }, (_, i) => fakeDiagnoser.diagnose(photo(800, 600 + i, 50_000 + i * 977))),
+    Array.from({ length: 100 }, (_, i) =>
+      fakeDiagnoser.diagnose(photo(800, 600 + i, 50_000 + i * 977)),
+    ),
   );
   expect(results.some(isLowConfidence)).toBe(true);
   expect(results.some((r) => !isLowConfidence(r))).toBe(true);

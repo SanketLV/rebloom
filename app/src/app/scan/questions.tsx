@@ -55,7 +55,11 @@ export default function QuestionsScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.top}>
         {step === 0 ? (
-          <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back to camera" style={styles.back}>
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Back to camera"
+            style={styles.back}>
             <ChevronLeftIcon color={colors.text} />
           </Pressable>
         ) : (
@@ -67,7 +71,10 @@ export default function QuestionsScreen() {
             <ChevronLeftIcon color={colors.text} />
           </Pressable>
         )}
-        <View style={styles.bars} accessible accessibilityLabel={`Question ${step + 1} of ${QUESTIONS.length}`}>
+        <View
+          style={styles.bars}
+          accessible
+          accessibilityLabel={`Question ${step + 1} of ${QUESTIONS.length}`}>
           {QUESTIONS.map((q, i) => (
             <View key={q.id} style={[styles.bar, i <= step && styles.barOn]} />
           ))}
@@ -79,10 +86,18 @@ export default function QuestionsScreen() {
 
       <ScrollView testID="questions-scroll" contentContainerStyle={styles.content}>
         <View style={styles.card}>
-          {photo && <Image source={{ uri: photo.uri }} style={styles.thumb} accessibilityIgnoresInvertColors />}
+          {photo && (
+            <Image
+              source={{ uri: photo.uri }}
+              style={styles.thumb}
+              accessibilityIgnoresInvertColors
+            />
+          )}
           <View style={styles.cardText}>
             <Text style={[type.bodyStrong, styles.cardTitle]}>{headerLabel(diagnosis)}</Text>
-            <Text style={[type.small, styles.cardBody]}>Two causes look alike. Your answers decide.</Text>
+            <Text style={[type.small, styles.cardBody]}>
+              Two causes look alike. Your answers decide.
+            </Text>
             {isDemoDiagnoser(diagnosis.diagnoserId) && <DemoTag />}
           </View>
         </View>
@@ -90,7 +105,10 @@ export default function QuestionsScreen() {
         <Text accessibilityRole="header" style={[type.title, styles.question]}>
           {question.text}
         </Text>
-        <View accessibilityRole="radiogroup" accessibilityLabel={question.text} style={styles.options}>
+        <View
+          accessibilityRole="radiogroup"
+          accessibilityLabel={question.text}
+          style={styles.options}>
           {question.options.map((option) => {
             const checked = answer === option.id;
             return (
@@ -101,7 +119,9 @@ export default function QuestionsScreen() {
                 accessibilityLabel={option.label}
                 accessibilityState={{ checked }}
                 style={[styles.option, checked && styles.optionOn]}>
-                <View style={[styles.ring, checked && styles.ringOn]}>{checked && <View style={styles.dot} />}</View>
+                <View style={[styles.ring, checked && styles.ringOn]}>
+                  {checked && <View style={styles.dot} />}
+                </View>
                 <Text style={[type.bodyStrong, styles.optionText]}>{option.label}</Text>
               </Pressable>
             );
@@ -126,7 +146,13 @@ export default function QuestionsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  top: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.lg },
+  top: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
+  },
   back: { width: touchTarget, height: touchTarget, alignItems: 'center', justifyContent: 'center' },
   bars: { flex: 1, flexDirection: 'row', gap: 6, paddingRight: spacing.sm },
   bar: { flex: 1, height: 6, borderRadius: 3, backgroundColor: colors.disabled },

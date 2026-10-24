@@ -49,7 +49,11 @@ test('newest plant first, ties broken by id', async () => {
 test('shows the latest scan of a plant', async () => {
   await insertPlant(db, { id: 'p1', name: 'Fern', room: null }, at(0));
   await persistScan(db, scanFor('p1', 's1'), at(1));
-  await persistScan(db, scanFor('p1', 's2', { finalResult: [{ conditionId: 'sunburn', confidence: 0.7 }] }), at(2));
+  await persistScan(
+    db,
+    scanFor('p1', 's2', { finalResult: [{ conditionId: 'sunburn', confidence: 0.7 }] }),
+    at(2),
+  );
   const [plant] = await listPlants(db);
   expect(plant).toMatchObject({ photoPath: 'photos/s2.jpg', conditionId: 'sunburn' });
 });
@@ -58,7 +62,11 @@ test('soft-deleted plants and scans are left out', async () => {
   await insertPlant(db, { id: 'p1', name: 'Gone', room: 'Hall' }, at(0));
   await insertPlant(db, { id: 'p2', name: 'Here', room: null }, at(1));
   await persistScan(db, scanFor('p2', 's1'), at(1));
-  await persistScan(db, scanFor('p2', 's2', { finalResult: [{ conditionId: 'sunburn', confidence: 0.7 }] }), at(2));
+  await persistScan(
+    db,
+    scanFor('p2', 's2', { finalResult: [{ conditionId: 'sunburn', confidence: 0.7 }] }),
+    at(2),
+  );
   await db.runAsync('UPDATE plants SET deleted_at = ? WHERE id = ?', [at(3), 'p1']);
   await db.runAsync('UPDATE scans SET deleted_at = ? WHERE id = ?', [at(3), 's2']);
   const plants = await listPlants(db);
@@ -77,7 +85,11 @@ test('a plant with a corrupt stored result still shows, without a diagnosis', as
 
 test('a plant without a scan has no photo or diagnosis', async () => {
   await insertPlant(db, { id: 'p1', name: 'Fern', room: null }, at(0));
-  expect((await listPlants(db))[0]).toMatchObject({ photoPath: null, conditionId: null, diagnoserId: null });
+  expect((await listPlants(db))[0]).toMatchObject({
+    photoPath: null,
+    conditionId: null,
+    diagnoserId: null,
+  });
 });
 
 test('rooms are the distinct rooms in use, sorted', async () => {

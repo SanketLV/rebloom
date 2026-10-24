@@ -5,7 +5,12 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 // an icon carries the accessibility label.
 type IconProps = { color: string; size?: number; strokeWidth?: number };
 
-function Icon({ color, size = 24, strokeWidth = 2, children }: IconProps & { children: ReactNode }) {
+function Icon({
+  color,
+  size = 24,
+  strokeWidth = 2,
+  children,
+}: IconProps & { children: ReactNode }) {
   return (
     <Svg
       width={size}

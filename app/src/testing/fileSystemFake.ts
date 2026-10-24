@@ -14,7 +14,11 @@ export const DOCUMENT = 'file:///document';
 
 function join(parts: Part[]): string {
   const raw = parts.map((p) => (typeof p === 'string' ? p : p.uri)).join('/');
-  const path = raw.replace(/^file:/, '').split('/').filter(Boolean).join('/');
+  const path = raw
+    .replace(/^file:/, '')
+    .split('/')
+    .filter(Boolean)
+    .join('/');
   return `file:///${path}`;
 }
 
@@ -51,14 +55,16 @@ export class FakeFile {
     takeFailure('copy');
     const entry = files.get(this.uri);
     if (!entry) throw new Error(`File not found: ${this.uri}`);
-    const target = destination instanceof FakeDirectory ? join([destination, this.name]) : destination.uri;
+    const target =
+      destination instanceof FakeDirectory ? join([destination, this.name]) : destination.uri;
     files.set(target, { ...entry });
   }
   async move(destination: FakeFile | FakeDirectory) {
     takeFailure('move');
     const entry = files.get(this.uri);
     if (!entry) throw new Error(`File not found: ${this.uri}`);
-    const target = destination instanceof FakeDirectory ? join([destination, this.name]) : destination.uri;
+    const target =
+      destination instanceof FakeDirectory ? join([destination, this.name]) : destination.uri;
     files.delete(this.uri);
     files.set(target, entry);
   }

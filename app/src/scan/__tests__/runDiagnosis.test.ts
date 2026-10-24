@@ -4,9 +4,14 @@ import { mockManipulator } from '@/testing/nativeMocks';
 
 import { DiagnosisError, runDiagnosis } from '../runDiagnosis';
 
-const result: Diagnosis = { diagnoserId: 'fake-v1', candidates: [{ conditionId: 'sunburn', confidence: 0.8 }] };
+const result: Diagnosis = {
+  diagnoserId: 'fake-v1',
+  candidates: [{ conditionId: 'sunburn', confidence: 0.8 }],
+};
 
-const diagnoserReturning = (value: Diagnosis | Promise<Diagnosis>): Diagnoser & { diagnose: jest.Mock } => ({
+const diagnoserReturning = (
+  value: Diagnosis | Promise<Diagnosis>,
+): Diagnoser & { diagnose: jest.Mock } => ({
   id: 'test',
   diagnose: jest.fn(() => Promise.resolve(value)),
 });
@@ -33,10 +38,18 @@ test('prepares the photo, then diagnoses the prepared photo', async () => {
 });
 
 test('reuses an already prepared photo (Try again after a diagnose failure)', async () => {
-  const prepared: PreparedPhoto = { uri: `${CACHE}/scans/s1.jpg`, width: 800, height: 600, sizeBytes: 9 };
+  const prepared: PreparedPhoto = {
+    uri: `${CACHE}/scans/s1.jpg`,
+    width: 800,
+    height: 600,
+    sizeBytes: 9,
+  };
   fakeFs.put(prepared.uri, { size: 9, width: 800, height: 600 });
   const diagnoser = diagnoserReturning(result);
-  const out = await runDiagnosis({ scanId: 's1', sourceUri: null, prepared }, { ...fast, diagnoser });
+  const out = await runDiagnosis(
+    { scanId: 's1', sourceUri: null, prepared },
+    { ...fast, diagnoser },
+  );
   expect(mockManipulator.manipulate).not.toHaveBeenCalled();
   expect(out.photo).toBe(prepared);
 });
@@ -60,10 +73,14 @@ test('nothing to prepare is a "prepare" error', async () => {
 });
 
 test('a failing diagnoser is a "diagnose" error and keeps the prepared photo for Try again', async () => {
-  const diagnoser: Diagnoser = { id: 'x', diagnose: () => Promise.reject(new Error('model crashed')) };
-  const error = await runDiagnosis({ scanId: 's1', sourceUri: shot(), prepared: null }, { ...fast, diagnoser }).catch(
-    (e) => e,
-  );
+  const diagnoser: Diagnoser = {
+    id: 'x',
+    diagnose: () => Promise.reject(new Error('model crashed')),
+  };
+  const error = await runDiagnosis(
+    { scanId: 's1', sourceUri: shot(), prepared: null },
+    { ...fast, diagnoser },
+  ).catch((e) => e);
   expect(error.kind).toBe('diagnose');
   expect(error.photo).toMatchObject({ uri: `${CACHE}/scans/s1.jpg` });
 });
@@ -74,9 +91,10 @@ describe('with fake timers', () => {
 
   test('a diagnoser that never answers times out after 10 seconds', async () => {
     const diagnoser: Diagnoser = { id: 'x', diagnose: () => new Promise(() => {}) };
-    const run = runDiagnosis({ scanId: 's1', sourceUri: shot(), prepared: null }, { diagnoser, minMs: 0 }).catch(
-      (e) => e,
-    );
+    const run = runDiagnosis(
+      { scanId: 's1', sourceUri: shot(), prepared: null },
+      { diagnoser, minMs: 0 },
+    ).catch((e) => e);
     await jest.advanceTimersByTimeAsync(10_000);
     const error = await run;
     expect(error.kind).toBe('timeout');
@@ -116,7 +134,10 @@ describe('with fake timers', () => {
 test('a cancelled run rejects as "aborted", never resolves with a result', async () => {
   const controller = new AbortController();
   let resolveDiagnosis!: (d: Diagnosis) => void;
-  const diagnoser: Diagnoser = { id: 'x', diagnose: () => new Promise((r) => (resolveDiagnosis = r)) };
+  const diagnoser: Diagnoser = {
+    id: 'x',
+    diagnose: () => new Promise((r) => (resolveDiagnosis = r)),
+  };
   const run = runDiagnosis(
     { scanId: 's1', sourceUri: shot(), prepared: null },
     { ...fast, diagnoser, signal: controller.signal },

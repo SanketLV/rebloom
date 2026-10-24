@@ -1,5 +1,12 @@
 import { useEffect, type ReactNode } from 'react';
-import { BackHandler, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
+import {
+  BackHandler,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius, scrim, spacing } from '@/theme/tokens';
@@ -44,7 +51,10 @@ export function BottomSheet({ visible, label, onClose, dismissible = true, child
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.scrim]} />
       )}
-      <KeyboardAvoidingView style={styles.anchor} behavior={Platform.OS === 'ios' ? 'padding' : undefined} pointerEvents="box-none">
+      <KeyboardAvoidingView
+        style={styles.anchor}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        pointerEvents="box-none">
         <View
           accessibilityViewIsModal
           accessibilityLabel={label}
@@ -76,5 +86,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     gap: spacing.lg,
   },
-  handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: colors.disabled },
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.disabled,
+  },
 });

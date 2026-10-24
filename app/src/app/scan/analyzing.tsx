@@ -87,7 +87,11 @@ export default function AnalyzingScreen() {
       <View style={styles.screen} {...hiddenBehindSheet(phase === 'low')}>
         <View style={[styles.photoArea, { paddingTop: insets.top }]}>
           {photoUri && (
-            <Image source={{ uri: photoUri }} style={styles.photo} accessibilityLabel="Your photo being analyzed" />
+            <Image
+              source={{ uri: photoUri }}
+              style={styles.photo}
+              accessibilityLabel="Your photo being analyzed"
+            />
           )}
           <View style={[styles.chip, { top: insets.top + spacing.xl }]}>
             <Text style={[type.chip, styles.chipText]}>Analyzing on your phone</Text>
@@ -103,7 +107,11 @@ export default function AnalyzingScreen() {
           </View>
           <View style={styles.steps} accessibilityLiveRegion="polite">
             {STEPS.map((label, index) => (
-              <StepRow key={label} label={label} status={index < done ? 'done' : index === done ? 'active' : 'pending'} />
+              <StepRow
+                key={label}
+                label={label}
+                status={index < done ? 'done' : index === done ? 'active' : 'pending'}
+              />
             ))}
           </View>
           <View style={styles.spacer} />
@@ -125,7 +133,9 @@ export default function AnalyzingScreen() {
 
 function StepRow({ label, status }: { label: string; status: 'done' | 'active' | 'pending' }) {
   return (
-    <View style={styles.step} accessibilityLabel={`${label}${status === 'done' ? ', done' : status === 'active' ? ', in progress' : ''}`}>
+    <View
+      style={styles.step}
+      accessibilityLabel={`${label}${status === 'done' ? ', done' : status === 'active' ? ', in progress' : ''}`}>
       {status === 'done' ? (
         <View style={styles.doneDot}>
           <CheckIcon color={colors.onPrimary} size={14} strokeWidth={3} />
@@ -137,7 +147,9 @@ function StepRow({ label, status }: { label: string; status: 'done' | 'active' |
       ) : (
         <View style={styles.pendingDot} />
       )}
-      <Text style={[type.bodyStrong, status === 'pending' ? styles.pendingText : styles.stepText]}>{label}</Text>
+      <Text style={[type.bodyStrong, status === 'pending' ? styles.pendingText : styles.stepText]}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -146,8 +158,19 @@ const DOT = 26;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: cameraColors.ground },
-  photoArea: { height: '60%', backgroundColor: cameraColors.analyzing, alignItems: 'center', justifyContent: 'center' },
-  photo: { width: 260, height: 260, borderRadius: radius.lg, borderWidth: 2, borderColor: colors.reward },
+  photoArea: {
+    height: '60%',
+    backgroundColor: cameraColors.analyzing,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photo: {
+    width: 260,
+    height: 260,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.reward,
+  },
   chip: {
     position: 'absolute',
     alignSelf: 'center',
@@ -180,8 +203,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dotSlot: { width: DOT, height: DOT, alignItems: 'center', justifyContent: 'center' },
-  activeDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.primary, borderWidth: 3, borderColor: colors.reward },
-  pendingDot: { width: DOT, height: DOT, borderRadius: DOT / 2, borderWidth: 2, borderColor: colors.controlBorder },
+  activeDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.primary,
+    borderWidth: 3,
+    borderColor: colors.reward,
+  },
+  pendingDot: {
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
+    borderWidth: 2,
+    borderColor: colors.controlBorder,
+  },
   stepText: { color: colors.text },
   pendingText: { color: colors.textSecondary, fontFamily: type.body.fontFamily },
   spacer: { flex: 1 },
