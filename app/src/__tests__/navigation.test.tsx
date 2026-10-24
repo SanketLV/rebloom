@@ -1,10 +1,19 @@
 import { fireEvent, screen } from '@testing-library/react-native';
 import { renderRouter } from 'expo-router/testing-library';
 
+import { mockCamera } from '@/testing/nativeMocks';
+
 // The real route tree from src/app, with fonts treated as loaded.
 jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), useFonts: () => [true, null] }));
 
-const renderApp = (initialUrl = '/') => renderRouter('./src/app', { initialUrl });
+// Navigation, not permissions, is under test here.
+beforeEach(() => mockCamera.setPermission('granted'));
+
+// Screens appear once the local database has opened.
+async function renderApp(initialUrl = '/') {
+  await renderRouter('./src/app', { initialUrl });
+  await screen.findByRole('tab', { name: 'Today' });
+}
 
 test('profile icon on Today opens Settings', async () => {
   await renderApp();

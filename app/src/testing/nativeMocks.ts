@@ -239,10 +239,18 @@ export const mockSqlite = {
     return current;
   },
   failNextInit: undefined as Error | undefined,
+  // Set by `hold()`: opening waits until the returned release function runs.
+  gate: undefined as Promise<void> | undefined,
+  hold(): () => void {
+    let release!: () => void;
+    mockSqlite.gate = new Promise((resolve) => (release = resolve));
+    return release;
+  },
   reset() {
     current?.close();
     current = undefined;
     mockSqlite.failNextInit = undefined;
+    mockSqlite.gate = undefined;
   },
 };
 
@@ -259,6 +267,7 @@ function SQLiteProvider({ onInit, onError, children }: ProviderProps) {
     let cancelled = false;
     (async () => {
       try {
+        await mockSqlite.gate;
         const opened = await createTestDb();
         const failure = mockSqlite.failNextInit;
         mockSqlite.failNextInit = undefined;
