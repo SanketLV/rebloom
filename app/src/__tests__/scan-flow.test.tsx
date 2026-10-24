@@ -4,8 +4,8 @@ import { renderRouter } from 'expo-router/testing-library';
 import { BackHandler } from 'react-native';
 
 import type { Diagnosis } from '@/diagnosis/types';
-import { CACHE, fakeFs } from '@/testing/fileSystemFake';
-import { mockCamera, mockManipulator } from '@/testing/nativeMocks';
+import { CACHE, DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
+import { mockCamera, mockManipulator, mockSqlite } from '@/testing/nativeMocks';
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -382,5 +382,129 @@ describe('Result', () => {
     const view = await renderRouter('./src/app', { initialUrl: '/scan/result' });
     await waitFor(() => expect(view).toHavePathname('/scan'));
     await screen.findByRole('button', { name: 'Close camera', includeHiddenElements: true });
+  });
+});
+
+const rows = (table: string) =>
+  mockSqlite.db().getAllAsync<Record<string, unknown>>(`SELECT * FROM ${table}`, []);
+
+async function saveFromResult(name = 'Fern') {
+  await fireEvent.press(screen.getByRole('button', { name: 'Save to My Plants' }));
+  await fireEvent.changeText(await screen.findByLabelText('Name'), name);
+  await fireEvent.press(screen.getByRole('button', { name: 'Save plant' }));
+}
+
+async function giveFeedback(verdict: 'Yes' | 'Not sure') {
+  await fireEvent.press(screen.getByRole('button', { name: "Doesn't look right?" }));
+  await fireEvent.press(await screen.findByRole('button', { name: verdict }));
+  await screen.findByText('Thanks! Your answer is saved.');
+  await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+}
+
+describe('end to end', () => {
+  test('scan, answer, save: lands on My Plants with the plant, and the scan is gone', async () => {
+    const view = await reachResult();
+    await saveFromResult('Kitchen fern');
+    await waitFor(() => expect(view).toHavePathname('/plants'));
+    expect(scanStack(view)).toBeNull();
+    expect(await screen.findByText('Kitchen fern')).toBeOnTheScreen();
+    expect(await rows('plants')).toHaveLength(1);
+    expect(await rows('scans')).toEqual([
+      expect.objectContaining({ plant_id: (await rows('plants'))[0].id, diagnoser_id: 'fake-v1' }),
+    ]);
+
+    // Back from My Plants goes to Today (the tabs' usual Back), never into the scan.
+    await act(async () => router.canGoBack() && router.back());
+    expect(view).toHavePathname('/');
+    expect(scanStack(view)).toBeNull();
+  });
+
+  test('the saved photo is permanent and every temp file is cleaned up', async () => {
+    const view = await reachResult();
+    await saveFromResult();
+    await waitFor(() => expect(view).toHavePathname('/plants'));
+    const [scan] = await rows('scans');
+    expect(fakeFs.has(`${DOCUMENT}/${scan.photo_path}`)).toBe(true);
+    expect(fakeFs.under(`${CACHE}/scans`)).toEqual([]);
+    expect(fakeFs.under(`${CACHE}/Camera`)).toEqual([]);
+  });
+
+  test('closing the scan before saving stores nothing and leaves no files', async () => {
+    const view = await reachResult();
+    await act(async () => router.dismissTo('/'));
+    await waitFor(() => expect(view).toHavePathname('/'));
+    expect(await rows('plants')).toEqual([]);
+    expect(await rows('scans')).toEqual([]);
+    expect(fakeFs.under(CACHE)).toEqual([]);
+    expect(fakeFs.under(DOCUMENT)).toEqual([]);
+  });
+
+  test('feedback, then a save that fails: the photo the feedback scan uses survives', async () => {
+    const view = await reachResult();
+    await giveFeedback('Yes');
+    await mockSqlite
+      .db()
+      .execAsync(
+        "CREATE TEMP TRIGGER fail_plants BEFORE INSERT ON plants BEGIN SELECT RAISE(ABORT, 'disk full'); END;",
+      );
+    await saveFromResult();
+    expect(await screen.findByText("Couldn't save the plant. Try again.")).toBeOnTheScreen();
+    expect(view).toHavePathname('/scan/result');
+
+    const scans = await rows('scans');
+    expect(scans).toHaveLength(1);
+    expect(fakeFs.has(`${DOCUMENT}/${scans[0].photo_path}`)).toBe(true);
+    expect(await rows('plants')).toEqual([]);
+  });
+
+  test('feedback, then changed answers, then save: one scan with the new answers', async () => {
+    const view = await reachResult(['Every 2–3 days', 'Bright, indirect light', 'Repotted it']);
+    await giveFeedback('Not sure');
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(view).toHavePathname('/scan/questions'));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Nothing has changed' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'See my diagnosis' }));
+    await screen.findByText('Most likely');
+    await saveFromResult();
+    await waitFor(() => expect(view).toHavePathname('/plants'));
+
+    const scans = await rows('scans');
+    expect(scans).toHaveLength(1);
+    expect(JSON.parse(scans[0].answers as string)).toMatchObject({ recent_change: 'change_none' });
+    expect(scans[0].plant_id).toBe((await rows('plants'))[0].id);
+  });
+
+  test('feedback, then a new photo, then save: a new scan with its own photo', async () => {
+    const view = await reachResult();
+    await giveFeedback('Yes');
+    await fireEvent.press(screen.getByRole('button', { name: 'Retake photo' }));
+    await waitFor(() => expect(view).toHavePathname('/scan'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Take photo' }));
+    await screen.findByText('How often do you water it?');
+    for (let i = 0; i < 3; i++)
+      await fireEvent.press(screen.getByRole('button', { name: "I'm not sure" }));
+    await screen.findByText('Most likely');
+    await saveFromResult('Second');
+    await waitFor(() => expect(view).toHavePathname('/plants'));
+
+    const scans = await rows('scans');
+    expect(scans).toHaveLength(2);
+    const [plant] = await rows('plants');
+    const saved = scans.find((s) => s.plant_id === plant.id)!;
+    const feedbackOnly = scans.find((s) => s.plant_id === null)!;
+    expect(saved.photo_path).not.toBe(feedbackOnly.photo_path);
+    expect(fakeFs.has(`${DOCUMENT}/${saved.photo_path}`)).toBe(true);
+    expect(fakeFs.has(`${DOCUMENT}/${feedbackOnly.photo_path}`)).toBe(true);
+  });
+
+  test('a double tap on Save plant saves one plant', async () => {
+    const view = await reachResult();
+    await fireEvent.press(screen.getByRole('button', { name: 'Save to My Plants' }));
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Save plant' }));
+      fireEvent.press(screen.getByRole('button', { name: 'Save plant' }));
+    });
+    await waitFor(() => expect(view).toHavePathname('/plants'));
+    expect(await rows('plants')).toHaveLength(1);
   });
 });
