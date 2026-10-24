@@ -21,7 +21,31 @@ export const colors = {
   warningBg: '#F6E3BD',
   severe: '#A8261E',
   severeBg: '#F7DEDA',
+  // From the scan artboards (Questions, Result, sheets).
+  onPrimary: '#FFFFFF',
+  // Disabled buttons, inactive progress, sheet handles.
+  disabled: '#C9CDBD',
+  // Unselected radio rings, dashed "+ New room" border.
+  controlBorder: '#8C9482',
+  // Behind a plant photo while it loads, or when it's missing.
+  photoBg: '#CFC8B6',
 } as const;
+
+// The dark viewfinder screens (Camera, Analyzing).
+export const cameraColors = {
+  ground: '#0F140F',
+  text: '#F3F4EC',
+  caption: '#AEB8A4',
+  preview: '#3D4A34',
+  analyzing: '#2C3726',
+  button: '#1E2A1C',
+  buttonIcon: '#D3D9C8',
+  // Chips and round buttons over the live preview.
+  overlay: 'rgba(15,20,15,0.6)',
+} as const;
+
+// Dims the screen behind a bottom sheet.
+export const scrim = 'rgba(15,20,15,0.55)';
 
 export const radius = { sm: 14, md: 20, lg: 24, pill: 999 } as const;
 
