@@ -546,3 +546,14 @@ describe('review round 1', () => {
     expect(fakeFs.under(CACHE)).toEqual([]);
   });
 });
+
+describe('break-test fixes', () => {
+  test('opening Scan again mid-scan (a deep link) keeps the live scan photo', async () => {
+    const view = await reachQuestions();
+    const [live] = fakeFs.under(`${CACHE}/scans`);
+    expect(live).toBeDefined();
+    await act(async () => router.push('/scan'));
+    await waitFor(() => expect(view).toHavePathname('/scan'));
+    expect(fakeFs.has(live)).toBe(true);
+  });
+});
