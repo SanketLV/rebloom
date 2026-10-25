@@ -4,6 +4,7 @@ import { renderRouter } from 'expo-router/testing-library';
 import { Text } from 'react-native';
 
 import RootLayout from '@/app/_layout';
+import { DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
 import { mockSqlite } from '@/testing/nativeMocks';
 
 let mockFontState: [boolean, Error | null] = [true, null];
@@ -71,4 +72,12 @@ test('a database that fails to open shows a start error with Retry, never a blan
 
   await fireEvent.press(screen.getByRole('button', { name: 'Retry' }));
   expect(await screen.findByText('child screen')).toBeOnTheScreen();
+});
+
+test('start-up deletes stored photos left by a save that never finished', async () => {
+  mockFontState = [true, null];
+  fakeFs.put(`${DOCUMENT}/photos/killed-mid-save.jpg`);
+  await renderRouter({ _layout: RootLayout, index: Child });
+  await screen.findByText('child screen');
+  expect(fakeFs.under(`${DOCUMENT}/photos`)).toEqual([]);
 });

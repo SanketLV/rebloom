@@ -66,7 +66,7 @@ export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: B
       testID="tab-bar"
       accessibilityRole="tablist"
       style={[styles.bar, { paddingBottom: spacing.sm + Math.max(insets.bottom, spacing.sm) }]}>
-      <View testID="tab-bar-background" pointerEvents="none" style={styles.background} />
+      <View testID="tab-bar-background" style={styles.background} />
       {first}
       {scan}
       {rest}
@@ -83,6 +83,7 @@ const styles = StyleSheet.create({
   },
   background: {
     position: 'absolute',
+    pointerEvents: 'none',
     top: SCAN_LIFT,
     right: 0,
     bottom: 0,

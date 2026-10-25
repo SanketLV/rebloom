@@ -2,6 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
 import type { PreparedPhoto } from '@/diagnosis/types';
+import type { Db } from '@/storage/db';
 
 // Longest side of the photo the diagnoser reads (Tech Stack: ~800px, 1–2 MP).
 export const MAX_SIDE = 800;
@@ -110,5 +111,21 @@ export function sweepTempPhotos(): void {
     for (const item of dir.list()) if (item instanceof File) deletePhoto(item.uri);
   } catch {
     // Nothing to do; the next sweep tries again.
+  }
+}
+
+// Deletes stored photos no scan row points to: a copy left by a save that was
+// killed before its transaction committed. Run at start-up, before any save.
+export async function sweepOrphanPhotos(db: Db): Promise<void> {
+  try {
+    const rows = await db.getAllAsync<{ photo_path: string }>('SELECT photo_path FROM scans', []);
+    const kept = new Set(rows.map((row) => photoUri(row.photo_path)));
+    const dir = photosDir();
+    if (!dir.exists) return;
+    for (const item of dir.list()) {
+      if (item instanceof File && !kept.has(item.uri)) deletePhoto(item.uri);
+    }
+  } catch {
+    // Keep everything; the next start tries again.
   }
 }

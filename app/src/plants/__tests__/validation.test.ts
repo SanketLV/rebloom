@@ -28,3 +28,15 @@ test('rooms follow the same rules with a 30 limit', () => {
   expect(validateRoom('x'.repeat(30))).toEqual({ ok: true, value: 'x'.repeat(30) });
   expect(validateRoom('x'.repeat(31))).toEqual({ ok: false, reason: 'too_long' });
 });
+
+test.each(['​​', ' ‍﻿ ', '⁠', ' 　'])(
+  'a name of only invisible characters %j is rejected',
+  (name) => {
+    expect(validateName(name)).toEqual({ ok: false, reason: 'empty' });
+    expect(validateRoom(name)).toEqual({ ok: false, reason: 'empty' });
+  },
+);
+
+test('a name with a zero-width joiner inside an emoji is kept', () => {
+  expect(validateName('👩‍🌾 corner')).toEqual({ ok: true, value: '👩‍🌾 corner' });
+});

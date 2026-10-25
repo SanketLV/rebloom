@@ -13,8 +13,8 @@ const scan = (overrides: Partial<ScanInput> = {}): ScanInput => ({
   photoPath: 'photos/scan-1.jpg',
   diagnoserId: 'fake-v1',
   modelResult: [
-    { conditionId: 'underwatering', confidence: 0.45 },
-    { conditionId: 'overwatering', confidence: 0.35 },
+    { conditionId: 'underwatering', confidence: 0.52 },
+    { conditionId: 'overwatering', confidence: 0.28 },
     { conditionId: 'low_light', confidence: 0.1 },
   ],
   answers: { watering: 'water_2_3_days', light: 'not_sure', recent_change: 'change_none' },
@@ -54,7 +54,7 @@ test('inserts a scan with snake_case JSON and the low-confidence flag', async ()
   });
   expect(JSON.parse(row.model_result as string)[0]).toEqual({
     condition_id: 'underwatering',
-    confidence: 0.45,
+    confidence: 0.52,
   });
   expect(JSON.parse(row.answers as string)).toEqual({
     watering: 'water_2_3_days',
@@ -65,6 +65,18 @@ test('inserts a scan with snake_case JSON and the low-confidence flag', async ()
 
 test('flags a low-confidence final result', async () => {
   await persistScan(db, scan({ finalResult: [{ conditionId: 'healthy', confidence: 0.4 }] }), T1);
+  expect((await rows(db, 'scans'))[0].low_confidence).toBe(1);
+});
+
+test('flags a scan the model was unsure of, even if the answers lifted it over 50%', async () => {
+  await persistScan(
+    db,
+    scan({
+      modelResult: [{ conditionId: 'overwatering', confidence: 0.41 }],
+      finalResult: [{ conditionId: 'overwatering', confidence: 0.58 }],
+    }),
+    T1,
+  );
   expect((await rows(db, 'scans'))[0].low_confidence).toBe(1);
 });
 

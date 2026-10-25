@@ -24,10 +24,11 @@ const shutter = () => screen.getByRole('button', { name: 'Take photo' });
 describe('opening Scan', () => {
   test('sweeps temp photos left by an earlier scan before the camera starts', async () => {
     fakeFs.put(`${CACHE}/scans/left-over.jpg`);
-    fakeFs.put(`${DOCUMENT}/photos/saved.jpg`);
+    // Stored photos with no scan row are the start-up sweep's job (root-layout tests).
+    fakeFs.put(`${DOCUMENT}/notes/keep.jpg`);
     await openScan();
     expect(fakeFs.has(`${CACHE}/scans/left-over.jpg`)).toBe(false);
-    expect(fakeFs.has(`${DOCUMENT}/photos/saved.jpg`)).toBe(true);
+    expect(fakeFs.has(`${DOCUMENT}/notes/keep.jpg`)).toBe(true);
   });
 });
 

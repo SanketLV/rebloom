@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
-import { BackHandler } from 'react-native';
+import { AccessibilityInfo, BackHandler } from 'react-native';
 
 import type { Diagnosis } from '@/diagnosis/types';
 import { CACHE, DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
@@ -107,6 +107,21 @@ describe('Analyzing', () => {
     expect(screen.getByText('Comparing likely causes')).toBeOnTheScreen();
     expect(screen.getByText('Your photo stays on your phone')).toBeOnTheScreen();
     expect(screen.getByText('Demo')).toBeOnTheScreen();
+  });
+
+  test('screen readers hear each step as it starts (iOS has no live regions)', async () => {
+    // The preset's AccessibilityInfo is already a jest.fn that keeps earlier tests' calls.
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+    announce.mockClear();
+    let finish!: (d: Diagnosis) => void;
+    mockDiagnose.mockReturnValue(new Promise((r) => (finish = r)));
+    await shoot();
+    await waitFor(() =>
+      expect(announce).toHaveBeenLastCalledWith('Photo ready. Checking color, spots and edges'),
+    );
+    await act(async () => finish(UNSURE));
+    await waitFor(() => expect(announce).toHaveBeenLastCalledWith('Comparing likely causes'));
+    expect(announce).toHaveBeenCalledTimes(2);
   });
 
   test('a low-confidence result asks for a better photo first', async () => {
@@ -356,6 +371,19 @@ describe('Result', () => {
     expect(await screen.findByText("We're not sure yet")).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'See treatment plan' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Retake photo' })).toBeOnTheScreen();
+  });
+
+  test('answers that lift an unsure photo over 50% still show it as unsure', async () => {
+    mockDiagnose.mockResolvedValue(UNSURE);
+    const view = await shoot();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Use it anyway' }));
+    await screen.findByText('How often do you water it?');
+    await answerQuestion('Every 2–3 days');
+    for (let i = 0; i < 2; i++)
+      await fireEvent.press(await screen.findByRole('button', { name: "I'm not sure" }));
+    await waitFor(() => expect(view).toHavePathname('/scan/result'));
+    expect(await screen.findByText("We're not sure yet")).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'See treatment plan' })).toBeNull();
   });
 
   test('Retake leaves exactly one camera in the scan stack', async () => {

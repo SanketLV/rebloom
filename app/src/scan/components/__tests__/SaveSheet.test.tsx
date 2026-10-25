@@ -120,3 +120,21 @@ test('starting a new room clears the room picked before, so a blank new room sav
   await fireEvent.press(saveButton());
   expect(onSave).toHaveBeenCalledWith({ name: 'My plant', room: null });
 });
+
+test('rooms that differ only in case show once, with the first spelling', async () => {
+  const { view } = renderSheet({ rooms: ['kitchen', 'balcony', 'BALCONY'] });
+  await view;
+  expect(screen.getAllByRole('button', { name: /^kitchen$/i })).toHaveLength(1);
+  expect(screen.getByRole('button', { name: 'Kitchen' })).toBeOnTheScreen();
+  expect(screen.getAllByRole('button', { name: /^balcony$/i })).toHaveLength(1);
+  expect(screen.getByRole('button', { name: 'balcony' })).toBeOnTheScreen();
+});
+
+test('a new room typed like an existing one saves the existing spelling', async () => {
+  const { view, onSave } = renderSheet({ rooms: ['Balcony'] });
+  await view;
+  await fireEvent.press(screen.getByRole('button', { name: 'New room' }));
+  await fireEvent.changeText(screen.getByLabelText('New room name'), ' BALCONY ');
+  await fireEvent.press(saveButton());
+  expect(onSave).toHaveBeenCalledWith({ name: 'My plant', room: 'Balcony' });
+});

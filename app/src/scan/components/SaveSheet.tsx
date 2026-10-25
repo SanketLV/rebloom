@@ -12,6 +12,15 @@ const DEFAULT_ROOMS = ['Living room', 'Bedroom', 'Kitchen'];
 // No species ID yet, so no species-based default (spec open question).
 const DEFAULT_NAME = 'My plant';
 
+const sameRoom = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+// "Kitchen" and "kitchen" are one room: the first spelling wins.
+function uniqueRooms(rooms: string[]): string[] {
+  const out: string[] = [];
+  for (const room of rooms) if (!out.some((kept) => sameRoom(kept, room))) out.push(room);
+  return out;
+}
+
 type Props = {
   visible: boolean;
   // Rooms already used by saved plants.
@@ -29,8 +38,11 @@ export function SaveSheet({ visible, rooms, onSave, onClose }: Props) {
   const [newRoom, setNewRoom] = useState('');
   const [failed, setFailed] = useState(false);
 
-  const roomChoices = [...new Set([...DEFAULT_ROOMS, ...rooms])];
-  const chosenRoom = addingRoom && newRoom.trim() ? newRoom : room;
+  const roomChoices = uniqueRooms([...DEFAULT_ROOMS, ...rooms]);
+  const typedRoom = addingRoom && newRoom.trim() ? newRoom : null;
+  const chosenRoom = typedRoom
+    ? (roomChoices.find((choice) => sameRoom(choice, typedRoom)) ?? typedRoom)
+    : room;
   const valid = validateName(name).ok && (chosenRoom === null || validateRoom(chosenRoom).ok);
 
   const save = useSingleFlight(async () => {

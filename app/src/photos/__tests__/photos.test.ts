@@ -1,5 +1,8 @@
 import { CACHE, DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
 import { mockManipulator } from '@/testing/nativeMocks';
+import { createTestDb } from '@/testing/sqljs';
+import { migrate } from '@/storage/migrations';
+import { persistScan } from '@/storage/scansRepo';
 
 import {
   deleteCachedPhoto,
@@ -9,6 +12,7 @@ import {
   persistPhoto,
   photoUri,
   preparePhoto,
+  sweepOrphanPhotos,
   sweepTempPhotos,
 } from '../photos';
 
@@ -144,4 +148,53 @@ test.each([
   ['content://media/external/images/1', false],
 ])('isInAppCache(%s) is %s', (uri, expected) => {
   expect(isInAppCache(uri)).toBe(expected);
+});
+
+describe('sweepOrphanPhotos', () => {
+  const migratedDb = async () => {
+    const db = await createTestDb();
+    await migrate(db);
+    return db;
+  };
+
+  test('deletes stored photos no scan points to and keeps the rest', async () => {
+    const db = await migratedDb();
+    const row = {
+      plantId: null,
+      diagnoserId: 'fake-v1',
+      modelResult: [],
+      answers: {},
+      finalResult: [],
+    };
+    await persistScan(db, { ...row, id: 'a', photoPath: 'photos/a.jpg' }, 't');
+    await persistScan(db, { ...row, id: 'b', photoPath: 'photos/b.jpg' }, 't');
+    await db.runAsync("UPDATE scans SET deleted_at = 't' WHERE id = 'b'", []);
+    for (const name of ['a', 'b', 'orphan']) fakeFs.put(`${DOCUMENT}/photos/${name}.jpg`);
+    fakeFs.put(`${DOCUMENT}/other.jpg`);
+    fakeFs.put(`${CACHE}/scans/live.jpg`);
+
+    await sweepOrphanPhotos(db);
+
+    expect(fakeFs.uris()).toEqual([
+      `${CACHE}/scans/live.jpg`,
+      `${DOCUMENT}/other.jpg`,
+      `${DOCUMENT}/photos/a.jpg`,
+      `${DOCUMENT}/photos/b.jpg`,
+    ]);
+  });
+
+  test('is fine with no photos folder, and never throws', async () => {
+    const db = await migratedDb();
+    await expect(sweepOrphanPhotos(db)).resolves.toBeUndefined();
+    fakeFs.put(`${DOCUMENT}/photos/orphan.jpg`);
+    fakeFs.failNext('delete');
+    await expect(sweepOrphanPhotos(db)).resolves.toBeUndefined();
+  });
+
+  test('keeps every photo when the scans query fails', async () => {
+    const db = await createTestDb();
+    fakeFs.put(`${DOCUMENT}/photos/a.jpg`);
+    await expect(sweepOrphanPhotos(db)).resolves.toBeUndefined();
+    expect(fakeFs.uris()).toEqual([`${DOCUMENT}/photos/a.jpg`]);
+  });
 });

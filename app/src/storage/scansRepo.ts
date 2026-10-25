@@ -64,12 +64,11 @@ export function parseCandidates(raw: string): Candidate[] {
 // then changed answers, then save). A later call without a plant id keeps the
 // existing link.
 export async function persistScan(db: Db, scan: ScanInput, now: string): Promise<void> {
-  const lowConfidence = isLowConfidence({
-    diagnoserId: scan.diagnoserId,
-    candidates: scan.finalResult,
-  })
-    ? 1
-    : 0;
+  // Unsure if the model was, whatever the answers did to the ranking.
+  const low = [scan.modelResult, scan.finalResult].some((candidates) =>
+    isLowConfidence({ diagnoserId: scan.diagnoserId, candidates }),
+  );
+  const lowConfidence = low ? 1 : 0;
   await db.runAsync(
     `INSERT INTO scans (id, plant_id, photo_path, diagnoser_id, model_result, answers, final_result, low_confidence, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

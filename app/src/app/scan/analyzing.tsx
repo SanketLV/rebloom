@@ -1,6 +1,6 @@
 import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useEffectEvent, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Image, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { hiddenBehindSheet } from '@/components/BottomSheet';
@@ -39,6 +39,10 @@ export default function AnalyzingScreen() {
       // and gets deleted if the user leaves, even mid-diagnosis.
       if (step === 'prepared') session.setPrepared(photo);
       setDone(step === 'prepared' ? 1 : 2);
+      // Announced on both platforms rather than via a live region, which iOS lacks.
+      AccessibilityInfo.announceForAccessibility(
+        step === 'prepared' ? `${STEPS[0]}. ${STEPS[1]}` : STEPS[2],
+      );
     };
     runDiagnosis(
       { scanId: state.scanId, sourceUri: state.sourceUri, prepared: state.photo },
@@ -110,7 +114,7 @@ export default function AnalyzingScreen() {
             </Text>
             {isDemoDiagnoser(diagnoser.id) && <DemoTag />}
           </View>
-          <View style={styles.steps} accessibilityLiveRegion="polite">
+          <View style={styles.steps}>
             {STEPS.map((label, index) => (
               <StepRow
                 key={label}

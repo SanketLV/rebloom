@@ -6,6 +6,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 
 import { StartError } from '@/components/StartError';
+import { sweepOrphanPhotos } from '@/photos/photos';
+import type { Db } from '@/storage/db';
 import { migrate } from '@/storage/migrations';
 import { fontAssets, fonts } from '@/theme/fonts';
 import { colors } from '@/theme/tokens';
@@ -24,6 +26,12 @@ const theme = {
     primary: colors.primary,
   },
 };
+
+// Nothing is saving yet, so any photo no scan points to is safe to delete.
+async function openDb(db: Db) {
+  await migrate(db);
+  await sweepOrphanPhotos(db);
+}
 
 // Mounted only once fonts and the database are ready (or have failed).
 function HideSplash() {
@@ -59,8 +67,8 @@ export default function RootLayout() {
   }
 
   return (
-    // Renders its children only after `migrate` has run.
-    <SQLiteProvider key={attempt} databaseName="rebloom.db" onInit={migrate} onError={setDbError}>
+    // Renders its children only after `openDb` has run.
+    <SQLiteProvider key={attempt} databaseName="rebloom.db" onInit={openDb} onError={setDbError}>
       <HideSplash />
       <ThemeProvider value={theme}>
         <StatusBar style="dark" />

@@ -46,14 +46,15 @@ export default function ResultScreen() {
   // A fresh feedback sheet each time it opens.
   const [feedbackKey, setFeedbackKey] = useState(0);
   const [rooms, setRooms] = useState<string[]>([]);
-  const { result, photo, answers } = session.state;
+  const { diagnosis, result, photo, answers } = session.state;
 
   if (!result || result.candidates.length === 0) return <Redirect href="/scan" />;
 
   const [top, ...others] = result.candidates;
   const condition = CONDITIONS[top.conditionId];
   const severity = SEVERITY[condition.severity];
-  const low = isLowConfidence(result);
+  // Answers re-weight the model's guesses but can't make an unsure photo sure.
+  const low = isLowConfidence(result) || (diagnosis !== null && isLowConfidence(diagnosis));
   const chips = answerChips(answers);
   const retake = () => router.dismissTo('/scan');
 

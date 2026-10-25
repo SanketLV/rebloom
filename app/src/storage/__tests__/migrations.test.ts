@@ -89,3 +89,18 @@ test('running it again changes nothing and keeps data', async () => {
   expect(await db.getAllAsync('SELECT id FROM plants', [])).toEqual([{ id: 'p1' }]);
   expect(await db.getFirstAsync('PRAGMA user_version', [])).toEqual({ user_version: 1 });
 });
+
+test('a scan can have only one live feedback row; soft-deleted ones do not count', async () => {
+  const db = await createTestDb();
+  await migrate(db);
+  const insert = (id: string, deletedAt: string | null) =>
+    db.runAsync(
+      `INSERT INTO scan_feedback (id, scan_id, verdict, user_guess, created_at, updated_at, deleted_at)
+       VALUES (?, 'scan-1', 'wrong', NULL, 't', 't', ?)`,
+      [id, deletedAt],
+    );
+  await insert('f1', 't');
+  await insert('f2', 't');
+  await insert('f3', null);
+  await expect(insert('f4', null)).rejects.toThrow(/UNIQUE/);
+});

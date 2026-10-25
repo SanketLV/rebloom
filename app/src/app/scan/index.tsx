@@ -181,7 +181,6 @@ export default function CameraScreen() {
 function Corners() {
   return (
     <View
-      pointerEvents="none"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={styles.frame}>
@@ -231,7 +230,7 @@ const styles = StyleSheet.create({
     backgroundColor: cameraColors.overlay,
   },
   promptText: { color: cameraColors.text, textAlign: 'center' },
-  frame: { width: FRAME, height: FRAME },
+  frame: { width: FRAME, height: FRAME, pointerEvents: 'none' },
   corner: { position: 'absolute', width: CORNER, height: CORNER, borderColor: colors.reward },
   topLeft: { left: 0, top: 0, borderLeftWidth: 4, borderTopWidth: 4, borderTopLeftRadius: 18 },
   topRight: { right: 0, top: 0, borderRightWidth: 4, borderTopWidth: 4, borderTopRightRadius: 18 },

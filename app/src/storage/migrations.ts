@@ -37,7 +37,8 @@ const MIGRATIONS: string[] = [
     updated_at TEXT NOT NULL,
     deleted_at TEXT
   );
-  CREATE INDEX idx_scan_feedback_scan_id ON scan_feedback(scan_id) WHERE deleted_at IS NULL;
+  -- One live answer per scan; replaceFeedback soft-deletes the old one first.
+  CREATE UNIQUE INDEX idx_scan_feedback_scan_id ON scan_feedback(scan_id) WHERE deleted_at IS NULL;
   `,
 ];
 

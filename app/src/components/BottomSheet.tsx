@@ -53,8 +53,7 @@ export function BottomSheet({ visible, label, onClose, dismissible = true, child
       )}
       <KeyboardAvoidingView
         style={styles.anchor}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        pointerEvents="box-none">
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View
           accessibilityViewIsModal
           accessibilityLabel={label}
@@ -77,7 +76,7 @@ export function hiddenBehindSheet(open: boolean) {
 
 const styles = StyleSheet.create({
   scrim: { backgroundColor: scrim },
-  anchor: { flex: 1, justifyContent: 'flex-end' },
+  anchor: { flex: 1, justifyContent: 'flex-end', pointerEvents: 'box-none' },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.lg + 4,
