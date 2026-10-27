@@ -9,12 +9,14 @@ import { QUESTIONS } from '@/diagnosis/questions';
 import { applyAnswers } from '@/diagnosis/rerank';
 import type { Answers, Candidate, Diagnosis } from '@/diagnosis/types';
 import { charCount, limitChars } from '@/lib/text';
-import { isInAppCache } from '@/photos/photos';
-import { NAME_MAX, validateName, validateRoom } from '@/plants/validation';
+import { isInAppCache, sweepOrphanPhotos } from '@/photos/photos';
+import { NAME_MAX, validateName, validateRoom, visibleText } from '@/plants/validation';
+import { saveAsPlant, saveFeedback } from '@/scan/saveScan';
+import type { ScanState } from '@/scan/session';
 import { uniqueRooms } from '@/scan/components/SaveSheet';
 import { migrate } from '@/storage/migrations';
 import { persistScan, replaceFeedback } from '@/storage/scansRepo';
-import { CACHE } from '@/testing/fileSystemFake';
+import { CACHE, DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
 import { createTestDb } from '@/testing/sqljs';
 
 const RUNS = 2000;
@@ -307,6 +309,196 @@ describe('isInAppCache', () => {
         if (!uri.startsWith(`${CACHE}/`)) expect(isInAppCache(uri)).toBe(false);
       }),
       { numRuns: RUNS },
+    );
+  });
+});
+
+describe('visibleText helper (#3, #4)', () => {
+  const strippedClassRegex = /[\p{Cc}\p{Default_Ignorable_Code_Point}\u2800\u3164\uffa0]/u;
+  const randomUnicode = fc.oneof(
+    fc.string({ unit: 'grapheme', maxLength: 50 }),
+    fc.string({ unit: 'binary', maxLength: 50 }),
+    fc
+      .array(
+        fc.oneof(
+          fc.string({ unit: 'grapheme', maxLength: 3 }),
+          fc.constantFrom(
+            '\u3164',
+            '\u2800',
+            '\uffa0',
+            '\u034f',
+            '\ufe0f',
+            '\u200b',
+            '\u0000',
+            '\u001f',
+            'e\u0301',
+            'Café',
+            'Cafe\u0301',
+          ),
+        ),
+        { maxLength: 20 },
+      )
+      .map((parts) => parts.join('')),
+  );
+
+  test('random unicode in: output has no stripped characters, is idempotent, and NFC-equivalent inputs map to the same key', () => {
+    fc.assert(
+      fc.property(randomUnicode, (input) => {
+        const out = visibleText(input);
+
+        // 1. Output has no characters from the stripped classes
+        expect(strippedClassRegex.test(out)).toBe(false);
+
+        // 2. Idempotent
+        expect(visibleText(out)).toBe(out);
+
+        // 3. NFC-equivalent inputs map to the same key
+        expect(visibleText(input.normalize('NFD'))).toBe(out);
+      }),
+      { numRuns: RUNS },
+    );
+  });
+});
+
+describe('sweepOrphanPhotos property tests (#14)', () => {
+  const prefix = fc.constantFrom(
+    'photos/',
+    'file:///var/mobile/Containers/Data/Application/X/Documents/photos/',
+    'file:///private/var/mobile/Documents/photos/',
+    '/var/mobile/photos/',
+    'file:///document/photos/',
+  );
+  const fileName = fc.stringMatching(/^[a-z0-9_-]{1,10}\.jpg$/);
+
+  test('random set of scans and files with random prefix spellings never deletes a referenced basename', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.uniqueArray(fileName, { minLength: 1, maxLength: 8 }),
+        fc.array(
+          fc.record({
+            name: fileName,
+            prefix: prefix,
+          }),
+          { minLength: 1, maxLength: 8 },
+        ),
+        async (filesInDir, scanRecords) => {
+          const db = await createTestDb();
+          await migrate(db);
+          fakeFs.reset();
+
+          for (const name of filesInDir) {
+            fakeFs.put(`${DOCUMENT}/photos/${name}`);
+          }
+
+          const referencedNames = new Set<string>();
+          for (const [i, scan] of scanRecords.entries()) {
+            const photoPath = `${scan.prefix}${scan.name}`;
+            referencedNames.add(scan.name);
+            await persistScan(
+              db,
+              {
+                id: `scan-${i}`,
+                plantId: null,
+                photoPath,
+                diagnoserId: 'fake-v1',
+                modelResult: [],
+                answers: {},
+                finalResult: [],
+              },
+              '2026-10-24T10:00:00.000Z',
+            );
+          }
+
+          await sweepOrphanPhotos(db);
+
+          for (const name of filesInDir) {
+            if (referencedNames.has(name)) {
+              expect(fakeFs.has(`${DOCUMENT}/photos/${name}`)).toBe(true);
+            }
+          }
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});
+
+describe('saves interleaving property tests (#1)', () => {
+  type Op =
+    | { type: 'feedback'; verdict: 'yes' | 'no' | 'not_sure'; failDb?: boolean }
+    | { type: 'plant'; name: string; failDb?: boolean };
+
+  const opArb: fc.Arbitrary<Op> = fc.oneof(
+    fc.record({
+      type: fc.constant('feedback' as const),
+      verdict: fc.constantFrom('yes' as const, 'no' as const, 'not_sure' as const),
+      failDb: fc.boolean(),
+    }),
+    fc.record({
+      type: fc.constant('plant' as const),
+      name: fc.oneof(fc.constantFrom('Fern', 'Basil', 'Monstera'), fc.constant('   ')),
+      failDb: fc.boolean(),
+    }),
+  );
+
+  test('random interleavings of feedback/save calls on one scan: final photo exists iff a scan row references it', async () => {
+    let scanNum = 0;
+    await fc.assert(
+      fc.asyncProperty(fc.array(opArb, { minLength: 1, maxLength: 4 }), async (ops) => {
+        const db = await createTestDb();
+        await migrate(db);
+
+        const scanId = `prop-scan-${scanNum++}`;
+        const tempPhoto = `${CACHE}/scans/${scanId}.jpg`;
+        const storedPhoto = `${DOCUMENT}/photos/${scanId}.jpg`;
+
+        fakeFs.put(tempPhoto, { size: 10_000, width: 800, height: 600 });
+
+        const scanState: ScanState = {
+          scanId,
+          sourceUri: null,
+          photo: { uri: tempPhoto, width: 800, height: 600, sizeBytes: 10_000 },
+          diagnosis: {
+            diagnoserId: 'fake-v1',
+            candidates: [{ conditionId: 'underwatering', confidence: 0.6 }],
+          },
+          answers: { watering: 'water_2_3_days' },
+          result: {
+            diagnoserId: 'fake-v1',
+            candidates: [{ conditionId: 'underwatering', confidence: 0.6 }],
+          },
+          persisted: false,
+          photoStored: false,
+        };
+
+        const now = () => '2026-10-24T10:00:00.000Z';
+        let idGen = 0;
+        const newId = () => `${scanId}-id-${++idGen}`;
+
+        const promises = ops.map(async (op) => {
+          if (op.failDb) {
+            await db.execAsync(
+              `CREATE TEMP TRIGGER IF NOT EXISTS fail_prop_${scanNum} BEFORE INSERT ON scans BEGIN SELECT RAISE(ABORT, 'disk full'); END;`,
+            );
+          }
+          if (op.type === 'feedback') {
+            return saveFeedback(db, scanState, { verdict: op.verdict, userGuess: null }, { now, newId });
+          } else {
+            return saveAsPlant(db, scanState, { name: op.name, room: null }, { now, newId });
+          }
+        });
+
+        await Promise.allSettled(promises);
+
+        const scanRow = await db.getFirstAsync<{ id: string }>(
+          'SELECT id FROM scans WHERE id = ?',
+          [scanId],
+        );
+        const photoExists = fakeFs.has(storedPhoto);
+
+        expect(photoExists).toBe(scanRow !== null);
+      }),
+      { numRuns: 50 },
     );
   });
 });
