@@ -197,4 +197,68 @@ describe('sweepOrphanPhotos', () => {
     await expect(sweepOrphanPhotos(db)).resolves.toBeUndefined();
     expect(fakeFs.uris()).toEqual([`${DOCUMENT}/photos/a.jpg`]);
   });
+
+  test('keeps referenced photos when scan photo_path prefix differs from photos directory', async () => {
+    const db = await migratedDb();
+    const row = {
+      plantId: null,
+      diagnoserId: 'fake-v1',
+      modelResult: [],
+      answers: {},
+      finalResult: [],
+    };
+    await persistScan(
+      db,
+      {
+        ...row,
+        id: 'a',
+        photoPath: 'file:///private/var/mobile/Containers/Data/Application/X/Documents/photos/a.jpg',
+      },
+      't',
+    );
+    fakeFs.put(`${DOCUMENT}/photos/a.jpg`);
+    fakeFs.put(`${DOCUMENT}/photos/orphan.jpg`);
+
+    await sweepOrphanPhotos(db);
+
+    expect(fakeFs.has(`${DOCUMENT}/photos/a.jpg`)).toBe(true);
+    expect(fakeFs.has(`${DOCUMENT}/photos/orphan.jpg`)).toBe(false);
+  });
+
+  test('skips cleanup entirely when scans exist but none of their file names match photos folder', async () => {
+    const db = await migratedDb();
+    const row = {
+      plantId: null,
+      diagnoserId: 'fake-v1',
+      modelResult: [],
+      answers: {},
+      finalResult: [],
+    };
+    await persistScan(db, { ...row, id: 'a', photoPath: 'photos/a.jpg' }, 't');
+    fakeFs.put(`${DOCUMENT}/photos/other-1.jpg`);
+    fakeFs.put(`${DOCUMENT}/photos/other-2.jpg`);
+
+    await sweepOrphanPhotos(db);
+
+    expect(fakeFs.has(`${DOCUMENT}/photos/other-1.jpg`)).toBe(true);
+    expect(fakeFs.has(`${DOCUMENT}/photos/other-2.jpg`)).toBe(true);
+  });
+
+  test('a crafted photo_path cannot cause a delete outside photos/', async () => {
+    const db = await migratedDb();
+    const row = {
+      plantId: null,
+      diagnoserId: 'fake-v1',
+      modelResult: [],
+      answers: {},
+      finalResult: [],
+    };
+    await persistScan(db, { ...row, id: 'a', photoPath: '../rebloom.db' }, 't');
+    fakeFs.put(`${DOCUMENT}/rebloom.db`);
+    fakeFs.put(`${DOCUMENT}/photos/orphan.jpg`);
+
+    await sweepOrphanPhotos(db);
+
+    expect(fakeFs.has(`${DOCUMENT}/rebloom.db`)).toBe(true);
+  });
 });

@@ -98,8 +98,16 @@ export function photoUri(path: string): string {
   return new File(Paths.document, path).uri;
 }
 
+const photoFileName = (pathOrUri: string) => pathOrUri.split(/[\\/]/).pop() ?? '';
+
 export function deleteStoredPhoto(path: string): void {
-  deletePhoto(photoUri(path));
+  const uri = photoUri(path);
+  const dir = photosDir();
+  const prefix = `${withoutTrailingSlash(dir.uri)}/`;
+  if (!uri.startsWith(prefix)) return;
+  const rest = uri.slice(prefix.length).split('/');
+  if (!rest.every((segment) => segment !== '' && segment !== '.' && segment !== '..')) return;
+  deletePhoto(uri);
 }
 
 // Deletes leftover temp photos: from a killed app, or a late write after the
@@ -119,11 +127,22 @@ export function sweepTempPhotos(): void {
 export async function sweepOrphanPhotos(db: Db): Promise<void> {
   try {
     const rows = await db.getAllAsync<{ photo_path: string }>('SELECT photo_path FROM scans', []);
-    const kept = new Set(rows.map((row) => photoUri(row.photo_path)));
     const dir = photosDir();
     if (!dir.exists) return;
-    for (const item of dir.list()) {
-      if (item instanceof File && !kept.has(item.uri)) deletePhoto(item.uri);
+    const files = dir.list().filter((item): item is File => item instanceof File);
+    if (files.length === 0) return;
+
+    const kept = new Set(
+      rows.map((row) => photoFileName(row.photo_path)).filter((name) => name.length > 0),
+    );
+    // Safety net: if scans exist but NONE of their file names match any file in photos/,
+    // the paths/storage scheme on this device may differ from expectations. Skip cleanup entirely.
+    if (rows.length > 0 && !files.some((item) => kept.has(item.name))) {
+      return;
+    }
+
+    for (const item of files) {
+      if (!kept.has(item.name)) deletePhoto(item.uri);
     }
   } catch {
     // Keep everything; the next start tries again.
