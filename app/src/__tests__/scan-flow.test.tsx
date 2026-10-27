@@ -525,6 +525,21 @@ describe('end to end', () => {
     expect(fakeFs.has(`${DOCUMENT}/${feedbackOnly.photo_path}`)).toBe(true);
   });
 
+  test('overlapping saves: tapping feedback then closing and saving plant keeps the photo', async () => {
+    const view = await reachResult();
+    await fireEvent.press(screen.getByRole('button', { name: "Doesn't look right?" }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Yes' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByLabelText('Diagnosis feedback')).toBeNull());
+    await saveFromResult('Kitchen fern');
+    await waitFor(() => expect(view).toHavePathname('/plants'));
+    const plantRows = await rows('plants');
+    expect(plantRows).toHaveLength(1);
+    const scanRows = await rows('scans');
+    expect(scanRows.length).toBeGreaterThanOrEqual(1);
+    expect(fakeFs.has(`${DOCUMENT}/${scanRows[0].photo_path}`)).toBe(true);
+  });
+
   test('a double tap on Save plant saves one plant', async () => {
     const view = await reachResult();
     await fireEvent.press(screen.getByRole('button', { name: 'Save to My Plants' }));

@@ -19,6 +19,21 @@ type Saved = { photoStored: true; persisted: true };
 
 const isoNow = () => new Date().toISOString();
 
+// Per-scan promise queue: serializes saves so concurrent attempts (e.g. feedback
+// in flight while saving to My Plants) run one at a time and cannot collide.
+const saveChains = new Map<string, Promise<unknown>>();
+
+function serializeForScan<T>(scanId: string, op: () => Promise<T>): Promise<T> {
+  const previous = saveChains.get(scanId) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(op);
+  saveChains.set(scanId, next);
+  return next.finally(() => {
+    if (saveChains.get(scanId) === next) {
+      saveChains.delete(scanId);
+    }
+  });
+}
+
 // Checked before anything is copied or written.
 function assertSavable(state: ScanState): asserts state is ScanState & {
   photo: NonNullable<ScanState['photo']>;
@@ -55,7 +70,19 @@ async function withStoredPhoto(
   try {
     await db.withTransactionAsync(() => write(path));
   } catch (error) {
-    if (created && !state.persisted) deleteStoredPhoto(path);
+    if (created && !state.persisted) {
+      try {
+        const referenced = await db.getFirstAsync<{ id: string }>(
+          'SELECT id FROM scans WHERE photo_path = ? LIMIT 1',
+          [path],
+        );
+        if (!referenced) {
+          deleteStoredPhoto(path);
+        }
+      } catch {
+        // If the DB check fails, leave the photo for sweepOrphanPhotos to decide.
+      }
+    }
     throw error;
   }
 }
@@ -73,13 +100,15 @@ export async function saveAsPlant(
   if (room && !room.ok) throw new Error(`Invalid room: ${room.reason}`);
   assertSavable(state);
 
-  const plantId = newId();
-  const at = now();
-  await withStoredPhoto(db, state, async (photoPath) => {
-    await insertPlant(db, { id: plantId, name: name.value, room: room?.value ?? null }, at);
-    await persistScan(db, scanInput(state, photoPath, plantId), at);
+  return serializeForScan(state.scanId, async () => {
+    const plantId = newId();
+    const at = now();
+    await withStoredPhoto(db, state, async (photoPath) => {
+      await insertPlant(db, { id: plantId, name: name.value, room: room?.value ?? null }, at);
+      await persistScan(db, scanInput(state, photoPath, plantId), at);
+    });
+    return { plantId, photoStored: true, persisted: true };
   });
-  return { plantId, photoStored: true, persisted: true };
 }
 
 export async function saveFeedback(
@@ -89,19 +118,21 @@ export async function saveFeedback(
   { now = isoNow, newId = randomUUID }: Options = {},
 ): Promise<Saved> {
   assertSavable(state);
-  const at = now();
-  await withStoredPhoto(db, state, async (photoPath) => {
-    await persistScan(db, scanInput(state, photoPath, null), at);
-    await replaceFeedback(
-      db,
-      {
-        id: newId(),
-        scanId: state.scanId,
-        verdict: feedback.verdict,
-        userGuess: feedback.verdict === 'no' ? feedback.userGuess : null,
-      },
-      at,
-    );
+  return serializeForScan(state.scanId, async () => {
+    const at = now();
+    await withStoredPhoto(db, state, async (photoPath) => {
+      await persistScan(db, scanInput(state, photoPath, null), at);
+      await replaceFeedback(
+        db,
+        {
+          id: newId(),
+          scanId: state.scanId,
+          verdict: feedback.verdict,
+          userGuess: feedback.verdict === 'no' ? feedback.userGuess : null,
+        },
+        at,
+      );
+    });
+    return { photoStored: true, persisted: true };
   });
-  return { photoStored: true, persisted: true };
 }

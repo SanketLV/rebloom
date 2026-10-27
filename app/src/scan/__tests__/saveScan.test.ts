@@ -1,6 +1,7 @@
 import type { Diagnosis } from '@/diagnosis/types';
 import { migrate } from '@/storage/migrations';
 import { listPlants } from '@/storage/plantsRepo';
+import { persistScan } from '@/storage/scansRepo';
 import { CACHE, DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
 import { createTestDb, type TestDb } from '@/testing/sqljs';
 
@@ -170,4 +171,34 @@ test('a failed photo copy writes nothing to the database', async () => {
     'copy failed',
   );
   expect(await count(db, 'plants')).toBe(0);
+});
+
+test('overlapping saves serialize so feedback and plant save do not collide and keep the photo', async () => {
+  const p1 = saveFeedback(db, state(), { verdict: 'yes', userGuess: null }, options());
+  const p2 = saveAsPlant(db, state(), { name: 'Fern', room: null }, options());
+  await Promise.all([p1, p2]);
+  expect(fakeFs.has(storedPhoto)).toBe(true);
+  expect(await count(db, 'plants')).toBe(1);
+  expect(await count(db, 'scans')).toBe(1);
+});
+
+test('error cleanup never deletes a photo that a stored scan row still references', async () => {
+  await persistScan(
+    db,
+    {
+      id: 'existing-scan',
+      plantId: 'p1',
+      photoPath: 'photos/scan-1.jpg',
+      diagnoserId: 'fake-v1',
+      modelResult: [],
+      answers: {},
+      finalResult: [],
+    },
+    NOW,
+  );
+  await failNextInsertInto(db, 'scans');
+  await expect(
+    saveFeedback(db, state(), { verdict: 'yes', userGuess: null }, options()),
+  ).rejects.toThrow('disk full');
+  expect(fakeFs.has(storedPhoto)).toBe(true);
 });
