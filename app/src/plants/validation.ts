@@ -5,13 +5,20 @@ export const ROOM_MAX = 30;
 
 export type Validation = { ok: true; value: string } | { ok: false; reason: 'empty' | 'too_long' };
 
-// Zero-width and other format characters (\p{Cf}) are invisible on their own,
-// so a name made only of them would show as blank.
-const visible = (value: string) => value.replace(/[\p{Cf}\s]/gu, '');
+// Normalizes to NFC and strips control characters (\p{Cc}), default ignorable code points
+// (\p{Default_Ignorable_Code_Point}, including zero-width chars and variation selectors),
+// Hangul fillers (U+3164, U+FFA0), and braille blank (U+2800).
+export const visibleText = (text: string): string =>
+  text
+    .normalize('NFC')
+    .replace(/[\p{Cc}\p{Default_Ignorable_Code_Point}\u2800\u3164\uffa0]/gu, '');
+
+// Re-export visible for backward compatibility with earlier checks
+export const visible = visibleText;
 
 function validate(raw: string, max: number): Validation {
   const value = raw.trim();
-  if (visible(value).length === 0) return { ok: false, reason: 'empty' };
+  if (visibleText(value).trim().length === 0) return { ok: false, reason: 'empty' };
   if (charCount(value) > max) return { ok: false, reason: 'too_long' };
   return { ok: true, value };
 }

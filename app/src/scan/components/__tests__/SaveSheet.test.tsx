@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { SaveSheet } from '../SaveSheet';
+import { sameRoom, SaveSheet, uniqueRooms } from '../SaveSheet';
 
 const metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -137,4 +137,41 @@ test('a new room typed like an existing one saves the existing spelling', async 
   await fireEvent.changeText(screen.getByLabelText('New room name'), ' BALCONY ');
   await fireEvent.press(saveButton());
   expect(onSave).toHaveBeenCalledWith({ name: 'My plant', room: 'Balcony' });
+});
+
+test('rooms typed with combining vs precomposed accents match the same room', async () => {
+  const precomposed = 'Caf\u00E9';
+  const combining = 'Cafe\u0301';
+  expect(sameRoom(precomposed, combining)).toBe(true);
+  expect(uniqueRooms([precomposed, combining])).toEqual([precomposed]);
+
+  const { view, onSave } = renderSheet({ rooms: [precomposed] });
+  await view;
+  await fireEvent.press(screen.getByRole('button', { name: 'New room' }));
+  await fireEvent.changeText(screen.getByLabelText('New room name'), combining);
+  await fireEvent.press(saveButton());
+  expect(onSave).toHaveBeenCalledWith({ name: 'My plant', room: precomposed });
+});
+
+test('rooms with leading zero-width space match the existing room', async () => {
+  const normal = 'Kitchen';
+  const withZwsp = '\u200BKitchen';
+  expect(sameRoom(normal, withZwsp)).toBe(true);
+  expect(uniqueRooms([normal, withZwsp])).toEqual([normal]);
+
+  const { view, onSave } = renderSheet({ rooms: [normal] });
+  await view;
+  await fireEvent.press(screen.getByRole('button', { name: 'New room' }));
+  await fireEvent.changeText(screen.getByLabelText('New room name'), withZwsp);
+  await fireEvent.press(saveButton());
+  expect(onSave).toHaveBeenCalledWith({ name: 'My plant', room: normal });
+});
+
+test('a brand new room is stored trimmed as typed', async () => {
+  const { view, onSave } = renderSheet({ rooms: ['Living room'] });
+  await view;
+  await fireEvent.press(screen.getByRole('button', { name: 'New room' }));
+  await fireEvent.changeText(screen.getByLabelText('New room name'), '  Sunroom  ');
+  await fireEvent.press(saveButton());
+  expect(onSave).toHaveBeenCalledWith({ name: 'My plant', room: 'Sunroom' });
 });

@@ -5,14 +5,21 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Button, TextButton } from '@/components/Button';
 import { limitChars } from '@/lib/text';
 import { useSingleFlight } from '@/lib/useSingleFlight';
-import { NAME_MAX, ROOM_MAX, validateName, validateRoom } from '@/plants/validation';
+import {
+  NAME_MAX,
+  ROOM_MAX,
+  validateName,
+  validateRoom,
+  visibleText,
+} from '@/plants/validation';
 import { colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
 
 const DEFAULT_ROOMS = ['Living room', 'Bedroom', 'Kitchen'];
 // No species ID yet, so no species-based default (spec open question).
 const DEFAULT_NAME = 'My plant';
 
-export const sameRoom = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+export const roomKey = (room: string) => visibleText(room).trim().toLowerCase();
+export const sameRoom = (a: string, b: string) => roomKey(a) === roomKey(b);
 
 // "Kitchen" and "kitchen" are one room: the first spelling wins.
 export function uniqueRooms(rooms: string[]): string[] {
@@ -39,7 +46,7 @@ export function SaveSheet({ visible, rooms, onSave, onClose }: Props) {
   const [failed, setFailed] = useState(false);
 
   const roomChoices = uniqueRooms([...DEFAULT_ROOMS, ...rooms]);
-  const typedRoom = addingRoom && newRoom.trim() ? newRoom : null;
+  const typedRoom = addingRoom && visibleText(newRoom).trim() ? newRoom.trim() : null;
   const chosenRoom = typedRoom
     ? (roomChoices.find((choice) => sameRoom(choice, typedRoom)) ?? typedRoom)
     : room;

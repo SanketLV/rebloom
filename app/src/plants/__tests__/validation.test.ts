@@ -37,6 +37,20 @@ test.each(['​​', ' ‍﻿ ', '⁠', ' 　'])(
   },
 );
 
+test.each([
+  ['Hangul filler U+3164', '\u3164'],
+  ['Halfwidth Hangul filler U+FFA0', '\uFFA0'],
+  ['variation selector U+FE0F', '\uFE0F'],
+  ['braille blank U+2800', '\u2800'],
+  ['combining grapheme joiner U+034F', '\u034F'],
+  ['NUL control character U+0000', '\u0000'],
+  ['control character U+001F', '\u001F'],
+])('names consisting only of %s (%j) are rejected as empty', (_, invisible) => {
+  expect(validateName(invisible)).toEqual({ ok: false, reason: 'empty' });
+  expect(validateRoom(invisible)).toEqual({ ok: false, reason: 'empty' });
+  expect(validateName(`  ${invisible}  `)).toEqual({ ok: false, reason: 'empty' });
+});
+
 test('a name with a zero-width joiner inside an emoji is kept', () => {
   expect(validateName('👩‍🌾 corner')).toEqual({ ok: true, value: '👩‍🌾 corner' });
 });
