@@ -290,6 +290,7 @@ Solo developer, so the build runs 1 → 35 in order, then stops for the break-te
 - [ ] Android Back on every step does what the spec says
 - [ ] Airplane mode: the whole flow works
 - [ ] After prebuild (or the manifest in a dev build): no `RECORD_AUDIO` / microphone permission
+- [ ] With TalkBack and VoiceOver on, the final "Comparing likely causes" announcement on Analyzing is heard in full before the screen moves to Questions/Result (it may be cut off by the navigation)
 
 ---
 
