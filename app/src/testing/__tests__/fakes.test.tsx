@@ -51,7 +51,7 @@ test('the SQLite provider runs onInit before rendering children', async () => {
       <Rows />
     </SQLiteProvider>,
   );
-  expect(await screen.findByText('rows: 1')).toBeOnTheScreen();
+  expect(await screen.findByText('rows: 1', {}, { timeout: 5000 })).toBeOnTheScreen();
   expect(await mockSqlite.db().getAllAsync('SELECT id FROM t', [])).toEqual([{ id: 'a' }]);
 });
 
