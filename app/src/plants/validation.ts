@@ -15,7 +15,7 @@ export const visibleText = (text: string): string =>
 
 function validate(raw: string, max: number): Validation {
   const value = raw.trim();
-  if (visibleText(value).trim().length === 0) return { ok: false, reason: 'empty' };
+  if (visibleText(value).replace(/\p{M}/gu, '').trim().length === 0) return { ok: false, reason: 'empty' };
   if (charCount(value) > max) return { ok: false, reason: 'too_long' };
   return { ok: true, value };
 }

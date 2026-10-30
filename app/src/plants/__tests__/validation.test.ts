@@ -54,3 +54,17 @@ test.each([
 test('a name with a zero-width joiner inside an emoji is kept', () => {
   expect(validateName('👩‍🌾 corner')).toEqual({ ok: true, value: '👩‍🌾 corner' });
 });
+
+test('lone combining marks are rejected as empty', () => {
+  expect(validateName('\u0301')).toEqual({ ok: false, reason: 'empty' });
+  expect(validateName('\u0301\u0300')).toEqual({ ok: false, reason: 'empty' });
+  expect(validateRoom('\u0303')).toEqual({ ok: false, reason: 'empty' });
+});
+
+test('names with accented letters stay valid and the stored value is unchanged', () => {
+  expect(validateName('Café')).toEqual({ ok: true, value: 'Café' });
+  expect(validateName('Cafe\u0301')).toEqual({ ok: true, value: 'Cafe\u0301' });
+  expect(validateRoom('Café')).toEqual({ ok: true, value: 'Café' });
+  expect(validateRoom('Cafe\u0301')).toEqual({ ok: true, value: 'Cafe\u0301' });
+});
+
