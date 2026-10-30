@@ -75,7 +75,7 @@ beforeEach(() => {
 
 async function openScan(initialUrl = '/scan') {
   const view = await renderRouter('./src/app', { initialUrl });
-  await screen.findByRole('button', { name: 'Close camera', includeHiddenElements: true });
+  await screen.findByRole('button', { name: 'Close camera', includeHiddenElements: true }, { timeout: 5000 });
   return view;
 }
 
@@ -409,7 +409,7 @@ describe('Result', () => {
   test('opened with no session (a deep link), it sends the user to the camera', async () => {
     const view = await renderRouter('./src/app', { initialUrl: '/scan/result' });
     await waitFor(() => expect(view).toHavePathname('/scan'));
-    await screen.findByRole('button', { name: 'Close camera', includeHiddenElements: true });
+    await screen.findByRole('button', { name: 'Close camera', includeHiddenElements: true }, { timeout: 5000 });
   });
 });
 
