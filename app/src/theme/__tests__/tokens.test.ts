@@ -1,4 +1,4 @@
-import { colors } from '../tokens';
+import { cameraColors, colors, scrim } from '../tokens';
 
 // Brand & Design (Notion), palette F · Sage, Walnut & Lime.
 test('colors match the brand palette exactly', () => {
@@ -19,5 +19,28 @@ test('colors match the brand palette exactly', () => {
     warningBg: '#F6E3BD',
     severe: '#A8261E',
     severeBg: '#F7DEDA',
+    // Scan artboards (Questions, Result, sheets).
+    onPrimary: '#FFFFFF',
+    disabled: '#C9CDBD',
+    controlBorder: '#8C9482',
+    photoBg: '#CFC8B6',
   });
+});
+
+// Camera and Analyzing artboards: the dark viewfinder screens.
+test('camera colors match the Camera and Analyzing artboards', () => {
+  expect(cameraColors).toEqual({
+    ground: '#0F140F',
+    text: '#F3F4EC',
+    caption: '#AEB8A4',
+    preview: '#3D4A34',
+    analyzing: '#2C3726',
+    button: '#1E2A1C',
+    buttonIcon: '#D3D9C8',
+    overlay: 'rgba(15,20,15,0.6)',
+  });
+});
+
+test('sheets dim the screen behind them with the artboard scrim', () => {
+  expect(scrim).toBe('rgba(15,20,15,0.55)');
 });
