@@ -13,9 +13,6 @@ export const visibleText = (text: string): string =>
     .normalize('NFC')
     .replace(/[\p{Cc}\p{Default_Ignorable_Code_Point}\u2800\u3164\uffa0]/gu, '');
 
-// Re-export visible for backward compatibility with earlier checks
-export const visible = visibleText;
-
 function validate(raw: string, max: number): Validation {
   const value = raw.trim();
   if (visibleText(value).trim().length === 0) return { ok: false, reason: 'empty' };
