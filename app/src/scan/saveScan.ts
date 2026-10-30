@@ -19,19 +19,15 @@ type Saved = { photoStored: true; persisted: true };
 
 const isoNow = () => new Date().toISOString();
 
-// Per-scan promise queue: serializes saves so concurrent attempts (e.g. feedback
-// in flight while saving to My Plants) run one at a time and cannot collide.
-const saveChains = new Map<string, Promise<unknown>>();
+// App-wide promise queue: serializes saves so concurrent attempts (e.g. feedback
+// in flight while saving to My Plants, or across different scans) run one at a
+// time and cannot collide with "cannot start a transaction within a transaction".
+let saveQueue: Promise<unknown> = Promise.resolve();
 
-function serializeForScan<T>(scanId: string, op: () => Promise<T>): Promise<T> {
-  const previous = saveChains.get(scanId) ?? Promise.resolve();
-  const next = previous.catch(() => {}).then(op);
-  saveChains.set(scanId, next);
-  return next.finally(() => {
-    if (saveChains.get(scanId) === next) {
-      saveChains.delete(scanId);
-    }
-  });
+function serializeSave<T>(op: () => Promise<T>): Promise<T> {
+  const next = saveQueue.catch(() => {}).then(op);
+  saveQueue = next;
+  return next;
 }
 
 // Checked before anything is copied or written.
@@ -100,7 +96,7 @@ export async function saveAsPlant(
   if (room && !room.ok) throw new Error(`Invalid room: ${room.reason}`);
   assertSavable(state);
 
-  return serializeForScan(state.scanId, async () => {
+  return serializeSave(async () => {
     const plantId = newId();
     const at = now();
     await withStoredPhoto(db, state, async (photoPath) => {
@@ -118,7 +114,7 @@ export async function saveFeedback(
   { now = isoNow, newId = randomUUID }: Options = {},
 ): Promise<Saved> {
   assertSavable(state);
-  return serializeForScan(state.scanId, async () => {
+  return serializeSave(async () => {
     const at = now();
     await withStoredPhoto(db, state, async (photoPath) => {
       await persistScan(db, scanInput(state, photoPath, null), at);

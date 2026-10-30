@@ -202,3 +202,75 @@ test('error cleanup never deletes a photo that a stored scan row still reference
   ).rejects.toThrow('disk full');
   expect(fakeFs.has(storedPhoto)).toBe(true);
 });
+
+test('overlapping saves on two different scans serialize through one queue and keep both photos', async () => {
+  const scan2Id = 'scan-2';
+  const tempPhoto2 = `${CACHE}/scans/${scan2Id}.jpg`;
+  const storedPhoto2 = `${DOCUMENT}/photos/${scan2Id}.jpg`;
+  fakeFs.put(tempPhoto2, { size: 10_000, width: 800, height: 600 });
+  const scan2State = state({
+    scanId: scan2Id,
+    photo: { uri: tempPhoto2, width: 800, height: 600, sizeBytes: 10_000 },
+  });
+
+  const [r1, r2] = await Promise.allSettled([
+    saveFeedback(db, state(), { verdict: 'yes', userGuess: null }, options()),
+    saveAsPlant(db, scan2State, { name: 'Monstera', room: null }, options()),
+  ]);
+
+  expect(r1.status).toBe('fulfilled');
+  expect(r2.status).toBe('fulfilled');
+  expect(fakeFs.has(storedPhoto)).toBe(true);
+  expect(fakeFs.has(storedPhoto2)).toBe(true);
+  expect(await count(db, 'scans')).toBe(2);
+  expect(await count(db, 'plants')).toBe(1);
+});
+
+test('a failed save does not block subsequent saves in the queue', async () => {
+  await failNextInsertInto(db, 'scans');
+  await expect(saveFeedback(db, state(), { verdict: 'yes', userGuess: null }, options())).rejects.toThrow(
+    'disk full',
+  );
+  await db.execAsync('DROP TRIGGER fail_once;');
+
+  const scan2Id = 'scan-2';
+  const tempPhoto2 = `${CACHE}/scans/${scan2Id}.jpg`;
+  const storedPhoto2 = `${DOCUMENT}/photos/${scan2Id}.jpg`;
+  fakeFs.put(tempPhoto2, { size: 10_000, width: 800, height: 600 });
+  const scan2State = state({
+    scanId: scan2Id,
+    photo: { uri: tempPhoto2, width: 800, height: 600, sizeBytes: 10_000 },
+  });
+
+  const res = await saveAsPlant(db, scan2State, { name: 'Monstera', room: null }, options());
+  expect(res.persisted).toBe(true);
+  expect(fakeFs.has(storedPhoto2)).toBe(true);
+  expect(await count(db, 'plants')).toBe(1);
+});
+
+test('a concurrent failed save does not block subsequent saves in the queue', async () => {
+  await db.execAsync(
+    "CREATE TEMP TRIGGER fail_scan1 BEFORE INSERT ON scans WHEN NEW.id = 'scan-1' BEGIN SELECT RAISE(ABORT, 'scan 1 failed'); END;",
+  );
+
+  const scan2Id = 'scan-2';
+  const tempPhoto2 = `${CACHE}/scans/${scan2Id}.jpg`;
+  const storedPhoto2 = `${DOCUMENT}/photos/${scan2Id}.jpg`;
+  fakeFs.put(tempPhoto2, { size: 10_000, width: 800, height: 600 });
+  const scan2State = state({
+    scanId: scan2Id,
+    photo: { uri: tempPhoto2, width: 800, height: 600, sizeBytes: 10_000 },
+  });
+
+  const [r1, r2] = await Promise.allSettled([
+    saveFeedback(db, state(), { verdict: 'yes', userGuess: null }, options()),
+    saveAsPlant(db, scan2State, { name: 'Monstera', room: null }, options()),
+  ]);
+
+  expect(r1.status).toBe('rejected');
+  expect(r2.status).toBe('fulfilled');
+  expect(fakeFs.has(storedPhoto2)).toBe(true);
+  expect(await count(db, 'plants')).toBe(1);
+});
+
+
