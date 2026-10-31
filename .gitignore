@@ -8,3 +8,8 @@ web-build/
 .DS_Store
 Thumbs.db
 .worktrees/
+.handoff/
+
+# Remotion render scratch
+brand/motion/out/
+/rebloom-brand-kit-*
