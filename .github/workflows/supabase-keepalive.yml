@@ -1,0 +1,25 @@
+# Free Supabase projects pause when they don't see "a few user requests to the database each day", and a
+# paused project makes every waitlist sign-up fail. Call ping(), which reads the waitlist table, 3 times a day.
+# Runs only from the default branch (main). GitHub disables schedules in public repos after 60 days with no
+# commits; re-enable it from the Actions tab if that happens. The key is the page's public publishable key.
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: '17 */8 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping the waitlist database
+        run: |
+          curl --fail --silent --show-error --max-time 30 --retry 3 --retry-delay 10 --retry-all-errors \
+            -X POST 'https://vhxcgmupopeochwvmwcv.supabase.co/rest/v1/rpc/ping' \
+            -H 'apikey: sb_publishable_FsACOB5IUTE3GTxtxbwXsA_DgNlcwzg' \
+            -H 'Content-Type: application/json' \
+            -d '{}'
