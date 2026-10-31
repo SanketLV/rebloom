@@ -436,16 +436,19 @@ notes.addEventListener('change', e => { if (e.target.name === 'symptom') notes.d
     slider.setAttribute('aria-valuetext', `Day ${d} of 7${d === 7 ? ', recovered' : d === 1 ? ', drooping' : ''}`);
   }
 
-  let raf = 0;
-  slider.addEventListener('input', () => { cancelAnimationFrame(raf); show(parseFloat(slider.value)); });
+  let raf = 0, touched = false;
+  slider.addEventListener('input', () => { touched = true; cancelAnimationFrame(raf); show(parseFloat(slider.value)); });
 
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { show(7); return; }
+  // No autoplay for reduced motion or without IntersectionObserver (iOS < 12.2): show the recovered plant.
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) { show(7); return; }
 
-  // Play the week once, when the panel is mostly on screen; a drag stops it.
+  // Play the week once, when the panel is mostly on screen; a drag stops it, and a drag before it starts
+  // (on phones the slider is below the photo) means it never starts.
   show(1);
   new IntersectionObserver((entries, io) => {
     if (!entries[0].isIntersecting) return;
     io.disconnect();
+    if (touched) return;
     const start = performance.now(), ms = 2800;
     const tick = now => {
       const t = Math.min(1, (now - start) / ms);

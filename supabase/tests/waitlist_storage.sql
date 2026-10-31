@@ -12,6 +12,10 @@ begin
   perform public.join_waitlist('  REAL' || upper(d) || chr(8203) || ' ', 'final');
   select count(*) into n from public.waitlist where email = 'real' || d;
   if n <> 1 then fails := fails || format('real address stored %s times, want 1', n); end if;
+  -- the duplicate (from the "final" form) must not overwrite which form they first used
+  if (select source from public.waitlist where email = 'real' || d) is distinct from 'hero' then
+    fails := fails || 'duplicate signup overwrote the first source'::text;
+  end if;
 
   -- Non-ASCII addresses are rejected (same rule as the browser's type=email); both accent forms alike.
   begin

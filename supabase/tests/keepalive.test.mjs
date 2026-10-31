@@ -12,8 +12,10 @@ const yml = readFileSync(new URL('../../.github/workflows/supabase-keepalive.yml
 test('keep-alive runs at least once a day', () => {
   const cron = yml.match(/cron:\s*'([^']+)'/)?.[1];
   assert.ok(cron, 'no cron schedule found');
-  const [, hour, dom] = cron.split(/\s+/);
+  const [, hour, dom, month, dow] = cron.split(/\s+/);
   assert.equal(dom, '*', `day-of-month must be "*", got ${dom}`);
+  assert.equal(month, '*', `month must be "*", got ${month}`);
+  assert.equal(dow, '*', `day-of-week must be "*", got ${dow}`);
   assert.ok(hour === '*' || hour.includes('/') || hour.includes(','), `expected several runs a day, got hour field ${hour}`);
 });
 

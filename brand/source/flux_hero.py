@@ -100,8 +100,8 @@ SIZES = {
 }
 
 
-def workflow(prompt, width, height, seed, prefix, init_image=None, denoise=1.0):
-    job = {
+def workflow(prompt, width, height, seed, prefix):
+    return {
         "1": {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": "flux1-schnell-Q5_K_S.gguf"}},
         "2": {"class_type": "DualCLIPLoader", "inputs": {
             "clip_name1": "t5xxl_fp8_e4m3fn.safetensors", "clip_name2": "clip_l.safetensors", "type": "flux"}},
@@ -112,41 +112,24 @@ def workflow(prompt, width, height, seed, prefix, init_image=None, denoise=1.0):
         # schnell is distilled: 4 steps, cfg 1, no negative prompt.
         "7": {"class_type": "KSampler", "inputs": {
             "model": ["1", 0], "positive": ["4", 0], "negative": ["5", 0], "latent_image": ["6", 0],
-            "seed": seed, "steps": 4, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": denoise}},
+            "seed": seed, "steps": 4, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0}},
         "8": {"class_type": "VAEDecode", "inputs": {"samples": ["7", 0], "vae": ["3", 0]}},
         "9": {"class_type": "SaveImage", "inputs": {"images": ["8", 0], "filename_prefix": prefix}},
     }
-    if init_image:
-        # img2img: start from an existing photo so a before/after pair keeps the same plant and framing.
-        job["10"] = {"class_type": "LoadImage", "inputs": {"image": init_image}}
-        job["11"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["10", 0], "vae": ["3", 0]}}
-        job["7"]["inputs"]["latent_image"] = ["11", 0]
-        # With only 4 steps denoise snaps between "unchanged" and "new plant"; 8 gives usable in-between strengths.
-        job["7"]["inputs"]["steps"] = 8
-    return job
-
-
-def upload(path):
-    boundary = "----rebloom" + str(int(time.time() * 1000))
-    body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{path.name}\"\r\n"
-            f"Content-Type: image/png\r\n\r\n").encode() + path.read_bytes() + \
-        f"\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n--{boundary}--\r\n".encode()
-    req = urllib.request.Request(COMFY + "/upload/image", data=body,
-                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-    with urllib.request.urlopen(req) as r:
-        return json.loads(r.read())["name"]
 
 
 def call(path, body=None):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(COMFY + path, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as r:
+    # A stalled ComfyUI must raise, not hang the run.
+    with urllib.request.urlopen(req, timeout=60) as r:
         return r.read()
 
 
-def run(job, out_path):
+def run(job, out_path, deadline_s=900):
     prompt_id = json.loads(call("/prompt", {"prompt": job}))["prompt_id"]
-    while True:
+    deadline = time.monotonic() + deadline_s
+    while time.monotonic() < deadline:
         hist = json.loads(call(f"/history/{prompt_id}")).get(prompt_id)
         if hist:
             status = hist.get("status", {})
@@ -156,9 +139,13 @@ def run(job, out_path):
             if images:
                 img = images[0]
                 q = urllib.parse.urlencode({k: img[k] for k in ("filename", "subfolder", "type")})
-                out_path.write_bytes(call(f"/view?{q}"))
+                # Write then rename: a half-written PNG would otherwise be skipped as "done" next run.
+                tmp = out_path.with_name(out_path.name + ".part")
+                tmp.write_bytes(call(f"/view?{q}"))
+                tmp.replace(out_path)
                 return
         time.sleep(2)
+    raise TimeoutError(f"no result for {out_path.name} after {deadline_s}s (prompt {prompt_id})")
 
 
 def main():
@@ -167,11 +154,8 @@ def main():
     ap.add_argument("--seeds", type=int, default=2)
     ap.add_argument("--sizes", default="wide,tall")
     ap.add_argument("--scenes", default="unfurl,sprout,monstera")
-    ap.add_argument("--init", type=pathlib.Path, help="img2img source photo")
-    ap.add_argument("--denoise", type=float, default=0.7, help="img2img strength, 0..1")
     args = ap.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    init = upload(args.init) if args.init else None
     for size in args.sizes.split(","):
         w, h, framing = SIZES[size]
         for name in args.scenes.split(","):
@@ -182,8 +166,7 @@ def main():
                     continue
                 t = time.time()
                 prompt = ", ".join(p for p in (scene, framing, look) if p)
-                run(workflow(prompt, w, h, seed, f"rebloom-{size}-{name}", init,
-                             args.denoise if init else 1.0), out)
+                run(workflow(prompt, w, h, seed, f"rebloom-{size}-{name}"), out)
                 print(f"{out.name}  {time.time() - t:.0f}s", flush=True)
 
 
