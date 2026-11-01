@@ -1,0 +1,49 @@
+/// <reference types="vitest/config" />
+import { defineConfig, isRunnableDevEnvironment, type Plugin } from 'vite';
+import react from '@vitejs/plugin-react';
+import { earlySubmitGuard } from './src/lib/early-submit.ts';
+import { MESSAGES, WAITLIST } from './src/lib/waitlist.ts';
+
+// Vite 8 defaults to Safari 16.4 ("baseline-widely-available"); the page supports older iOS in-app browsers.
+const target = ['es2020', 'safari14', 'chrome87', 'firefox78', 'edge88'];
+
+// Dev only: server-render each page into <!--app--> so `npm run dev` matches the pre-rendered build
+// (scripts/prerender.mjs does the same after `vite build`).
+const devPrerender = (): Plugin => ({
+  name: 'rebloom-dev-prerender',
+  apply: 'serve',
+  async transformIndexHtml(html, ctx) {
+    const ssr = ctx.server?.environments.ssr;
+    if (!ssr || !isRunnableDevEnvironment(ssr)) return html;
+    const { render } = await ssr.runner.import('/src/entry-server.tsx');
+    return html.replace('<!--app-->', () => render(ctx.path.startsWith('/privacy') ? 'privacy' : 'index'));
+  },
+});
+
+// The early-submit guard has to run before the pre-rendered forms are usable, so it goes inline into the head of
+// the page that has forms (privacy.html has none and stays script-free).
+const inlineEarlySubmit = (): Plugin => ({
+  name: 'rebloom-early-submit',
+  transformIndexHtml(_html, ctx) {
+    if (!ctx.filename.endsWith('index.html')) return;
+    // One source of truth for the endpoint and wording; escaping "<" keeps "</script>" out of the inline JSON.
+    const cfg = JSON.stringify({ url: WAITLIST.url, key: WAITLIST.key, timeoutMs: WAITLIST.timeoutMs, messages: MESSAGES })
+      .replace(/</g, '\\u003c');
+    return [{ tag: 'script', attrs: { 'data-early-submit': '' }, children: `(${earlySubmitGuard})(window, ${cfg})`, injectTo: 'head' }];
+  },
+});
+
+export default defineConfig({
+  plugins: [react(), inlineEarlySubmit(), devPrerender()],
+  build: {
+    target,
+    cssTarget: target,
+    rollupOptions: { input: { index: 'index.html', privacy: 'privacy.html' } },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['src/test/setup.ts'],
+    // Vitest blanks CSS by default; early-submit.test.ts checks index.css's wording against MESSAGES.
+    css: { include: [/index\.css/] },
+  },
+});
