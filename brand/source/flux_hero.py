@@ -32,6 +32,13 @@ SECTION_LOOK = (
     "calm and quiet, no text, no logos"
 )
 
+# Onboarding: the hero's dark palette, but warmer light and no single-lime-leaf rule (each screen has its own subject).
+ONBOARD_LOOK = (
+    "photorealistic photograph, cinematic, soft warm rim light from the upper right, shallow depth of field, "
+    "deep olive green shadows, muted earthy palette of olive, sage, walnut brown and terracotta, "
+    "fine film grain, editorial still life, quiet and calm, no text, no people, no hands, no logos"
+)
+
 SCENES = {
     # hero
     "unfurl": ("a new houseplant leaf unfurling from its stem, tiny water droplets on the leaf surface, "
@@ -86,6 +93,21 @@ SCENES = {
              "soft rim light from the upper right, moody", SECTION_LOOK),
     "lush": ("lush healthy monstera and philodendron leaves filling the frame, glossy deep green leaves "
              "catching soft light, a few bright new leaves, deep olive shadows, dark and moody", LOOK),
+    # App onboarding (full-bleed behind the text, like the landing hero): one photo per screen, dark and calm,
+    # no hands or tools (FLUX's weak spots), one lit subject so the white headline below stays readable.
+    # Size "phone". Picked into app/assets/onboarding/: welcome seed 1, scan-yellow seed 2, remind seed 3, ready seed 1.
+    "ob-welcome": ("a single tiny green seedling with two round leaves rising from dark damp soil, "
+                   "a water droplet on one leaf, low camera angle at soil level", ONBOARD_LOOK),
+    # Scan: spots and lesions failed (dropped, perfect painted circles, sticker-like blotches, dry tips that
+    # curled like paper or looked dipped in paint). A leaf yellowing among green ones reads as real damage.
+    "ob-scan-yellow": ("close-up of a potted pothos houseplant where one heart-shaped leaf is turning yellow "
+                       "unevenly with green veins still showing, surrounded by healthy green leaves, the yellow "
+                       "leaf in sharp focus", ONBOARD_LOOK),
+    "ob-remind": ("a small brushed-steel watering can standing next to a potted houseplant on a dark wooden "
+                  "windowsill at dawn, first pale morning light from the window, only one watering can",
+                  ONBOARD_LOOK),
+    "ob-ready": ("a thriving lush houseplant in a terracotta pot, glossy upright green leaves and one bright "
+                 "fresh new leaf, the whole plant and pot in frame", ONBOARD_LOOK),
 }
 
 # Desktop hero keeps the subject right and the lower left dark for the headline;
@@ -97,6 +119,8 @@ SIZES = {
                         "the bottom two thirds dark and empty"),
     "portrait": (896, 1120, ""),
     "square": (1024, 1024, "subject centered"),
+    # Onboarding screens (about 9:19.5): subject in the upper half, text and button sit on the dark lower third.
+    "phone": (832, 1792, "subject in the upper half of the frame, the lower third dark and empty"),
 }
 
 
