@@ -18,8 +18,16 @@ export const MESSAGES = {
   unreachable: "Couldn't reach the waitlist. Check your connection and try again.",
 } as const;
 
+// When the field no longer shows the address that joined (edited mid-request, or a sign-up queued before React
+// loaded), say which address it was instead of implying the one on screen.
+export const joinedAs = (email: string) => `${email} is on the list. We'll email you once, on launch day.`;
+
 // review.md: strip invisible characters and trim before validating user text.
 export const normalizeEmail = (raw: string) => raw.replace(/\p{Cf}/gu, '').trim();
+
+// The browser's own email grammar, for an address that isn't in a field (a queued one).
+export const isEmail = (email: string) =>
+  !!email && Object.assign(document.createElement('input'), { type: 'email', value: email }).checkValidity();
 
 // Not AbortSignal.timeout(): iOS 15 and older (incl. Instagram/TikTok in-app browsers there) lack it.
 const timeoutSignal = (ms: number) => {

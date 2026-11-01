@@ -1,9 +1,10 @@
-import { act } from 'react';
+import { act, useState } from 'react';
 import { hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RootBoundary } from '../components/RootBoundary';
 import { earlySubmitGuard } from '../lib/early-submit';
+import { MESSAGES, WAITLIST, joinedAs } from '../lib/waitlist';
 import { LandingPage } from './LandingPage';
 
 // Server HTML → hydrateRoot, as in production. Any mismatch shows up as a console error or recoverable error.
@@ -84,7 +85,7 @@ describe('LandingPage hydration', () => {
 // The inline guard and the real pre-rendered form together: if data-source or name="email" drifts, these fail.
 describe('early submit before hydration (guard + real form)', () => {
   let removeGuard: () => void;
-  beforeEach(() => { removeGuard = earlySubmitGuard(window); });
+  beforeEach(() => { removeGuard = earlySubmitGuard(window, { url: WAITLIST.url, key: WAITLIST.key, timeoutMs: WAITLIST.timeoutMs, messages: MESSAGES }); });
   afterEach(() => { removeGuard(); delete document.documentElement.dataset.rbQueued; });
 
   const typeAndSubmit = (email: string) => {
@@ -107,6 +108,17 @@ describe('early submit before hydration (guard + real form)', () => {
     expect(container.querySelector('#status-final')).toHaveTextContent("You're on the list.");
   });
 
+  it('sends the address that was submitted, not one typed afterwards without submitting', async () => {
+    const f = vi.fn(async () => ({ status: 204 }));
+    vi.stubGlobal('fetch', f);
+    typeAndSubmit('ann@gmail.com');
+    container.querySelector<HTMLInputElement>('#email-final')!.value = 'bob@gmail.com';
+    await hydrate();
+    expect(sentEmails(f)).toEqual(['ann@gmail.com']);
+    expect(container.querySelector<HTMLInputElement>('#email-final')!.value).toBe('bob@gmail.com');
+    expect(container.querySelector('#status-final')).toHaveTextContent(joinedAs('ann@gmail.com'));
+  });
+
   it('sends exactly once when the submit lands between hydrateRoot and the commit', async () => {
     const f = vi.fn(async () => ({ status: 204 }));
     vi.stubGlobal('fetch', f);
@@ -121,6 +133,15 @@ describe('early submit before hydration (guard + real form)', () => {
 
 describe('error boundary fallback', () => {
   const Boom = () => { throw new Error('in-app browser without some API'); };
+  // Throws on demand, after the page has hydrated.
+  let explode = () => {};
+  const LateBoom = () => { const [on, setOn] = useState(false); explode = () => setOn(true); if (on) throw new Error('late crash'); return null; };
+  const hydrateThenCrash = async () => {
+    const html = container.innerHTML;
+    await act(async () => { root = hydrateRoot(container, <RootBoundary fallbackHtml={html}><LandingPage /><LateBoom /></RootBoundary>); });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    return () => act(async () => explode());
+  };
   const crash = async () => {
     const html = container.innerHTML;
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -141,7 +162,8 @@ describe('error boundary fallback', () => {
     await act(async () => {});
     expect(f).toHaveBeenCalledTimes(1);
     expect(window.__rbPending).toEqual([]);
-    expect(container.querySelector('#status-hero')).toHaveTextContent("You're on the list.");
+    // The fallback field is empty, so the status names the address that joined.
+    expect(container.querySelector('#status-hero')).toHaveTextContent(joinedAs('ann@gmail.com'));
   });
 
   it('keeps its forms working instead of posting to a page that cannot take it', async () => {
@@ -155,6 +177,44 @@ describe('error boundary fallback', () => {
     expect(JSON.parse((f.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
       .toEqual({ p_email: 'ann@gmail.com', p_source: 'final' });
     expect(container.querySelector('#status-final')).toHaveTextContent("You're on the list.");
+  });
+
+  it('keeps an address typed before the crash', async () => {
+    container.querySelector<HTMLInputElement>('#email-hero')!.value = 'typed@gmail.com';
+    await crash();
+    expect(container.querySelector<HTMLInputElement>('#email-hero')!.value).toBe('typed@gmail.com');
+  });
+
+  it('keeps an address typed after hydration, before a later crash', async () => {
+    const crashNow = await hydrateThenCrash();
+    container.querySelector<HTMLInputElement>('#email-final')!.value = 'typed@gmail.com';
+    await crashNow();
+    expect(container.querySelector('h1')).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>('#email-final')!.value).toBe('typed@gmail.com');
+  });
+
+  it('shows the result of a request that was still in flight when the page crashed', async () => {
+    let reply!: (s: number) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(res => { reply = status => res({ status }); })));
+    const crashNow = await hydrateThenCrash();
+    container.querySelector<HTMLInputElement>('#email-final')!.value = 'ann@gmail.com';
+    await act(async () => { container.querySelector('form[data-source="final"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+    await crashNow();
+    await act(async () => reply(204));
+    expect(container.querySelector('#status-final')).toHaveTextContent(MESSAGES.joined);
+  });
+
+  it('flags an invalid address in a fallback form like the live form does', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    await crash();
+    const input = container.querySelector<HTMLInputElement>('#email-hero')!;
+    input.value = 'not-an-email';
+    await act(async () => { container.querySelector('form[data-source="hero"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+    expect(container.querySelector('#status-hero')).toHaveTextContent(MESSAGES.invalid);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveFocus();
+    await act(async () => { input.dispatchEvent(new Event('input', { bubbles: true })); });
+    expect(input).not.toHaveAttribute('aria-invalid');
   });
 
   it('sends one request for a double tap on a fallback form', async () => {

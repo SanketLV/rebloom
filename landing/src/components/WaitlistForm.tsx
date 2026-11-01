@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { takePending } from '../lib/early-submit';
-import { MESSAGES, joinWaitlist, normalizeEmail, type Source } from '../lib/waitlist';
+import { showResult } from '../lib/fallback-form';
+import { MESSAGES, isEmail, joinWaitlist, joinedAs, normalizeEmail, type Source } from '../lib/waitlist';
 
 export function WaitlistForm({ source }: { source: Source }) {
+  const form = useRef<HTMLFormElement>(null);
   const email = useRef<HTMLInputElement>(null);
   const trap = useRef<HTMLInputElement>(null);
   const busyRef = useRef(false);
@@ -19,24 +21,39 @@ export function WaitlistForm({ source }: { source: Source }) {
     if (!quiet) email.current!.focus();
   };
 
-  async function submit(quiet = false) {
+  // address: send this instead of the field: a sign-up queued before React loaded sends the address that was
+  // submitted, even if the visitor typed another one afterwards without submitting it.
+  async function submit(quiet = false, address?: string) {
     const input = email.current!;
     if (busyRef.current) return;
-    input.value = normalizeEmail(input.value);
-    if (!input.value || !input.checkValidity()) return markInvalid(quiet);
+    let sent: string;
+    if (address === undefined) {
+      input.value = normalizeEmail(input.value);
+      sent = input.value;
+      if (!sent || !input.checkValidity()) return markInvalid(quiet);
+    } else {
+      sent = normalizeEmail(address);
+      if (!isEmail(sent)) return markInvalid(quiet);
+    }
     setInvalid(false);
     if (trap.current!.value) return setStatus(MESSAGES.joined);  // bot trap filled: look done, send nothing
 
-    const sent = input.value;
     busyRef.current = true;
     setBusy(true);  // read-only while in flight; aria-disabled, not disabled, which drops keyboard focus
     setStatus(MESSAGES.sending);
     const result = await joinWaitlist(sent, source);
     busyRef.current = false;
+    // The page crashed meanwhile and RootBoundary swapped in the static fallback: report into its form instead.
+    if (!form.current?.isConnected) {
+      const fallback = document.querySelector<HTMLFormElement>(`form[data-source="${source}"]`);
+      if (fallback) showResult(fallback, result, sent, true);
+      return;
+    }
     setBusy(false);
     if (result === 'invalid') return markInvalid(quiet);
-    // Keep what they typed after a failure so a retry is one tap; joining twice is harmless.
-    setStatus(MESSAGES[result]);
+    // Keep what they typed after a failure so a retry is one tap; joining twice is harmless. If the field no
+    // longer shows the address that joined, name it rather than imply the one on screen.
+    setStatus(result === 'joined' && input.value !== sent ? joinedAs(sent) : MESSAGES[result]);
     if (result === 'joined' && input.value === sent) input.value = '';  // never wipe something changed meanwhile
   }
 
@@ -47,14 +64,12 @@ export function WaitlistForm({ source }: { source: Source }) {
   useEffect(() => {
     window.__rbHydrated = true;
     const [queued] = takePending(source);
-    if (!queued) return;
-    if (!email.current!.value) email.current!.value = queued.email;
-    void submit(true);
+    if (queued) void submit(true, queued.email);
     // Mount only: the queue is drained once.
   }, []);
 
   return (
-    <form className="waitlist w-[min(100%,460px)]" data-source={source} method="post" noValidate onSubmit={onSubmit}>
+    <form ref={form} className="waitlist w-[min(100%,460px)]" data-source={source} method="post" noValidate onSubmit={onSubmit}>
       <div className="waitlist-row flex gap-2 rounded-full border border-surface/30 bg-surface/10 p-1.5">
         <label className="sr-only" htmlFor={ids.email}>Email</label>
         <input

@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MESSAGES } from '../lib/waitlist';
+import { MESSAGES, joinedAs } from '../lib/waitlist';
 import { WaitlistForm } from './WaitlistForm';
 
 const ZWSP = String.fromCodePoint(0x200b);
@@ -84,7 +84,8 @@ describe('WaitlistForm', () => {
     email.value = 'ann@gmail.com';
     await reply(204);
     expect(email.value).toBe('ann@gmail.com');
-    expect(status).toHaveTextContent(MESSAGES.joined);
+    // The field no longer shows the address that joined, so say which one did.
+    expect(status).toHaveTextContent(joinedAs('ann@gmial.com'));
   });
 
   it('flags an invalid email, focuses it, and clears the flag on input', async () => {

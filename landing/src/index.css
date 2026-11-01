@@ -45,9 +45,16 @@
   /* Joined before React loaded (src/lib/early-submit.ts): show progress without touching React's markup. */
   html[data-rb-queued~="hero"] .waitlist[data-source="hero"] [role="status"]:empty::after,
   html[data-rb-queued~="final"] .waitlist[data-source="final"] [role="status"]:empty::after { content: "Joining…"; }
-  html[data-rb-slow][data-rb-queued~="hero"] .waitlist[data-source="hero"] [role="status"]:empty::after,
-  html[data-rb-slow][data-rb-queued~="final"] .waitlist[data-source="final"] [role="status"]:empty::after {
-    content: "Still loading. Check your connection, then reload the page."; }
+  /* If React never arrives, the guard sends it itself and reports here. Wording = MESSAGES in lib/waitlist.ts
+     (early-submit.test.ts keeps them in sync). */
+  html[data-rb-done~="hero:joined"] .waitlist[data-source="hero"] [role="status"]:empty::after,
+  html[data-rb-done~="final:joined"] .waitlist[data-source="final"] [role="status"]:empty::after { content: "You're on the list. We'll email you once, on launch day."; }
+  html[data-rb-done~="hero:invalid"] .waitlist[data-source="hero"] [role="status"]:empty::after,
+  html[data-rb-done~="final:invalid"] .waitlist[data-source="final"] [role="status"]:empty::after { content: "Enter an email like name@example.com."; }
+  html[data-rb-done~="hero:unreachable"] .waitlist[data-source="hero"] [role="status"]:empty::after,
+  html[data-rb-done~="final:unreachable"] .waitlist[data-source="final"] [role="status"]:empty::after { content: "Couldn't reach the waitlist. Check your connection and try again."; }
+  html[data-rb-done~="hero:timeout"] .waitlist[data-source="hero"] [role="status"]:empty::after,
+  html[data-rb-done~="final:timeout"] .waitlist[data-source="final"] [role="status"]:empty::after { content: "This is taking a while. Tap Join again if it doesn't confirm; joining twice is safe."; }
   /* 44px tap targets for inline links without changing the line height. */
   .tap-link { display: inline-block; padding: 12px 4px; margin: -12px -4px; }
 

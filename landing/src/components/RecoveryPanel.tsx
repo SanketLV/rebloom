@@ -23,7 +23,10 @@ export function RecoveryPanel() {
     // (on phones the slider is below the photo) means it never starts.
     setDay(1);
     const io = new IntersectionObserver((entries, obs) => {
-      if (!entries[0].isIntersecting) return;
+      // The callback also fires when isIntersecting flips, at the first visible sliver; wait for the 60%.
+      // (0.59: the ratio at the threshold can round just below it.)
+      const e = entries[0];
+      if (!e.isIntersecting || e.intersectionRatio < 0.59) return;
       obs.disconnect();
       if (touched.current) return;
       const start = performance.now(), ms = 2800;

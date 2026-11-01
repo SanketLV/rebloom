@@ -2,6 +2,7 @@
 import { defineConfig, isRunnableDevEnvironment, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { earlySubmitGuard } from './src/lib/early-submit.ts';
+import { MESSAGES, WAITLIST } from './src/lib/waitlist.ts';
 
 // Vite 8 defaults to Safari 16.4 ("baseline-widely-available"); the page supports older iOS in-app browsers.
 const target = ['es2020', 'safari14', 'chrome87', 'firefox78', 'edge88'];
@@ -25,7 +26,10 @@ const inlineEarlySubmit = (): Plugin => ({
   name: 'rebloom-early-submit',
   transformIndexHtml(_html, ctx) {
     if (!ctx.filename.endsWith('index.html')) return;
-    return [{ tag: 'script', attrs: { 'data-early-submit': '' }, children: `(${earlySubmitGuard})(window)`, injectTo: 'head' }];
+    // One source of truth for the endpoint and wording; escaping "<" keeps "</script>" out of the inline JSON.
+    const cfg = JSON.stringify({ url: WAITLIST.url, key: WAITLIST.key, timeoutMs: WAITLIST.timeoutMs, messages: MESSAGES })
+      .replace(/</g, '\\u003c');
+    return [{ tag: 'script', attrs: { 'data-early-submit': '' }, children: `(${earlySubmitGuard})(window, ${cfg})`, injectTo: 'head' }];
   },
 });
 
@@ -39,5 +43,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['src/test/setup.ts'],
+    // Vitest blanks CSS by default; early-submit.test.ts checks index.css's wording against MESSAGES.
+    css: { include: [/index\.css/] },
   },
 });

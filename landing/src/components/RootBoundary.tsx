@@ -1,27 +1,37 @@
 import { Component, createRef, type FormEvent, type ReactNode } from 'react';
 import { takePending } from '../lib/early-submit';
-import { MESSAGES, joinWaitlist, normalizeEmail, type Source } from '../lib/waitlist';
+import { sendFromFallback } from '../lib/fallback-form';
+
+type State = { failed: boolean; typed: Record<string, string> };
 
 // Without a boundary, React removes the whole page on an uncaught error (say, an in-app browser missing an API),
 // leaving it blank. Instead, put back the pre-rendered HTML: static, but readable. Its forms have no endpoint to
-// POST to, so they're handled here with the same request (sendFromFallback), and sign-ups queued before the
-// crash are sent too.
-export class RootBoundary extends Component<{ children: ReactNode; fallbackHtml: string }, { failed: boolean }> {
-  state = { failed: false };
+// POST to, so they're handled here with the same request (lib/fallback-form.ts); addresses typed before the
+// crash are carried over, and sign-ups queued before it are sent.
+export class RootBoundary extends Component<{ children: ReactNode; fallbackHtml: string }, State> {
+  state: State = { failed: false, typed: {} };
   fallback = createRef<HTMLDivElement>();
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+  // Runs before the fallback replaces the live forms, so their typed values can still be read.
+  static getDerivedStateFromError(): State {
+    const typed: Record<string, string> = {};
+    for (const form of document.querySelectorAll<HTMLFormElement>('form[data-source]')) {
+      const input = form.elements.namedItem('email') as HTMLInputElement | null;
+      if (input?.value) typed[form.dataset.source!] = input.value;
+    }
+    return { failed: true, typed };
   }
 
   componentDidCatch() {
     window.__rbHydrated = true;  // the guard stands down; this component owns the forms now
+    const form = (source: string) => this.fallback.current?.querySelector<HTMLFormElement>(`form[data-source="${source}"]`);
+    for (const [source, value] of Object.entries(this.state.typed)) {
+      const input = form(source)?.elements.namedItem('email') as HTMLInputElement | null;
+      if (input) input.value = value;
+    }
     for (const { source, email } of takePending()) {
-      const form = this.fallback.current?.querySelector<HTMLFormElement>(`form[data-source="${source}"]`);
-      const input = form?.elements.namedItem('email') as HTMLInputElement | null;
-      if (!form || !input) continue;
-      if (!input.value) input.value = email;
-      void sendFromFallback(form);
+      const f = form(source);
+      if (f) void sendFromFallback(f, { quiet: true, address: email });
     }
   }
 
@@ -32,25 +42,9 @@ export class RootBoundary extends Component<{ children: ReactNode; fallbackHtml:
 
   render() {
     return this.state.failed
-      ? <div ref={this.fallback} onSubmit={this.onSubmit} dangerouslySetInnerHTML={{ __html: this.props.fallbackHtml }} />
+      ? <div ref={this.fallback} onSubmit={this.onSubmit}
+          onInput={e => (e.target as HTMLElement).removeAttribute('aria-invalid')}
+          dangerouslySetInnerHTML={{ __html: this.props.fallbackHtml }} />
       : this.props.children;
   }
-}
-
-// WaitlistForm's flow on plain DOM (no React state in the fallback): clean, validate, bot trap, send once.
-async function sendFromFallback(form: HTMLFormElement) {
-  const input = form.elements.namedItem('email') as HTMLInputElement | null;
-  const trap = form.elements.namedItem('rb_hp') as HTMLInputElement | null;
-  const status = form.querySelector('[role="status"]');
-  if (!input || !status || 'busy' in form.dataset) return;  // the marker is '', so test presence
-  input.value = normalizeEmail(input.value);
-  if (!input.value || !input.checkValidity()) { status.textContent = MESSAGES.invalid; return; }
-  if (trap?.value) { status.textContent = MESSAGES.joined; return; }
-  const sent = input.value;
-  form.dataset.busy = '';
-  status.textContent = MESSAGES.sending;
-  const result = await joinWaitlist(sent, form.dataset.source as Source);
-  delete form.dataset.busy;
-  status.textContent = MESSAGES[result];
-  if (result === 'joined' && input.value === sent) input.value = '';
 }

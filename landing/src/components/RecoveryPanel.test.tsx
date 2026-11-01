@@ -8,8 +8,8 @@ class FakeIO {
   constructor(public cb: IntersectionObserverCallback, public opts?: IntersectionObserverInit) { observers.push(this); }
   observe() {}
 }
-const intersect = () => act(() => {
-  for (const o of observers) o.cb([{ isIntersecting: true } as IntersectionObserverEntry], o as unknown as IntersectionObserver);
+const intersect = (intersectionRatio = 0.6) => act(() => {
+  for (const o of observers) o.cb([{ isIntersecting: true, intersectionRatio } as IntersectionObserverEntry], o as unknown as IntersectionObserver);
 });
 const reducedMotion = (on: boolean) =>
   vi.stubGlobal('matchMedia', (q: string) => ({ matches: on && q.includes('reduce'), media: q }));
@@ -55,6 +55,19 @@ describe('RecoveryPanel', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
     expect(dayText()).toBe('Day 7 of 7, recovered');
     expect(screen.getByTestId('day7')).toHaveStyle({ opacity: '1' });
+  });
+
+  // The observer also fires when isIntersecting flips, i.e. at the first visible sliver, not only at 60%.
+  it('waits for 60% visibility, not the first visible sliver', async () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'performance'] });
+    render(<RecoveryPanel />);
+    intersect(0.02);
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(dayText()).toBe('Day 1 of 7, drooping');
+    expect(observers[0].disconnect).not.toHaveBeenCalled();
+    intersect(0.6);
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(dayText()).toBe('Day 7 of 7, recovered');
   });
 
   it('never autoplays after a drag that came before the panel was visible', async () => {
