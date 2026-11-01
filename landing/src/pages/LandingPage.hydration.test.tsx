@@ -156,4 +156,17 @@ describe('error boundary fallback', () => {
       .toEqual({ p_email: 'ann@gmail.com', p_source: 'final' });
     expect(container.querySelector('#status-final')).toHaveTextContent("You're on the list.");
   });
+
+  it('sends one request for a double tap on a fallback form', async () => {
+    const f = vi.fn(() => new Promise(() => {}));
+    vi.stubGlobal('fetch', f);
+    await crash();
+    container.querySelector<HTMLInputElement>('#email-final')!.value = 'ann@gmail.com';
+    const form = container.querySelector('form[data-source="final"]')!;
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(f).toHaveBeenCalledTimes(1);
+  });
 });

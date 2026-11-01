@@ -42,7 +42,7 @@ async function sendFromFallback(form: HTMLFormElement) {
   const input = form.elements.namedItem('email') as HTMLInputElement | null;
   const trap = form.elements.namedItem('rb_hp') as HTMLInputElement | null;
   const status = form.querySelector('[role="status"]');
-  if (!input || !status || form.dataset.busy) return;
+  if (!input || !status || 'busy' in form.dataset) return;  // the marker is '', so test presence
   input.value = normalizeEmail(input.value);
   if (!input.value || !input.checkValidity()) { status.textContent = MESSAGES.invalid; return; }
   if (trap?.value) { status.textContent = MESSAGES.joined; return; }

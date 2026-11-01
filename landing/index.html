@@ -22,6 +22,9 @@
 </head>
 <body>
 <div id="root"><!--app--></div>
+<!-- Screen-reader progress for sign-ups tapped before React loads (src/lib/early-submit.ts). Outside #root, and
+     in the static HTML because VoiceOver only announces changes to a live region that already existed. -->
+<div id="rb-early-status" class="sr-only" role="status" aria-live="polite"></div>
 <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

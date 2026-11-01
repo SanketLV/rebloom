@@ -53,7 +53,7 @@ The landing page is one hand-written `landing/index.html` (463 lines of inline C
 - Day 1 → 7: autoplays once at 60% visibility over 2.8 s with cubic ease-out. No autoplay with reduced motion or without `IntersectionObserver` (show day 7). A drag before or during the autoplay stops it. Keeps `aria-valuetext`.
 
 **Budget**
-- JavaScript for `index.html` stays at or under 70 KB gzipped. Photos are unchanged.
+- JavaScript for `index.html` stays at or under 75 KB gzipped. Photos are unchanged. (Raised from 70 KB on 2026-11-01 by the user: the build came to 73 KB, React 19 alone is about 60 KB, the content is pre-rendered, and sign-ups tapped before the JS loads are queued, so the extra size only delays interactivity.)
 
 ### Nice-to-have
 - `privacy.html` ships with no JavaScript (it has nothing interactive).

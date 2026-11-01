@@ -2,7 +2,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
-const JS_BUDGET_KB = 70;
+// Raised from 70 on 2026-11-01 (user decision): React 19 alone is ~60 KB, the content is pre-rendered, and
+// sign-ups tapped before it loads are queued, so the bundle only delays interactivity.
+const JS_BUDGET_KB = 75;
 const root = new URL('../', import.meta.url);
 const dist = new URL('dist/', root);
 const read = (path, base = dist) => readFileSync(new URL(path, base), 'utf8');
@@ -30,6 +32,10 @@ check(count(index, /<script type="module"[^>]*\bsrc="\/assets\/[^"]+\.js"/g) ===
 check(inline.length === 1 && /<head>[\s\S]*data-early-submit[\s\S]*<\/head>/.test(index) && inline[0].includes('__rbPending'),
   'index: early-submit guard inlined in <head>');
 check(!/<script\b/.test(privacy), 'privacy: ships no JavaScript');
+// Outside #root (React would wipe or mismatch it) and present before any change, or VoiceOver won't announce it.
+const live = index.indexOf('<div id="rb-early-status" class="sr-only" role="status" aria-live="polite"></div>');
+check(live > index.lastIndexOf('</form>') && !index.slice(index.indexOf('<div id="root">'), live).includes('<script'),
+  'index: early-submit live region in the static HTML, after #root');
 for (const [name, html] of Object.entries(pages))
   check(/<link rel="stylesheet"[^>]*href="\/assets\/[^"]+\.css"/.test(html), `${name}: stylesheet linked`);
 

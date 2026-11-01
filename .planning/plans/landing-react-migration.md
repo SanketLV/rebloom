@@ -165,7 +165,7 @@ In practice I'll run these one after another in this session. The parallel group
 | `:has()` (edge 5) | No `:has(` in the built CSS | Build check |
 | Old-browser output (edge 5) | No CSS nesting and no `@layer` in the output CSS, JS syntax at most ES2020 | Build check plus the device checklist |
 | Paths (edge 6) | Every `src`, `href` and `content` URL in both pages (icons, manifest, OG, `privacy.html`) resolves to a file in `dist/` | Build check |
-| Bundle (edge 3) | Gzipped JS loaded by `index.html` ≤ 70 KB; `privacy.html` has no `<script>` | Build check |
+| Bundle (edge 3) | Gzipped JS loaded by `index.html` ≤ 75 KB (raised from 70, see spec); `privacy.html` has no `<script>` | Build check |
 | Hydration (edge 2) | No React hydration warnings in the console on load, at all 4 widths | Browser |
 | Tailwind drift (edge 7) | Image boxes at 1366×768 match the baseline: steps 369×369, plate 476×595, promise 458×572; screenshots match | Browser |
 | API unchanged | `supabase/tests` pass; a real `example.com` sign-up returns 204 | Integration |

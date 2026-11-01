@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { earlySubmitGuard } from './early-submit';
+import { earlySubmitGuard, takePending } from './early-submit';
 
 // Before React hydrates, a submit would be a native POST to the page (a 404/405 on a static host): the guard
 // queues it instead, and WaitlistForm sends it once it mounts.
@@ -67,6 +67,21 @@ describe('earlySubmitGuard', () => {
     expect(document.documentElement.dataset.rbSlow).toBeUndefined();
     vi.advanceTimersByTime(1);
     expect(document.documentElement.dataset.rbSlow).toBe('');
+  });
+
+  // CSS ::after text is never announced, so the same words go into a live region that is in the static HTML
+  // (index.html, outside #root): VoiceOver only announces changes to a region that already existed.
+  it('tells screen readers it is joining, then that it is still loading, and goes quiet once sent', () => {
+    vi.useFakeTimers();
+    const live = document.createElement('div');
+    live.id = 'rb-early-status';
+    document.body.append(live);
+    submit(form('hero', 'ann@gmail.com'));
+    expect(live.textContent).toBe('Joining…');
+    vi.advanceTimersByTime(15_000);
+    expect(live.textContent).toBe('Still loading. Check your connection, then reload the page.');
+    takePending('hero');
+    expect(live.textContent).toBe('');
   });
 
   it('ignores forms that are not waitlist forms', () => {
