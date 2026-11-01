@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { MESSAGES, joinWaitlist, normalizeEmail, type Source } from '../lib/waitlist';
 
 export function WaitlistForm({ source }: { source: Source }) {
@@ -16,8 +16,7 @@ export function WaitlistForm({ source }: { source: Source }) {
     email.current!.focus();
   };
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function submit() {
     const input = email.current!;
     if (busyRef.current) return;
     input.value = normalizeEmail(input.value);
@@ -37,6 +36,21 @@ export function WaitlistForm({ source }: { source: Source }) {
     setStatus(MESSAGES[result]);
     if (result === 'joined' && input.value === sent) input.value = '';  // never wipe something changed meanwhile
   }
+
+  const onSubmit = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); void submit(); };
+
+  // Hydrated: the inline guard (src/lib/early-submit.ts) stops queueing, and a sign-up it queued before React
+  // loaded is sent now. Matched by source, not element, in case React had to re-create the DOM.
+  useEffect(() => {
+    window.__rbHydrated = true;
+    const queue = window.__rbPending ?? [];
+    const i = queue.findIndex(p => p.source === source);
+    if (i < 0) return;
+    const [queued] = queue.splice(i, 1);
+    if (!email.current!.value) email.current!.value = queued.email;
+    void submit();
+    // Mount only: the queue is drained once.
+  }, []);
 
   return (
     <form className="waitlist w-[min(100%,460px)]" data-source={source} method="post" noValidate onSubmit={onSubmit}>

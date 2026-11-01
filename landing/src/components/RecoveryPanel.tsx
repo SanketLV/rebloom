@@ -7,11 +7,15 @@ const valueText = (d: number) => `Day ${d} of 7${d === 7 ? ', recovered' : d ===
 export function RecoveryPanel() {
   const [day, setDay] = useState(7);
   const photo = useRef<HTMLElement>(null);
+  const slider = useRef<HTMLInputElement>(null);
   const touched = useRef(false);
   const raf = useRef(0);
   const d = Math.round(day);
 
   useEffect(() => {
+    // A drag made before React loaded counts as a drag: keep that day and never autoplay.
+    const early = parseFloat(slider.current!.value);
+    if (early !== 7) { touched.current = true; setDay(early); return; }
     // No autoplay for reduced motion or without IntersectionObserver (iOS < 12.2): stay on the recovered plant.
     if (matchMedia('(prefers-reduced-motion: reduce)').matches || typeof IntersectionObserver === 'undefined') return;
 
@@ -51,7 +55,7 @@ export function RecoveryPanel() {
             <b className="mr-1.5 font-serif text-[32px] font-normal text-surface">Day <span>{d}</span></b> of 7
           </p>
           <input
-            className="days-range" type="range" min={1} max={7} step={0.01} value={day.toFixed(2)}
+            ref={slider} className="days-range" type="range" min={1} max={7} step={0.01} value={day.toFixed(2)}
             aria-label="Day of recovery" aria-valuetext={valueText(d)}
             style={{ '--p': `${((day - 1) / 6) * 100}%` } as CSSProperties}
             onChange={e => { touched.current = true; cancelAnimationFrame(raf.current); setDay(parseFloat(e.target.value)); }}

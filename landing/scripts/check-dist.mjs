@@ -1,60 +1,87 @@
-// Build checks from .planning/specs/landing-react-migration.md. Run after `npm run build`: `npm run check`.
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+// Build checks from .planning/specs/landing-react-migration.md. `npm run build` ends with these.
+import { readdirSync, readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
 const JS_BUDGET_KB = 70;
-const dist = new URL('../dist/', import.meta.url);
-const read = path => readFileSync(new URL(path, dist), 'utf8');
+const root = new URL('../', import.meta.url);
+const dist = new URL('dist/', root);
+const read = (path, base = dist) => readFileSync(new URL(path, base), 'utf8');
 const failures = [];
 const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`); if (!ok) failures.push(msg); };
 const count = (s, re) => (s.match(re) ?? []).length;
+const head = html => html.match(/<head>([\s\S]*?)<\/head>/)?.[1] ?? '';
 
-const index = read('index.html');
-const privacy = read('privacy.html');
+const pages = { index: read('index.html'), privacy: read('privacy.html') };
+const { index, privacy } = pages;
 
 // Content is in the HTML before any JS runs.
 check(index.includes('Bring your plant back to life.</h1>'), 'index: headline pre-rendered');
 check(count(index, /<article\b[^>]*data-s="/g) === 4, 'index: all 4 symptom entries pre-rendered');
-check(count(index, /<article\b(?![^>]*hidden)[^>]*data-s="tips"/g) === 1 && count(index, /<article\b[^>]*hidden/g) === 3,
+check(count(index, /<article\b(?![^>]*\bhidden="")[^>]*data-s="tips"/g) === 1 && count(index, /<article\b[^>]*\bhidden=""/g) === 3,
   'index: only "tips" visible without JS');
 check(count(index, /<form\b[^>]*method="post"/g) === 2, 'index: 2 forms with method="post"');
 check(/<input\b[^>]*type="range"[^>]*value="7(\.00)?"/.test(index), 'index: slider starts on day 7');
 check(privacy.includes('>Privacy</h1>') && privacy.includes('Your rights</h2>'), 'privacy: content pre-rendered');
+
+// Scripts and styles are actually wired up (an empty match would make the syntax and budget checks vacuous).
+const external = [...index.matchAll(/<(?:script[^>]*\bsrc|link[^>]*rel="modulepreload"[^>]*\bhref)="([^"]+)"/g)].map(m => m[1]);
+const inline = [...index.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+check(count(index, /<script type="module"[^>]*\bsrc="\/assets\/[^"]+\.js"/g) === 1, 'index: one module script');
+check(inline.length === 1 && /<head>[\s\S]*data-early-submit[\s\S]*<\/head>/.test(index) && inline[0].includes('__rbPending'),
+  'index: early-submit guard inlined in <head>');
 check(!/<script\b/.test(privacy), 'privacy: ships no JavaScript');
+for (const [name, html] of Object.entries(pages))
+  check(/<link rel="stylesheet"[^>]*href="\/assets\/[^"]+\.css"/.test(html), `${name}: stylesheet linked`);
 
-// <head> unchanged from the static page.
+// <head> is the source template's, unchanged: only Vite's own asset tags and the guard are added.
+const normalize = h => h
+  .replace(/<script\b[^>]*data-early-submit[\s\S]*?<\/script>/g, '')
+  .replace(/<script type="module"[^>]*><\/script>/g, '')
+  .replace(/<link rel="(?:modulepreload|stylesheet)"[^>]*href="\/(?:assets|src)\/[^"]+"[^>]*>/g, '')
+  .replace(/<!--[\s\S]*?-->/g, '')
+  .replace(/\s+/g, ' ').replace(/> </g, '><').trim();
+for (const name of Object.keys(pages))
+  check(normalize(head(pages[name])) === normalize(head(read(`${name}.html`, root))), `${name}: <head> matches the template`);
 for (const tag of [
-  '<title>Rebloom: Plant Doctor</title>', 'name="description"', 'property="og:title"', 'property="og:description"',
-  'content="/assets/og.png"', 'name="twitter:card"', 'href="/favicon.ico"', 'href="/favicon.svg"',
-  'href="/apple-touch-icon.png"', 'href="/site.webmanifest"', 'name="theme-color" content="#2E3D28"',
-  'href="https://fonts.googleapis.com" rel="preconnect"', 'https://vhxcgmupopeochwvmwcv.supabase.co',
-  'family=Figtree:wght@400;500;600;700&family=Instrument+Serif',
-]) check(index.includes(tag) || index.replace(/rel="preconnect" href="([^"]+)"/g, 'href="$1" rel="preconnect"').includes(tag), `index head: ${tag}`);
+  '<link rel="preconnect" href="https://fonts.googleapis.com">',
+  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+  '<link rel="preconnect" href="https://vhxcgmupopeochwvmwcv.supabase.co" crossorigin>',
+  '<meta property="og:image" content="/assets/og.png">',
+  '<link rel="manifest" href="/site.webmanifest">',
+]) check(index.includes(tag), `index head: ${tag}`);
 
-// Every local URL resolves to a built file.
-const cssFiles = readdirSync(new URL('assets/', dist)).filter(f => f.endsWith('.css'));
-const css = cssFiles.map(f => read(`assets/${f}`)).join('\n');
+// Every local URL resolves to a built file, with exact case (Windows matches case-insensitively, Linux hosts don't).
+const css = readdirSync(new URL('assets/', dist)).filter(f => f.endsWith('.css')).map(f => read(`assets/${f}`)).join('\n');
 const manifest = JSON.parse(read('site.webmanifest'));
-const urls = [
-  ...[index, privacy].flatMap(h => [...h.matchAll(/\b(?:src|href|content)="([^"]+)"/g)].map(m => m[1])),
+const urls = [...new Set([
+  ...Object.values(pages).flatMap(h => [...h.matchAll(/\b(?:src|href|content)="([^"]+)"/g)].map(m => m[1])),
   ...[...css.matchAll(/url\(([^)]+)\)/g)].map(m => m[1].replace(/["']/g, '')),
   ...manifest.icons.map(i => i.src),
-].filter(u => /^(\/(?!\/)|[\w-]+\.(html|webp|png|svg|ico|css|js|webmanifest)$)/.test(u));
-const missing = [...new Set(urls)].map(u => u.replace(/[?#].*$/, '').replace(/^\//, '') || 'index.html')
-  .filter(p => !existsSync(new URL(p, dist)));
-check(missing.length === 0, `all ${new Set(urls).size} local URLs resolve${missing.length ? `; missing: ${missing.join(', ')}` : ''}`);
+].filter(u => /^(\/(?!\/)|[\w-]+\.(html|webp|png|svg|ico|css|js|webmanifest)$)/.test(u)))];
+const exists = path => {
+  const parts = path.split('/');
+  let dir = dist;
+  for (const [i, part] of parts.entries()) {
+    let entries;
+    try { entries = readdirSync(dir); } catch { return false; }
+    if (!entries.includes(part)) return false;
+    if (i < parts.length - 1) dir = new URL(`${part}/`, dir);
+  }
+  return true;
+};
+const missing = urls.map(u => u.replace(/[?#].*$/, '').replace(/^\//, '') || 'index.html').filter(p => !exists(p));
+check(urls.length > 20 && missing.length === 0, `all ${urls.length} local URLs resolve (exact case)${missing.length ? `; missing: ${missing.join(', ')}` : ''}`);
 
 // Old-browser output (iOS 14+ in-app browsers).
+const js = [...external.map(u => read(u.replace(/^\//, ''))), ...inline].join('\n');
 check(!css.includes(':has('), 'css: no :has()');
 check(!/@layer\b/.test(css), 'css: no @layer');
 check(!/\{[^{}]*&[^{}]*\{/.test(css), 'css: no nesting');
-const scripts = [...index.matchAll(/<(?:script[^>]*src|link[^>]*rel="modulepreload"[^>]*href)="([^"]+)"/g)].map(m => m[1].replace(/^\//, ''));
-const js = scripts.map(read).join('\n');
 check(!/\?\?=|\|\|=|&&=/.test(js), 'js: no ES2021+ logical assignment');
 
 // Budget.
 const kb = gzipSync(js).length / 1024;
-check(kb <= JS_BUDGET_KB, `js budget: ${kb.toFixed(1)} KB gzipped (limit ${JS_BUDGET_KB} KB)`);
+check(kb > 1 && kb <= JS_BUDGET_KB, `js budget: ${kb.toFixed(1)} KB gzipped (limit ${JS_BUDGET_KB} KB)`);
 
 if (failures.length) { console.error(`\n${failures.length} check(s) failed`); process.exit(1); }
 console.log('\nall checks passed');

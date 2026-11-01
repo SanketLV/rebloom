@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig, isRunnableDevEnvironment, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { earlySubmitGuard } from './src/lib/early-submit';
 
 // Vite 8 defaults to Safari 16.4 ("baseline-widely-available"); the page supports older iOS in-app browsers.
 const target = ['es2020', 'safari14', 'chrome87', 'firefox78', 'edge88'];
@@ -18,8 +19,18 @@ const devPrerender = (): Plugin => ({
   },
 });
 
+// The early-submit guard has to run before the pre-rendered forms are usable, so it goes inline into the head of
+// the page that has forms (privacy.html has none and stays script-free).
+const inlineEarlySubmit = (): Plugin => ({
+  name: 'rebloom-early-submit',
+  transformIndexHtml(_html, ctx) {
+    if (!ctx.filename.endsWith('index.html')) return;
+    return [{ tag: 'script', attrs: { 'data-early-submit': '' }, children: `(${earlySubmitGuard})(window)`, injectTo: 'head' }];
+  },
+});
+
 export default defineConfig({
-  plugins: [react(), devPrerender()],
+  plugins: [react(), inlineEarlySubmit(), devPrerender()],
   build: {
     target,
     cssTarget: target,

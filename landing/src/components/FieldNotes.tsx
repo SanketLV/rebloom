@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { SYMPTOMS, type Symptom } from '../content/symptoms';
 
 // One symptom at a time: the checked radio picks its photo, caption and entry. All four stay in the HTML and the
@@ -6,6 +6,13 @@ import { SYMPTOMS, type Symptom } from '../content/symptoms';
 // the first symptom shows even without JS.
 export function FieldNotes() {
   const [active, setActive] = useState<Symptom['id']>('tips');
+  const chips = useRef<HTMLFieldSetElement>(null);
+
+  // A chip tapped before React loaded is already checked in the DOM: follow it instead of snapping back to tips.
+  useEffect(() => {
+    const picked = chips.current!.querySelector<HTMLInputElement>('input:checked')?.id.slice(2) as Symptom['id'] | undefined;
+    if (picked && SYMPTOMS.some(s => s.id === picked)) setActive(picked);
+  }, []);
 
   return (
     <section className="wrap py-[clamp(80px,12vw,160px)]" aria-labelledby="notes-title">
@@ -31,7 +38,7 @@ export function FieldNotes() {
         </figure>
 
         <div>
-          <fieldset className="symptoms m-0 flex flex-wrap gap-2 border-0 p-0">
+          <fieldset ref={chips} className="symptoms m-0 flex flex-wrap gap-2 border-0 p-0">
             <legend className="mb-[14px] p-0 font-semibold">What do you see?</legend>
             {SYMPTOMS.map(s => (
               <Fragment key={s.id}>

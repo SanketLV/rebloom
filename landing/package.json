@@ -5,12 +5,19 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit && vite build && vite build --ssr src/entry-server.tsx --outDir dist/server && node scripts/prerender.mjs",
+    "build:site": "tsc --noEmit && vite build && vite build --ssr src/entry-server.tsx --outDir dist/server && node scripts/prerender.mjs",
+    "build": "npm run build:site && node scripts/check-dist.mjs",
     "check": "node scripts/check-dist.mjs",
-    "preview": "vite preview",
+    "preview": "npm run build:site && vite preview",
     "test": "vitest run"
   },
-  "browserslist": ["safari >= 14", "ios_saf >= 14", "chrome >= 87", "firefox >= 78", "edge >= 88"],
+  "browserslist": [
+    "safari >= 14",
+    "ios_saf >= 14",
+    "chrome >= 87",
+    "firefox >= 78",
+    "edge >= 88"
+  ],
   "dependencies": {
     "react": "19.3.1",
     "react-dom": "19.3.1"
