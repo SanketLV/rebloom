@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { takePending } from '../lib/early-submit';
 import { MESSAGES, joinWaitlist, normalizeEmail, type Source } from '../lib/waitlist';
 
 export function WaitlistForm({ source }: { source: Source }) {
@@ -10,17 +11,19 @@ export function WaitlistForm({ source }: { source: Source }) {
   const [status, setStatus] = useState('');
   const ids = { email: `email-${source}`, status: `status-${source}` };
 
-  const markInvalid = () => {
+  // quiet: a sign-up queued before React loaded is sent on mount, wherever the visitor has scrolled since;
+  // don't yank the page to the field.
+  const markInvalid = (quiet = false) => {
     setStatus(MESSAGES.invalid);
     setInvalid(true);
-    email.current!.focus();
+    if (!quiet) email.current!.focus();
   };
 
-  async function submit() {
+  async function submit(quiet = false) {
     const input = email.current!;
     if (busyRef.current) return;
     input.value = normalizeEmail(input.value);
-    if (!input.value || !input.checkValidity()) return markInvalid();
+    if (!input.value || !input.checkValidity()) return markInvalid(quiet);
     setInvalid(false);
     if (trap.current!.value) return setStatus(MESSAGES.joined);  // bot trap filled: look done, send nothing
 
@@ -31,7 +34,7 @@ export function WaitlistForm({ source }: { source: Source }) {
     const result = await joinWaitlist(sent, source);
     busyRef.current = false;
     setBusy(false);
-    if (result === 'invalid') return markInvalid();
+    if (result === 'invalid') return markInvalid(quiet);
     // Keep what they typed after a failure so a retry is one tap; joining twice is harmless.
     setStatus(MESSAGES[result]);
     if (result === 'joined' && input.value === sent) input.value = '';  // never wipe something changed meanwhile
@@ -43,12 +46,10 @@ export function WaitlistForm({ source }: { source: Source }) {
   // loaded is sent now. Matched by source, not element, in case React had to re-create the DOM.
   useEffect(() => {
     window.__rbHydrated = true;
-    const queue = window.__rbPending ?? [];
-    const i = queue.findIndex(p => p.source === source);
-    if (i < 0) return;
-    const [queued] = queue.splice(i, 1);
+    const [queued] = takePending(source);
+    if (!queued) return;
     if (!email.current!.value) email.current!.value = queued.email;
-    void submit();
+    void submit(true);
     // Mount only: the queue is drained once.
   }, []);
 

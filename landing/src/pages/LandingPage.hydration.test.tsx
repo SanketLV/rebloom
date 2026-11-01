@@ -3,6 +3,7 @@ import { hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RootBoundary } from '../components/RootBoundary';
+import { earlySubmitGuard } from '../lib/early-submit';
 import { LandingPage } from './LandingPage';
 
 // Server HTML → hydrateRoot, as in production. Any mismatch shows up as a console error or recoverable error.
@@ -71,13 +72,88 @@ describe('LandingPage hydration', () => {
     expect(window.__rbHydrated).toBe(true);
   });
 
-  it('falls back to the pre-rendered page instead of a blank one when a component throws', async () => {
+  it('does not jump to the field when a queued address turns out invalid', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    window.__rbPending = [{ source: 'final', email: 'not-an-email' }];
+    await hydrate();
+    expect(container.querySelector('#status-final')).toHaveTextContent('Enter an email like name@example.com.');
+    expect(document.activeElement).not.toBe(container.querySelector('#email-final'));
+  });
+});
+
+// The inline guard and the real pre-rendered form together: if data-source or name="email" drifts, these fail.
+describe('early submit before hydration (guard + real form)', () => {
+  let removeGuard: () => void;
+  beforeEach(() => { removeGuard = earlySubmitGuard(window); });
+  afterEach(() => { removeGuard(); delete document.documentElement.dataset.rbQueued; });
+
+  const typeAndSubmit = (email: string) => {
+    container.querySelector<HTMLInputElement>('#email-final')!.value = email;
+    const e = new Event('submit', { bubbles: true, cancelable: true });
+    container.querySelector('form[data-source="final"]')!.dispatchEvent(e);
+    return e;
+  };
+  const sentEmails = (f: ReturnType<typeof vi.fn>) =>
+    f.mock.calls.map(c => JSON.parse((c as unknown as [string, RequestInit])[1].body as string).p_email);
+
+  it('queues the submit, shows it is joining, and sends it exactly once after hydration', async () => {
+    const f = vi.fn(async () => ({ status: 204 }));
+    vi.stubGlobal('fetch', f);
+    expect(typeAndSubmit('ann@gmail.com').defaultPrevented).toBe(true);
+    expect(document.documentElement.dataset.rbQueued).toContain('final');
+    expect(await hydrate()).toEqual([]);
+    expect(sentEmails(f)).toEqual(['ann@gmail.com']);
+    expect(document.documentElement.dataset.rbQueued ?? '').not.toContain('final');
+    expect(container.querySelector('#status-final')).toHaveTextContent("You're on the list.");
+  });
+
+  it('sends exactly once when the submit lands between hydrateRoot and the commit', async () => {
+    const f = vi.fn(async () => ({ status: 204 }));
+    vi.stubGlobal('fetch', f);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await act(async () => {
+      root = hydrateRoot(container, <LandingPage />);
+      typeAndSubmit('ann@gmail.com');
+    });
+    expect(sentEmails(f)).toEqual(['ann@gmail.com']);
+  });
+});
+
+describe('error boundary fallback', () => {
+  const Boom = () => { throw new Error('in-app browser without some API'); };
+  const crash = async () => {
     const html = container.innerHTML;
-    const Boom = () => { throw new Error('in-app browser without some API'); };
-    await hydrate(<RootBoundary fallbackHtml={html}><LandingPage /><Boom /></RootBoundary>);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await act(async () => { root = hydrateRoot(container, <RootBoundary fallbackHtml={html}><LandingPage /><Boom /></RootBoundary>); });
+  };
+
+  it('shows the pre-rendered page instead of a blank one', async () => {
+    await crash();
     expect(container.querySelector('h1')?.textContent).toBe('Bring your plant back to life.');
     expect(container.querySelectorAll('form')).toHaveLength(2);
-    // The fallback forms have no React handlers, so the guard must let their native POST through.
-    expect(window.__rbHydrated).toBe(true);
+  });
+
+  it('still sends a sign-up that was queued before the crash', async () => {
+    const f = vi.fn(async () => ({ status: 204 }));
+    vi.stubGlobal('fetch', f);
+    window.__rbPending = [{ source: 'hero', email: 'ann@gmail.com' }];
+    await crash();
+    await act(async () => {});
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(window.__rbPending).toEqual([]);
+    expect(container.querySelector('#status-hero')).toHaveTextContent("You're on the list.");
+  });
+
+  it('keeps its forms working instead of posting to a page that cannot take it', async () => {
+    const f = vi.fn(async () => ({ status: 204 }));
+    vi.stubGlobal('fetch', f);
+    await crash();
+    container.querySelector<HTMLInputElement>('#email-final')!.value = ' ann@gmail.com ';
+    const e = new Event('submit', { bubbles: true, cancelable: true });
+    await act(async () => { container.querySelector('form[data-source="final"]')!.dispatchEvent(e); });
+    expect(e.defaultPrevented).toBe(true);
+    expect(JSON.parse((f.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
+      .toEqual({ p_email: 'ann@gmail.com', p_source: 'final' });
+    expect(container.querySelector('#status-final')).toHaveTextContent("You're on the list.");
   });
 });

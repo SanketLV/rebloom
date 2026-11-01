@@ -42,6 +42,12 @@
   .waitlist input:focus-visible { outline: none; }
   /* aria-disabled, not disabled: a disabled button drops keyboard focus in Safari and Firefox. */
   .waitlist button[aria-disabled="true"] { opacity: .6; cursor: progress; }
+  /* Joined before React loaded (src/lib/early-submit.ts): show progress without touching React's markup. */
+  html[data-rb-queued~="hero"] .waitlist[data-source="hero"] [role="status"]:empty::after,
+  html[data-rb-queued~="final"] .waitlist[data-source="final"] [role="status"]:empty::after { content: "Joining…"; }
+  html[data-rb-slow][data-rb-queued~="hero"] .waitlist[data-source="hero"] [role="status"]:empty::after,
+  html[data-rb-slow][data-rb-queued~="final"] .waitlist[data-source="final"] [role="status"]:empty::after {
+    content: "Still loading. Check your connection, then reload the page."; }
   /* 44px tap targets for inline links without changing the line height. */
   .tap-link { display: inline-block; padding: 12px 4px; margin: -12px -4px; }
 

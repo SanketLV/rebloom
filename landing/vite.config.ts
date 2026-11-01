@@ -1,7 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig, isRunnableDevEnvironment, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-import { earlySubmitGuard } from './src/lib/early-submit';
+import { earlySubmitGuard } from './src/lib/early-submit.ts';
 
 // Vite 8 defaults to Safari 16.4 ("baseline-widely-available"); the page supports older iOS in-app browsers.
 const target = ['es2020', 'safari14', 'chrome87', 'firefox78', 'edge88'];

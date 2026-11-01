@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { earlySubmitGuard } from './early-submit';
 
 // Before React hydrates, a submit would be a native POST to the page (a 404/405 on a static host): the guard
@@ -17,12 +17,19 @@ const submit = (f: HTMLFormElement) => {
   return e;
 };
 
+let removeGuard: () => void;
 beforeEach(() => {
   delete window.__rbPending;
   delete window.__rbHydrated;
-  earlySubmitGuard(window);
+  removeGuard = earlySubmitGuard(window);
 });
-afterEach(() => { document.body.innerHTML = ''; });
+afterEach(() => {
+  removeGuard();
+  document.body.innerHTML = '';
+  delete document.documentElement.dataset.rbQueued;
+  delete document.documentElement.dataset.rbSlow;
+  vi.useRealTimers();
+});
 
 describe('earlySubmitGuard', () => {
   it('blocks the native POST and queues the submit before hydration', () => {
@@ -45,6 +52,21 @@ describe('earlySubmitGuard', () => {
     const e = submit(form('hero', 'ann@gmail.com'));
     expect(e.defaultPrevented).toBe(false);
     expect(window.__rbPending).toEqual([]);
+  });
+
+  // Feedback goes on <html>, outside React's tree, so it can't cause a hydration mismatch.
+  it('marks the page so the queued form shows that it is joining', () => {
+    submit(form('final', 'bo@x.co'));
+    expect(document.documentElement.dataset.rbQueued).toBe(' final');
+  });
+
+  it('switches to a still-loading hint when React has not arrived after 15 s', () => {
+    vi.useFakeTimers();
+    submit(form('hero', 'ann@gmail.com'));
+    vi.advanceTimersByTime(14_999);
+    expect(document.documentElement.dataset.rbSlow).toBeUndefined();
+    vi.advanceTimersByTime(1);
+    expect(document.documentElement.dataset.rbSlow).toBe('');
   });
 
   it('ignores forms that are not waitlist forms', () => {
