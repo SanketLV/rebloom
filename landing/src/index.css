@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Layout, spacing and color live in the components as utilities. This file keeps what utilities can't say:
+   page-wide base rules, pseudo-elements, counters, masks and the range input. */
+
+@layer base {
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { @apply bg-bg text-ink font-sans antialiased; font-size: 17px; line-height: 1.55; }
+  /* width/height attributes are only for layout reservation; without this the 1120 attribute wins over aspect-ratio. */
+  img { height: auto; }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid theme('colors.lime'); outline-offset: 3px; border-radius: 4px; }
+  h1, h2, h3 { @apply font-serif font-normal; letter-spacing: -0.015em; text-wrap: balance; }
+  h2 { font-size: clamp(2.6rem, 6vw, 4.75rem); line-height: 1; }
+}
+
+@layer components {
+  .wrap { max-width: 1280px; margin-inline: auto; padding-inline: theme('spacing.gutter'); }
+
+  /* ---------- Hero ---------- */
+  /* Photos: FLUX.1 [schnell] via brand/source/flux_hero.py (wide-sprout-2, tall-sprout-3).
+     Wide keeps the sprout right of the headline; tall keeps it above the text. */
+  .hero-media { position: absolute; inset: 0; z-index: -2; background: theme('colors.olive') url(/assets/hero-wide.webp) 72% center / cover no-repeat; }
+  /* FLUX won't place the sprout high on request, so on phones lift the photo and fade its foot into dark olive. */
+  @media (max-aspect-ratio: 4/5) {
+    .hero { background: theme('colors.ink'); }
+    .hero-media { inset: -16% 0 16% 0; background-image: url(/assets/hero-tall.webp); background-position: center top;
+      mask-image: linear-gradient(180deg, #000 70%, transparent); }
+  }
+  .hero::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(30,38,25,.35) 0%, transparent 30%, transparent 45%, rgba(30,38,25,.7) 100%); }
+
+  /* ---------- Waitlist form ---------- */
+  .waitlist-row { backdrop-filter: blur(6px); }
+  .waitlist-row:focus-within { border-color: theme('colors.surface'); }
+  .waitlist input::placeholder { color: rgba(250,250,245,.6); }
+  .waitlist input:focus-visible { outline: none; }
+  /* aria-disabled, not disabled: a disabled button drops keyboard focus in Safari and Firefox. */
+  .waitlist button[aria-disabled="true"] { opacity: .6; cursor: progress; }
+  /* 44px tap targets for inline links without changing the line height. */
+  .tap-link { display: inline-block; padding: 12px 4px; margin: -12px -4px; }
+
+  /* ---------- Field notes ---------- */
+  /* Colors here, not as utilities: utilities would beat the :checked rule below. */
+  .symptoms label { border-color: theme('colors.ink-2'); }
+  .symptoms label:hover { background: theme('colors.surface'); }
+  .symptoms input:focus-visible + label { outline: 3px solid theme('colors.olive'); outline-offset: 2px; }
+  .symptoms input:checked + label { background: theme('colors.olive'); border-color: theme('colors.olive'); color: theme('colors.surface'); }
+
+  /* ---------- How it works ---------- */
+  .steps { counter-reset: step; }
+  .step { counter-increment: step; }
+  /* The step number sits on the photo, bottom left. */
+  .step-figure::after { content: counter(step); position: absolute; left: 18px; bottom: 6px; font-family: theme('fontFamily.serif'); font-size: clamp(64px, 7vw, 96px); line-height: 1; color: theme('colors.surface'); text-shadow: 0 2px 24px rgba(30,38,25,.5); }
+  .step-7-text::before { content: counter(step); display: block; font-family: theme('fontFamily.serif'); font-size: 44px; line-height: 1; margin-bottom: 18px; color: theme('colors.lime'); }
+
+  /* Day slider: track fill follows --p. */
+  .days-range { -webkit-appearance: none; appearance: none; width: 100%; height: 44px; background: transparent; margin: 4px 0 0; cursor: grab; }
+  .days-range:active { cursor: grabbing; }
+  .days-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, theme('colors.lime') var(--p, 100%), rgba(250,250,245,.22) var(--p, 100%)); }
+  .days-range::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(250,250,245,.22); }
+  .days-range::-moz-range-progress { height: 4px; border-radius: 2px; background: theme('colors.lime'); }
+  .days-range::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -10px; border-radius: 50%; background: theme('colors.surface'); border: 0; }
+  .days-range::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: theme('colors.surface'); border: 0; }
+
+  /* ---------- Final CTA ---------- */
+  /* Bookends the hero: the sprout at the top, the thriving plant at the bottom. */
+  .final-media { position: absolute; inset: 0; z-index: -2; background: theme('colors.olive') url(/assets/lush-wide.webp) center / cover no-repeat; }
+  @media (max-aspect-ratio: 4/5) { .final-media { background-image: url(/assets/lush-tall.webp); } }
+  .final::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(30,38,25,.15) 0%, rgba(30,38,25,.55) 55%, rgba(30,38,25,.92) 100%); }
+
+  /* ---------- Privacy page ---------- */
+  .privacy { line-height: 1.6; }
+  .privacy :focus-visible { outline-color: theme('colors.olive'); }
+  /* Olive ring is invisible on the olive header. */
+  .privacy header :focus-visible { outline-color: theme('colors.lime'); }
+  .privacy main a { display: inline-block; padding: 12px 2px; margin: -12px -2px; color: theme('colors.ink'); }
+  .privacy main p, .privacy main li { color: theme('colors.ink-2'); }
+}
