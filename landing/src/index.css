@@ -11,18 +11,21 @@
   body { @apply bg-bg text-ink font-sans antialiased; font-size: 17px; line-height: 1.55; }
   /* width/height attributes are only for layout reservation; without this the 1120 attribute wins over aspect-ratio. */
   img { height: auto; }
-  a { color: inherit; }
+  /* Preflight sets text-decoration: inherit, which would drop the default link underline. */
+  a { color: inherit; text-decoration: underline; }
   :focus-visible { outline: 3px solid theme('colors.lime'); outline-offset: 3px; border-radius: 4px; }
   h1, h2, h3 { @apply font-serif font-normal; letter-spacing: -0.015em; text-wrap: balance; }
   h2 { font-size: clamp(2.6rem, 6vw, 4.75rem); line-height: 1; }
 }
 
 @layer components {
-  .wrap { max-width: 1280px; margin-inline: auto; padding-inline: theme('spacing.gutter'); }
+  .wrap { max-width: 1280px; margin: 0 auto; padding-inline: theme('spacing.gutter'); }
 
   /* ---------- Hero ---------- */
   /* Photos: FLUX.1 [schnell] via brand/source/flux_hero.py (wide-sprout-2, tall-sprout-3).
      Wide keeps the sprout right of the headline; tall keeps it above the text. */
+  /* Background here, not bg-olive: a utility would beat the phone override below. */
+  .hero { background: theme('colors.olive'); }
   .hero-media { position: absolute; inset: 0; z-index: -2; background: theme('colors.olive') url(/assets/hero-wide.webp) 72% center / cover no-repeat; }
   /* FLUX won't place the sprout high on request, so on phones lift the photo and fade its foot into dark olive. */
   @media (max-aspect-ratio: 4/5) {
@@ -78,4 +81,6 @@
   .privacy header :focus-visible { outline-color: theme('colors.lime'); }
   .privacy main a { display: inline-block; padding: 12px 2px; margin: -12px -2px; color: theme('colors.ink'); }
   .privacy main p, .privacy main li { color: theme('colors.ink-2'); }
+  /* Preflight zeroes paragraph margins; the privacy page relied on the browser's 1em. */
+  .privacy main p { margin: 1em 0; }
 }

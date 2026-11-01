@@ -10,57 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Instrument+Serif&display=swap" rel="stylesheet">
-<style>
-:root { --bg: #E8E9DF; --text: #1E2619; --text-2: #4F5947; --line: #D4D7C6; --olive: #2E3D28; --lime: #BFE23A;
-  --serif: 'Instrument Serif', Georgia, serif; --sans: 'Figtree', system-ui, sans-serif; }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 400 17px/1.6 var(--sans); }
-:focus-visible { outline: 3px solid var(--olive); outline-offset: 3px; border-radius: 4px; }
-header { background: var(--olive); padding: 22px clamp(16px, 4vw, 56px); }
-header img { height: 28px; width: auto; display: block; }
-/* Olive ring is invisible on the olive header. */
-header :focus-visible { outline-color: var(--lime); }
-/* 44px tap targets for inline links without changing the line height. */
-main a { display: inline-block; padding: 12px 2px; margin: -12px -2px; }
-main { max-width: 680px; margin: 0 auto; padding: clamp(48px, 8vw, 96px) clamp(16px, 4vw, 32px) 96px; }
-h1 { font: 400 clamp(2.6rem, 7vw, 4rem)/1 var(--serif); margin: 0 0 12px; letter-spacing: -0.015em; }
-h2 { font: 700 19px/1.3 var(--sans); margin: 40px 0 8px; }
-p, li { color: var(--text-2); }
-.updated { font-size: 14px; }
-a { color: var(--text); }
-</style>
+<!-- Styles only: this page has nothing interactive, so it ships no JavaScript. -->
+<link rel="stylesheet" href="/src/index.css">
 </head>
 <body>
-<header><a href="/" aria-label="Rebloom home"><img src="assets/rebloom-logo-bloom.svg" alt="Rebloom" width="104" height="28"></a></header>
-<main>
-  <h1>Privacy</h1>
-  <p class="updated">Last updated 31 October 2026</p>
-  <!-- TODO before launch: GDPR wants the controller's legal name and country under "Who we are", and the
-       transfer sentence is only true once Supabase's DPA is signed (dashboard: Organization > Legal Documents). -->
-
-
-  <h2>Who we are</h2>
-  <p>Rebloom is an independent project. You can reach us at <a href="mailto:sanketlakhani80@gmail.com">sanketlakhani80@gmail.com</a>. We decide what happens to the data described here.</p>
-
-  <h2>What we collect</h2>
-  <p>When you join the waitlist we store three things: your email address, which of the two sign-up forms you used, and the time you joined.</p>
-  <p>Like any website, the services that deliver it also keep short-lived technical logs of each request: your IP address, approximate location (city and country, worked out from the IP) and browser type. Our database provider, Supabase, keeps these logs for a limited time set by its plan and then deletes them automatically. The host that serves these pages keeps similar access logs. We use them only to keep the service running and secure.</p>
-  <p>This site sets no cookies and runs no analytics or ads.</p>
-
-  <h2>Why, and on what basis</h2>
-  <p>To send you one email when Rebloom launches. We do this because you asked us to by joining (your consent). We won't send anything else, and we won't sell your address. We'll only share it with the service we use to send that one email.</p>
-
-  <h2>Where it's kept</h2>
-  <p>The waitlist is stored with Supabase on servers in the United States. If you're in the UK or EU, this means your email leaves those regions; the transfer is covered by Supabase's data processing agreement, which includes the standard contractual clauses approved for such transfers. The page's fonts are loaded from Google Fonts, which means Google sees your IP address when the page loads.</p>
-
-  <h2>How long</h2>
-  <p>Until the launch email has been sent. After that we delete the list.</p>
-
-  <h2>Your rights</h2>
-  <p>You can ask to see what we hold about you, to correct it, or to be removed from the list at any time, which also withdraws your consent. Email <a href="mailto:sanketlakhani80@gmail.com">sanketlakhani80@gmail.com</a> from the address you signed up with; to protect the list, we only reply to that address. We'll act within 30 days and confirm by email.</p>
-  <p>If you think we've handled your data badly, you can complain to your data protection authority, for example the Information Commissioner's Office in the UK or the authority in your EU country.</p>
-
-  <p style="margin-top: 48px"><a href="/">Back to Rebloom</a></p>
-</main>
+<div id="root"><!--app--></div>
 </body>
 </html>
