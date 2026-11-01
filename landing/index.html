@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rebloom: Plant Doctor</title>
+<meta name="description" content="Photograph a struggling plant, learn what's wrong, and follow a plan until it recovers. Join the waitlist.">
+<meta property="og:title" content="Rebloom: Plant Doctor">
+<meta property="og:description" content="Bring your plant back to life. Join the waitlist.">
+<meta property="og:image" content="/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#2E3D28">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Warm DNS/TCP/TLS for the waitlist call; fetch uses the anonymous (crossorigin) pool. -->
+<link rel="preconnect" href="https://vhxcgmupopeochwvmwcv.supabase.co" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Instrument+Serif&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="root"><!--app--></div>
+<!-- Screen-reader progress for sign-ups tapped before React loads (src/lib/early-submit.ts). Outside #root, and
+     in the static HTML because VoiceOver only announces changes to a live region that already existed. -->
+<div id="rb-early-status" class="sr-only" role="status" aria-live="polite"></div>
+<script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
