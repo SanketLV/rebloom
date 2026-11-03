@@ -43,7 +43,7 @@ The app has one session module that holds the signed-in user's Supabase session,
 - `supabase migration list` (linked to production) shows all four as applied on both sides, and nothing pending.
 
 **2. Local development stack**
-- `supabase init` creates `supabase/config.toml` next to the existing `migrations/` and `tests/` folders. Nothing in those folders changes except the renames above.
+- `supabase init` creates `supabase/config.toml` next to the existing `migrations/` and `tests/` folders. Nothing in those folders changes except the renames above, and moving the two SQL-editor scripts (`waitlist_normalize.sql`, `waitlist_storage.sql`) to `supabase/scripts/`, because `supabase test db` runs every `.sql` file under `supabase/tests/` as a pgTAP test.
 - `config.toml`: anonymous sign-ins off; phone provider off; email provider on with sign-in by 6-digit code (the local stack's mail catcher receives the emails, so tests can sign in). The accounts spec owns the production provider settings.
 - `supabase start` runs every migration from an empty database with no errors, and `supabase db reset` does the same again.
 - `app/.env.example` (committed) lists `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` with comments. `app/.env.local` (already gitignored) holds the local stack's values. For a phone on the local stack, the URL is the computer's LAN address (`http://192.168.x.x:54321`), not `localhost`.

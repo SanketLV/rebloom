@@ -224,7 +224,7 @@ Written test-first. Screens with the foundation's session module and the Supabas
 - **Which domain sends the emails?** Needed for phase 1 (SPF/DKIM/DMARC). The landing page's domain works if you own it; a subdomain like `auth.<domain>` keeps sign-in mail separate from any future newsletter.
 - **Email limits**: the email service's free plan has a daily cap. Pick the plan and the Supabase hourly limit together in the plan, sized for launch.
 - **Apple token revocation on delete**: Apple asks apps that offer Sign in with Apple to revoke the user's Apple tokens when they delete their account. Check in the plan whether Supabase does this; if not, `delete-account` calls Apple's revoke endpoint, which needs an Apple signing key kept as a function secret.
-- **Designs**: there are no artboards for the account screens. Build them from the tokens and existing components, or draw them in the canvas first?
+- ~~Designs?~~ **Decided 2026-11-03:** draw the account screens (Account signed out / signed in, email, code, sign-out and delete sheets, "Sign-in didn't finish") in the design canvas before building phase 1. The UI Changes table gets the artboard names then.
 
 ---
 
