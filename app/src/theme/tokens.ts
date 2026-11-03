@@ -48,7 +48,8 @@ export const cameraColors = {
 export const scrim = 'rgba(15,20,15,0.55)';
 
 // Behind text on onboarding photos. 5.4:1 for cameraColors.text, even over pure white.
-export const photoScrim = 'rgba(15,20,15,0.66)';
+export const photoScrimOpacity = 0.66;
+export const photoScrim = `rgba(15,20,15,${photoScrimOpacity})`;
 
 export const radius = { sm: 14, md: 20, lg: 24, pill: 999 } as const;
 

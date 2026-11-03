@@ -22,6 +22,14 @@ test('hex colors only live in src/theme', () => {
   expect(offenders).toEqual([]);
 });
 
+test('every onboarding photo is used, so none adds dead weight to the app', () => {
+  const screens = readFileSync(join(SRC, 'onboarding/screens.ts'), 'utf8');
+  const unused = readdirSync(join(SRC, '../assets/onboarding')).filter(
+    (file) => !screens.includes(`assets/onboarding/${file}`),
+  );
+  expect(unused).toEqual([]);
+});
+
 test('app is light-only until dark mode is designed', () => {
   expect(appJson.expo.userInterfaceStyle).toBe('light');
 });

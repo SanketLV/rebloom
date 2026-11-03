@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 
 import { StartError } from '@/components/StartError';
+import { OnboardingContext, useOnboardingGate } from '@/onboarding/context';
 import { sweepOrphanPhotos } from '@/photos/photos';
 import type { Db } from '@/storage/db';
 import { migrate } from '@/storage/migrations';
@@ -48,6 +49,7 @@ export default function RootLayout() {
   const [dbError, setDbError] = useState<Error | null>(null);
   // Bumped by Retry to remount the provider and open the database again.
   const [attempt, setAttempt] = useState(0);
+  const { seen, onboarding } = useOnboardingGate();
 
   if (!fontsReady) return null;
 
@@ -72,23 +74,30 @@ export default function RootLayout() {
       <HideSplash />
       <ThemeProvider value={theme}>
         <StatusBar style="dark" />
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="scan"
-            options={{ presentation: 'fullScreenModal', headerShown: false }}
-          />
-          <Stack.Screen
-            name="settings"
-            options={{
-              title: 'Settings',
-              // Without this, iOS labels the back button with the hidden "(tabs)" group name.
-              headerBackTitle: 'Back',
-              headerTitleStyle: { fontFamily: fonts.body700 },
-              headerTintColor: colors.text,
-            }}
-          />
-        </Stack>
+        <OnboardingContext.Provider value={onboarding}>
+          <Stack>
+            <Stack.Protected guard={!seen}>
+              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            </Stack.Protected>
+            <Stack.Protected guard={seen}>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="scan"
+                options={{ presentation: 'fullScreenModal', headerShown: false }}
+              />
+              <Stack.Screen
+                name="settings"
+                options={{
+                  title: 'Settings',
+                  // Without this, iOS labels the back button with the hidden "(tabs)" group name.
+                  headerBackTitle: 'Back',
+                  headerTitleStyle: { fontFamily: fonts.body700 },
+                  headerTintColor: colors.text,
+                }}
+              />
+            </Stack.Protected>
+          </Stack>
+        </OnboardingContext.Provider>
       </ThemeProvider>
     </SQLiteProvider>
   );

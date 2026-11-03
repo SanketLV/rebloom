@@ -1,0 +1,176 @@
+import { useFocusEffect } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
+import {
+  AccessibilityInfo,
+  BackHandler,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { Button, TextButton } from '@/components/Button';
+import { CameraIcon } from '@/components/icons';
+import { useReduceMotion } from '@/lib/useReduceMotion';
+import { useOnboarding } from '@/onboarding/context';
+import { OnboardingPage } from '@/onboarding/OnboardingPage';
+import { SCREENS } from '@/onboarding/screens';
+import { cameraColors, colors, radius, spacing } from '@/theme/tokens';
+
+const LAST = SCREENS.length - 1;
+// "Scan a plant" takes Next's place, so the second tap of a double tap on Next would land on it.
+const DOUBLE_TAP_MS = 300;
+const PRIMARY_HEIGHT = 56;
+const SECONDARY_HEIGHT = 44;
+const DOT_SIZE = 8;
+
+export default function OnboardingScreen() {
+  const { finish } = useOnboarding();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReduceMotion();
+  const [index, setIndex] = useState(0);
+  const pager = useRef<ComponentRef<typeof ScrollView>>(null);
+  // A scroll we started: its end must not overwrite the index, which is already right.
+  const scrollingToIndex = useRef(false);
+  const shownAt = useRef(0);
+  const announced = useRef(index);
+
+  const bottomPadding = Math.max(insets.bottom, spacing.lg);
+  const actionsHeight = PRIMARY_HEIGHT + spacing.sm + SECONDARY_HEIGHT + bottomPadding;
+  const dotsHeight = spacing.lg + DOT_SIZE + spacing.lg;
+  const isLast = index === LAST;
+
+  useEffect(() => {
+    shownAt.current = Date.now();
+    if (announced.current === index) return;
+    announced.current = index;
+    AccessibilityInfo.announceForAccessibility(
+      `Step ${index + 1} of ${SCREENS.length}. ${SCREENS[index].title}`,
+    );
+  }, [index]);
+
+  const goTo = useCallback(
+    (next: number) => {
+      scrollingToIndex.current = true;
+      setIndex(next);
+      pager.current?.scrollTo({ x: next * width, animated: !reduceMotion });
+    },
+    [width, reduceMotion],
+  );
+
+  // Keeps the current screen aligned when the width changes (split screen, foldables).
+  const laidOutWidth = useRef(width);
+  useEffect(() => {
+    if (laidOutWidth.current === width) return;
+    laidOutWidth.current = width;
+    pager.current?.scrollTo({ x: index * width, animated: false });
+  }, [width, index]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (index === 0) return;
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        goTo(index - 1);
+        return true;
+      });
+      return () => subscription.remove();
+    }, [index, goTo]),
+  );
+
+  const onSwipeEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (scrollingToIndex.current) return;
+    const page = Math.round(event.nativeEvent.contentOffset.x / width);
+    setIndex(Math.min(LAST, Math.max(0, page)));
+  };
+
+  const scanPlant = () => {
+    if (Date.now() - shownAt.current < DOUBLE_TAP_MS) return;
+    finish(true);
+  };
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar style="light" />
+      <ScrollView
+        ref={pager}
+        testID="onboarding-pager"
+        horizontal
+        pagingEnabled
+        bounces={false}
+        showsHorizontalScrollIndicator={false}
+        onScrollBeginDrag={() => {
+          scrollingToIndex.current = false;
+        }}
+        onMomentumScrollEnd={onSwipeEnd}>
+        {SCREENS.map((screen, i) => (
+          <OnboardingPage
+            key={screen.title}
+            screen={screen}
+            size={{ width, height }}
+            topInset={insets.top}
+            footerHeight={actionsHeight + dotsHeight}
+            showLogo={i === 0}
+            current={i === index}
+          />
+        ))}
+      </ScrollView>
+      <View style={[styles.footer, { paddingBottom: bottomPadding }]}>
+        <View
+          style={styles.dots}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants">
+          {SCREENS.map((screen, i) => (
+            <View key={screen.title} style={[styles.dot, i === index && styles.dotCurrent]} />
+          ))}
+        </View>
+        {isLast ? (
+          <Button
+            label="Scan a plant"
+            tone="onDark"
+            icon={<CameraIcon color={colors.text} size={22} />}
+            onPress={scanPlant}
+          />
+        ) : (
+          <Button label="Next" tone="onDark" onPress={() => goTo(index + 1)} />
+        )}
+        <View style={styles.secondary}>
+          <TextButton
+            label={isLast ? 'Look around first' : 'Skip'}
+            tone="onDark"
+            onPress={() => finish()}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: cameraColors.ground },
+  footer: {
+    position: 'absolute',
+    left: spacing.xl,
+    right: spacing.xl,
+    bottom: 0,
+  },
+  dots: {
+    flexDirection: 'row',
+    gap: 6,
+    height: DOT_SIZE,
+    marginBottom: spacing.lg,
+  },
+  dot: {
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: radius.pill,
+    backgroundColor: cameraColors.caption,
+    opacity: 0.55,
+  },
+  dotCurrent: { width: 24, backgroundColor: cameraColors.text, opacity: 1 },
+  secondary: { marginTop: spacing.sm },
+});
