@@ -180,7 +180,7 @@ Written test-first. App logic in Jest with the Supabase client mocked at the mod
 
 ## Dependencies
 
-- Supabase CLI on Sanket's machine, and Docker (or a compatible runtime) for `supabase start`.
+- Supabase CLI on Sanket's machine, and Docker (installed) for `supabase start`.
 - Access to the `rebloom` project to link the CLI (`supabase link --project-ref vhxcgmupopeochwvmwcv`) and change the auth settings in the dashboard.
 - npm: `@supabase/supabase-js` (via `npx expo install`). Already installed: `expo-sqlite`, `fast-check`.
 - No dev build: everything used ships in Expo Go 58.
@@ -188,8 +188,8 @@ Written test-first. App logic in Jest with the Supabase client mocked at the mod
 
 ## Open Questions
 
-- **Docker on your machine?** The local stack needs it. If it isn't an option, the fallback is a second free Supabase project, `rebloom-dev`, used the same way. (You already have two other projects in the org, Spotify-Clone and Echoglot, both paused; the free plan limits how many can be active at once.)
-- **Session storage: plain or encrypted?** The SDK 58 guide stores the session in `expo-sqlite` localStorage, which is inside the app's private storage but not encrypted, and it ends up in iCloud / Android Auto Backup. That backup is also what lets an anonymous user's backups survive a phone change. Recommendation: follow the guide now and decide in the backup spec, together with the open "phone backups" question from the scan-diagnosis spec.
+- ~~Docker on your machine?~~ **Decided 2026-11-03:** Docker is installed, so development uses the local stack (`supabase start`). No `rebloom-dev` project.
+- ~~Session storage: plain or encrypted?~~ **Decided 2026-11-03:** follow the SDK 58 guide (`expo-sqlite` localStorage: inside the app's private storage, not encrypted, included in iCloud / Android Auto Backup). Revisit in the backup spec together with the "phone backups" question from the scan-diagnosis spec.
 - **Permanent sign-in for backup.** An anonymous account can't be recovered on a new phone unless the OS backup restores the session. For backup to be worth having, the backup spec probably needs email-code sign-in (or Apple / Google) to link the account. Decide there.
 - **Rate limit.** 30 anonymous sign-ins per IP per hour may block real users behind a shared carrier IP once there are many users. Fine at launch scale because sign-in happens only when backup is turned on, not at every app start; revisit before a marketing push.
 
