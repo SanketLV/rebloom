@@ -1,7 +1,15 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 
-import { cameraColors, colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
+import {
+  buttonHeight,
+  cameraColors,
+  colors,
+  radius,
+  spacing,
+  touchTarget,
+  type,
+} from '@/theme/tokens';
 
 // Keeps labels on a dark photo inside their fixed-height buttons at large text sizes.
 const ON_DARK_FONT_SCALE = 1.3;
@@ -47,7 +55,7 @@ export function Button({
         pressed && styles.pressed,
       ]}>
       {busy ? (
-        <ActivityIndicator color={colors.onPrimary} />
+        <ActivityIndicator color={onDark ? colors.text : colors.onPrimary} />
       ) : (
         <>
           {icon}
@@ -93,7 +101,7 @@ export function TextButton({
 
 const styles = StyleSheet.create({
   button: {
-    height: 56,
+    height: buttonHeight,
     borderRadius: radius.sm,
     backgroundColor: colors.primary,
     flexDirection: 'row',

@@ -57,9 +57,13 @@ async function pressNext(times = 1) {
 
 const pager = () => screen.getByTestId('onboarding-pager');
 
+async function scrollEvent(x: number) {
+  await fireEvent(pager(), 'scroll', { nativeEvent: { contentOffset: { x, y: 0 } } });
+}
+
 async function swipeTo(x: number) {
   await fireEvent(pager(), 'scrollBeginDrag');
-  await fireEvent(pager(), 'momentumScrollEnd', { nativeEvent: { contentOffset: { x, y: 0 } } });
+  await scrollEvent(x);
 }
 
 async function settle() {
@@ -178,6 +182,33 @@ describe('leaving', () => {
     expect(router.canGoBack()).toBe(false);
   });
 
+  test('the first exit wins: Scan a plant, then Look around first, still opens the camera', async () => {
+    await renderFirstLaunch();
+    await pressNext(3);
+    const scan = button('Scan a plant');
+    const look = button('Look around first');
+    await act(async () => {
+      fireEvent.press(scan);
+      fireEvent.press(look);
+    });
+    await settle();
+    expect(screen).toHavePathname('/scan');
+  });
+
+  test('the first exit wins: Look around first, then Scan a plant, opens no camera', async () => {
+    await renderFirstLaunch();
+    await pressNext(3);
+    const scan = button('Scan a plant');
+    const look = button('Look around first');
+    await act(async () => {
+      fireEvent.press(look);
+      fireEvent.press(scan);
+    });
+    await settle();
+    expect(screen).toHavePathname('/');
+    expect(router.canGoBack()).toBe(false);
+  });
+
   test('a tap meant for Next on screen 3 does not open the camera', async () => {
     await renderFirstLaunch();
     await pressNext(2);
@@ -232,10 +263,52 @@ describe('swiping', () => {
   const width = () => Dimensions.get('window').width;
 
   test('a swipe updates the screen, the actions and the announcement', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+    announce.mockClear();
     await renderFirstLaunch();
     await swipeTo(width() * 3);
     expect(screen.getByText(title(3))).toBeOnTheScreen();
     expect(button('Look around first')).toBeOnTheScreen();
+    expect(announce).toHaveBeenLastCalledWith(`Step 4 of 4. ${title(3)}`);
+  });
+
+  test('the screen follows the scroll past halfway, so Back acts on what is showing', async () => {
+    await renderFirstLaunch();
+    await fireEvent(pager(), 'scrollBeginDrag');
+    await scrollEvent(width() * 0.4);
+    expect(screen.getByText(title(0))).toBeOnTheScreen();
+    await scrollEvent(width() * 0.6);
+    expect(screen.getByText(title(1))).toBeOnTheScreen();
+  });
+
+  test('a screen reader paging with no touch drag still moves the screen', async () => {
+    await renderFirstLaunch();
+    await scrollEvent(width());
+    expect(screen.getByText(title(1))).toBeOnTheScreen();
+  });
+
+  test('after Next arrives, paging with no touch drag still moves the screen', async () => {
+    await renderFirstLaunch();
+    await pressNext();
+    await scrollEvent(width());
+    await scrollEvent(width() * 2);
+    expect(screen.getByText(title(2))).toBeOnTheScreen();
+  });
+
+  test('with reduce motion, paging after Next still moves the screen', async () => {
+    jest.mocked(AccessibilityInfo.isReduceMotionEnabled).mockResolvedValueOnce(true);
+    await renderFirstLaunch();
+    await settle();
+    await pressNext();
+    await scrollEvent(width() * 2);
+    expect(screen.getByText(title(2))).toBeOnTheScreen();
+  });
+
+  test('dragging during the scroll from Next hands control back to the finger', async () => {
+    await renderFirstLaunch();
+    await fireEvent.press(button('Next'));
+    await swipeTo(0);
+    expect(screen.getByText(title(0))).toBeOnTheScreen();
   });
 
   test('offsets outside the pages stay on the first or last screen', async () => {
@@ -246,13 +319,21 @@ describe('swiping', () => {
     expect(screen.getByText(title(0))).toBeOnTheScreen();
   });
 
-  test('a scroll settling from Next can not drag the index back', async () => {
+  test('the scroll from Next on its way can not drag the screen back', async () => {
     await renderFirstLaunch();
     await fireEvent.press(button('Next'));
-    await fireEvent(pager(), 'momentumScrollEnd', {
-      nativeEvent: { contentOffset: { x: 0, y: 0 } },
-    });
+    await scrollEvent(0);
+    await scrollEvent(width() * 0.3);
     expect(screen.getByText(title(1))).toBeOnTheScreen();
+  });
+
+  test('a scroll before the first layout has a width to divide by is ignored', async () => {
+    await renderFirstLaunch();
+    await fireEvent(screen.getByTestId('onboarding-screen'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 0, height: 0 } },
+    });
+    await scrollEvent(0);
+    expect(button('Next')).toBeOnTheScreen();
   });
 
   test('Next animates to the next page', async () => {
@@ -262,16 +343,12 @@ describe('swiping', () => {
   });
 
   test('a width change keeps the current screen aligned, without animating', async () => {
-    const original = Dimensions.get('window');
     await renderFirstLaunch();
     await pressNext();
-    await act(async () => {
-      Dimensions.set({ window: { ...original, width: 500 }, screen: { ...original, width: 500 } });
+    await fireEvent(screen.getByTestId('onboarding-screen'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 500, height: 900 } },
     });
     expect(scrollTo()).toHaveBeenLastCalledWith({ x: 500, animated: false });
-    await act(async () => {
-      Dimensions.set({ window: original, screen: original });
-    });
   });
 });
 
@@ -304,6 +381,13 @@ describe('accessibility', () => {
     });
   });
 
+  test('photos are decorative, so screen readers skip them', async () => {
+    await renderFirstLaunch();
+    const photos = screen.getAllByTestId('onboarding-photo', { includeHiddenElements: true });
+    expect(photos).toHaveLength(SCREENS.length);
+    for (const photo of photos) expect(photo.props.accessible).toBe(false);
+  });
+
   test('the logo is on the first screen only', async () => {
     await renderFirstLaunch();
     expect(screen.getByLabelText('Rebloom')).toBeOnTheScreen();
@@ -325,6 +409,25 @@ describe('Android Back', () => {
       expect(BackHandlerMock.press()).toBe(true);
     });
     expect(screen.getByText(title(1))).toBeOnTheScreen();
+  });
+
+  test('on the last screen goes back too, so it is never a dead end', async () => {
+    await renderFirstLaunch();
+    await pressNext(3);
+    await act(async () => {
+      expect(BackHandlerMock.press()).toBe(true);
+    });
+    expect(screen.getByText(title(2))).toBeOnTheScreen();
+    expect(button('Next')).toBeOnTheScreen();
+  });
+
+  test('stops listening after leaving, so Back on Today is left to the system', async () => {
+    await renderFirstLaunch();
+    await pressNext();
+    await fireEvent.press(button('Skip'));
+    await settle();
+    expect(screen).toHavePathname('/');
+    expect(BackHandlerMock.press()).toBe(false);
   });
 
   test('on the first screen is left to the system, which exits the app', async () => {

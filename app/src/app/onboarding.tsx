@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'rea
 import {
   AccessibilityInfo,
   BackHandler,
+  Dimensions,
   ScrollView,
   StyleSheet,
-  useWindowDimensions,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -19,29 +19,32 @@ import { useReduceMotion } from '@/lib/useReduceMotion';
 import { useOnboarding } from '@/onboarding/context';
 import { OnboardingPage } from '@/onboarding/OnboardingPage';
 import { SCREENS } from '@/onboarding/screens';
-import { cameraColors, colors, radius, spacing } from '@/theme/tokens';
+import { buttonHeight, cameraColors, colors, radius, spacing, touchTarget } from '@/theme/tokens';
 
 const LAST = SCREENS.length - 1;
 // "Scan a plant" takes Next's place, so the second tap of a double tap on Next would land on it.
 const DOUBLE_TAP_MS = 300;
-const PRIMARY_HEIGHT = 56;
-const SECONDARY_HEIGHT = 44;
 const DOT_SIZE = 8;
 
 export default function OnboardingScreen() {
   const { finish } = useOnboarding();
-  const { width, height } = useWindowDimensions();
+  // The window until the first layout, then this screen's real size: pages and the
+  // footer must agree on where the bottom is.
+  const [{ width, height }, setSize] = useState<{ width: number; height: number }>(() =>
+    Dimensions.get('window'),
+  );
   const insets = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
   const [index, setIndex] = useState(0);
   const pager = useRef<ComponentRef<typeof ScrollView>>(null);
-  // A scroll we started: its end must not overwrite the index, which is already right.
-  const scrollingToIndex = useRef(false);
+  // The page an animated scroll of ours is heading for. Until it arrives, its
+  // positions must not overwrite the index, which is already right.
+  const scrollTarget = useRef<number | null>(null);
   const shownAt = useRef(0);
   const announced = useRef(index);
 
   const bottomPadding = Math.max(insets.bottom, spacing.lg);
-  const actionsHeight = PRIMARY_HEIGHT + spacing.sm + SECONDARY_HEIGHT + bottomPadding;
+  const actionsHeight = buttonHeight + spacing.sm + touchTarget + bottomPadding;
   const dotsHeight = spacing.lg + DOT_SIZE + spacing.lg;
   const isLast = index === LAST;
 
@@ -56,7 +59,7 @@ export default function OnboardingScreen() {
 
   const goTo = useCallback(
     (next: number) => {
-      scrollingToIndex.current = true;
+      scrollTarget.current = reduceMotion ? null : next;
       setIndex(next);
       pager.current?.scrollTo({ x: next * width, animated: !reduceMotion });
     },
@@ -68,6 +71,7 @@ export default function OnboardingScreen() {
   useEffect(() => {
     if (laidOutWidth.current === width) return;
     laidOutWidth.current = width;
+    scrollTarget.current = null;
     pager.current?.scrollTo({ x: index * width, animated: false });
   }, [width, index]);
 
@@ -82,10 +86,16 @@ export default function OnboardingScreen() {
     }, [index, goTo]),
   );
 
-  const onSwipeEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (scrollingToIndex.current) return;
-    const page = Math.round(event.nativeEvent.contentOffset.x / width);
-    setIndex(Math.min(LAST, Math.max(0, page)));
+  // Follows the position rather than one end-of-scroll event: momentum-end doesn't fire
+  // for every drag, nor for screen reader paging.
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (width === 0) return;
+    const { x } = event.nativeEvent.contentOffset;
+    if (scrollTarget.current !== null) {
+      if (Math.abs(x - scrollTarget.current * width) > 1) return;
+      scrollTarget.current = null;
+    }
+    setIndex(Math.min(LAST, Math.max(0, Math.round(x / width))));
   };
 
   const scanPlant = () => {
@@ -94,7 +104,10 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <View style={styles.screen}>
+    <View
+      testID="onboarding-screen"
+      style={styles.screen}
+      onLayout={(event) => setSize(event.nativeEvent.layout)}>
       <StatusBar style="light" />
       <ScrollView
         ref={pager}
@@ -102,11 +115,13 @@ export default function OnboardingScreen() {
         horizontal
         pagingEnabled
         bounces={false}
+        overScrollMode="never"
         showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
         onScrollBeginDrag={() => {
-          scrollingToIndex.current = false;
+          scrollTarget.current = null;
         }}
-        onMomentumScrollEnd={onSwipeEnd}>
+        onScroll={onScroll}>
         {SCREENS.map((screen, i) => (
           <OnboardingPage
             key={screen.title}

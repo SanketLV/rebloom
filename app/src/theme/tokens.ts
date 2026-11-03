@@ -31,6 +31,8 @@ export const colors = {
   photoBg: '#CFC8B6',
 } as const;
 
+export const overlayOpacity = 0.6;
+
 // The dark viewfinder screens (Camera, Analyzing).
 export const cameraColors = {
   ground: '#0F140F',
@@ -41,7 +43,7 @@ export const cameraColors = {
   button: '#1E2A1C',
   buttonIcon: '#D3D9C8',
   // Chips and round buttons over the live preview.
-  overlay: 'rgba(15,20,15,0.6)',
+  overlay: `rgba(15,20,15,${overlayOpacity})`,
 } as const;
 
 // Dims the screen behind a bottom sheet.
@@ -75,3 +77,5 @@ export const type = {
 
 // Minimum touch target (Apple HIG / Material).
 export const touchTarget = 44;
+
+export const buttonHeight = 56;

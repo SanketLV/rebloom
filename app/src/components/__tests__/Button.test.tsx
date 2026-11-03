@@ -29,6 +29,12 @@ test('labels on a dark photo stop growing at 1.3× so they fit the button', asyn
   expect(screen.getByText('Skip').props.maxFontSizeMultiplier).toBe(1.3);
 });
 
+test('a busy spinner stays visible on the light on-dark fill', async () => {
+  await render(<Button label="Next" tone="onDark" busy onPress={jest.fn()} />);
+  // The label is gone while busy, so this color can only be the spinner's.
+  expect(JSON.stringify(screen.toJSON())).toContain(colors.text);
+});
+
 test('the default tone stays unchanged', async () => {
   await render(<Button label="Save plant" onPress={jest.fn()} />);
   expect(screen.getByRole('button', { name: 'Save plant' })).toHaveStyle({

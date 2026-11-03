@@ -5,6 +5,7 @@ import { Logo } from '@/components/Logo';
 import {
   cameraColors,
   colors,
+  overlayOpacity,
   photoScrim,
   photoScrimOpacity,
   spacing,
@@ -17,8 +18,6 @@ import type { SCREENS } from './screens';
 const TEXT_FADE = 96;
 const PHOTO_FADE = 200;
 const TOP_FADE = 48;
-// Same strength as cameraColors.overlay: enough for the light status bar icons over a bright window.
-const TOP_SCRIM_OPACITY = 0.6;
 const LOGO_WIDTH = 104;
 
 // A vertical gradient of cameraColors.ground. Stops are [offset, opacity].
@@ -27,9 +26,9 @@ function GroundFade({ height, stops }: { height: number; stops: [number, number]
     <Svg width="100%" height={height} accessible={false}>
       <Defs>
         <LinearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-          {stops.map(([offset, opacity]) => (
+          {stops.map(([offset, opacity], i) => (
             <Stop
-              key={offset}
+              key={i}
               offset={offset}
               stopColor={cameraColors.ground}
               stopOpacity={opacity}
@@ -61,7 +60,13 @@ export function OnboardingPage({ screen, size, topInset, footerHeight, showLogo,
       style={[styles.page, size]}
       accessibilityElementsHidden={!current}
       importantForAccessibility={current ? 'auto' : 'no-hide-descendants'}>
-      <Image source={screen.photo} style={[styles.absolute, frame]} resizeMode="cover" />
+      <Image
+        testID="onboarding-photo"
+        source={screen.photo}
+        style={[styles.absolute, frame]}
+        resizeMode="cover"
+        accessible={false}
+      />
       {/* Melts the photo's lower edge into the background, so moving it up leaves no seam. */}
       <View style={[styles.absolute, styles.full, { top: frame.top + frame.height - PHOTO_FADE }]}>
         <GroundFade
@@ -72,12 +77,13 @@ export function OnboardingPage({ screen, size, topInset, footerHeight, showLogo,
           ]}
         />
       </View>
+      {/* Keeps the light status bar icons readable over a bright window. */}
       <View style={[styles.absolute, styles.full, { top: 0 }]}>
         <GroundFade
           height={topHeight}
           stops={[
-            [0, TOP_SCRIM_OPACITY],
-            [topInset / topHeight, TOP_SCRIM_OPACITY],
+            [0, overlayOpacity],
+            [topInset / topHeight, overlayOpacity],
             [1, 0],
           ]}
         />
