@@ -51,6 +51,7 @@ export function Button({
       style={({ pressed }) => [
         styles.button,
         onDark && styles.onDark,
+        icon ? styles.withIcon : null,
         disabled && styles.disabled,
         pressed && styles.pressed,
       ]}>
@@ -63,6 +64,7 @@ export function Button({
             maxFontSizeMultiplier={onDark ? ON_DARK_FONT_SCALE : undefined}
             style={[
               type.button,
+              icon ? styles.labelWithIcon : null,
               disabled ? styles.disabledText : onDark ? styles.onDarkText : styles.text,
             ]}>
             {text}
@@ -104,12 +106,13 @@ const styles = StyleSheet.create({
     height: buttonHeight,
     borderRadius: radius.sm,
     backgroundColor: colors.primary,
-    flexDirection: 'row',
-    gap: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
+  // Only with an icon: in a row, a label doesn't wrap unless it can shrink.
+  withIcon: { flexDirection: 'row', gap: spacing.sm },
+  labelWithIcon: { flexShrink: 1 },
   onDark: { backgroundColor: cameraColors.text },
   onDarkText: { color: colors.text },
   onDarkLink: { color: cameraColors.text },

@@ -1,4 +1,4 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { Logo } from '@/components/Logo';
@@ -103,15 +103,23 @@ export function OnboardingPage({ screen, size, topInset, footerHeight, showLogo,
           ]}
         />
         <View style={[styles.copy, { paddingBottom: footerHeight }]}>
-          <Text
-            accessibilityRole="header"
-            maxFontSizeMultiplier={1.5}
-            style={[type.title, styles.text]}>
-            {screen.title}
-          </Text>
-          <Text maxFontSizeMultiplier={2} style={[type.body, styles.text]}>
-            {screen.body}
-          </Text>
+          {/* Sizes to its text. Only in a window too short for it does it start to scroll. */}
+          <ScrollView
+            testID="onboarding-text"
+            style={{ maxHeight: Math.max(0, size.height - topInset - TEXT_FADE - footerHeight) }}
+            contentContainerStyle={styles.text}
+            bounces={false}
+            overScrollMode="never">
+            <Text
+              accessibilityRole="header"
+              maxFontSizeMultiplier={1.5}
+              style={[type.title, styles.onPhoto]}>
+              {screen.title}
+            </Text>
+            <Text maxFontSizeMultiplier={2} style={[type.body, styles.onPhoto]}>
+              {screen.body}
+            </Text>
+          </ScrollView>
         </View>
       </View>
     </View>
@@ -127,7 +135,7 @@ const styles = StyleSheet.create({
   copy: {
     backgroundColor: photoScrim,
     paddingHorizontal: spacing.xl,
-    gap: spacing.sm,
   },
-  text: { color: cameraColors.text },
+  text: { gap: spacing.sm },
+  onPhoto: { color: cameraColors.text },
 });

@@ -49,6 +49,21 @@ test('a button can show an icon beside its label', async () => {
   );
   expect(screen.getByText('icon')).toBeOnTheScreen();
   expect(screen.getByText('Scan a plant')).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Scan a plant' })).toHaveStyle({
+    flexDirection: 'row',
+  });
+});
+
+test('a label beside an icon can shrink and wrap instead of running off the button', async () => {
+  await render(<Button label="Scan a plant" icon={<Text>icon</Text>} onPress={jest.fn()} />);
+  expect(screen.getByText('Scan a plant')).toHaveStyle({ flexShrink: 1 });
+});
+
+test('a button with no icon keeps the column layout, where long labels wrap', async () => {
+  await render(<Button label="See treatment plan anyway" onPress={jest.fn()} />);
+  expect(screen.getByRole('button', { name: 'See treatment plan anyway' })).not.toHaveStyle({
+    flexDirection: 'row',
+  });
 });
 
 test('a button fires onPress', async () => {

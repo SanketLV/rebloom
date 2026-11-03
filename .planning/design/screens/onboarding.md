@@ -100,6 +100,7 @@ The existing `scrim` (0.55) and `cameraColors.overlay` (0.6) are too weak: 0.61 
 | Default | Photo, text, actions | First launch |
 | Last screen | Camera icon on the button, "Look around first" | Index 3 |
 | Large text (200%) | Photo mostly under the panel; title capped at 1.5×, body at 2×, buttons at 1.3× | System setting |
+| Short window | The text scrolls inside the panel; the actions stay fixed | Text taller than the room above the footer, for example split screen at large text |
 | Photo failed | `ground` background, text and actions unchanged. Rare, and plain on purpose. | Decode error |
 | Button pressed | Opacity 0.85, as in `Button` today | Touch down |
 | Button focused | Platform focus indicator; on-dark variant must stay visible against `ground` | Hardware keyboard, Switch Control |
@@ -127,7 +128,7 @@ Reduced motion: Next jumps with no scroll animation and the dot changes instantl
 - [x] Focus order matches visual order: title, body, primary, secondary.
 - [x] Photos and dots are hidden from screen readers. The logo has the label "Rebloom".
 - [x] Off-screen pages are hidden from screen readers, or their text is reachable before its screen shows: `accessibilityElementsHidden` (iOS) and `importantForAccessibility="no-hide-descendants"` (Android) on every page but the current one.
-- [x] Progress is announced: "Step 2 of 4. One leaf, one photo."
+- [x] Progress is announced with the screen's whole text: "Step 2 of 4. One leaf, one photo. Photograph the leaf…"
 - [x] Not by color alone: the active dot differs in width too.
 - [x] Reduced motion handled.
 - [ ] Real VoiceOver and TalkBack pass: on the device checklist.

@@ -53,8 +53,9 @@ export default function OnboardingScreen() {
     shownAt.current = Date.now();
     if (announced.current === index) return;
     announced.current = index;
+    const { title, body } = SCREENS[index];
     AccessibilityInfo.announceForAccessibility(
-      `Step ${index + 1} of ${SCREENS.length}. ${SCREENS[index].title}`,
+      `Step ${index + 1} of ${SCREENS.length}. ${title}. ${body}`,
     );
   }, [index]);
 

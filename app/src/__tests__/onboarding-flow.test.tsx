@@ -61,9 +61,9 @@ async function scrollEvent(x: number) {
   await fireEvent(pager(), 'scroll', { nativeEvent: { contentOffset: { x, y: 0 } } });
 }
 
-async function layOut(width: number) {
+async function layOut(width: number, height = 900) {
   await fireEvent(screen.getByTestId('onboarding-screen'), 'layout', {
-    nativeEvent: { layout: { x: 0, y: 0, width, height: 900 } },
+    nativeEvent: { layout: { x: 0, y: 0, width, height } },
   });
 }
 
@@ -257,6 +257,23 @@ describe('deep links', () => {
     expect(screen).toHavePathname('/onboarding');
   });
 
+  test.each(['/settings', '/plants', '/scan/result'])(
+    'a link to %s on first launch lands on onboarding, never a blank screen',
+    async (url) => {
+      await renderRouter('./src/app', { initialUrl: url });
+      expect(await screen.findByText(title(0))).toBeOnTheScreen();
+      expect(screen).toHavePathname('/onboarding');
+      expect(button('Next')).toBeOnTheScreen();
+    },
+  );
+
+  test('a link to Settings after finishing still opens Settings', async () => {
+    mockKvStore.values.set(KEY, '1');
+    await renderRouter('./src/app', { initialUrl: '/settings' });
+    expect(await screen.findByText('Settings')).toBeOnTheScreen();
+    expect(screen).toHavePathname('/settings');
+  });
+
   test('a link to onboarding after finishing lands on Today', async () => {
     mockKvStore.values.set(KEY, '1');
     await renderRouter('./src/app', { initialUrl: '/onboarding' });
@@ -275,7 +292,7 @@ describe('swiping', () => {
     await swipeTo(width() * 3);
     expect(screen.getByText(title(3))).toBeOnTheScreen();
     expect(button('Look around first')).toBeOnTheScreen();
-    expect(announce).toHaveBeenLastCalledWith(`Step 4 of 4. ${title(3)}`);
+    expect(announce).toHaveBeenLastCalledWith(`Step 4 of 4. ${title(3)}. ${SCREENS[3].body}`);
   });
 
   test('the screen follows the scroll past halfway, so Back acts on what is showing', async () => {
@@ -396,13 +413,28 @@ describe('swiping', () => {
 });
 
 describe('accessibility', () => {
-  test('each screen change is announced with its step and title', async () => {
+  test('each screen change is announced with its step, title and body', async () => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
     announce.mockClear();
     await renderFirstLaunch();
     expect(announce).not.toHaveBeenCalled();
     await pressNext();
-    expect(announce).toHaveBeenLastCalledWith(`Step 2 of 4. ${title(1)}`);
+    expect(announce).toHaveBeenLastCalledWith(`Step 2 of 4. ${title(1)}. ${SCREENS[1].body}`);
+  });
+
+  test('text that cannot fit a short window scrolls instead of being cut off', async () => {
+    await renderFirstLaunch();
+    await layOut(400, 400);
+    // 400 tall, no inset, minus the 96 fade and the 164 of dots and actions.
+    expect(screen.getByTestId('onboarding-text')).toHaveStyle({ maxHeight: 140 });
+    expect(screen.getByText(title(0))).toBeOnTheScreen();
+  });
+
+  test('a window too short for any text never asks for a negative height', async () => {
+    await renderFirstLaunch();
+    await layOut(400, 100);
+    expect(screen.getByTestId('onboarding-text')).toHaveStyle({ maxHeight: 0 });
+    expect(button('Next')).toBeOnTheScreen();
   });
 
   test("other screens' text stays out of reach until its screen shows", async () => {
