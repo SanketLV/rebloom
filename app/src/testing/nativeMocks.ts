@@ -315,11 +315,40 @@ function useSQLiteContext(): Db {
 
 export const sqliteModule = { SQLiteProvider, useSQLiteContext };
 
+// ---------- expo-sqlite/kv-store ----------
+
+export const mockKvStore = {
+  // Starts seen, so tests land on Today unless they're about onboarding.
+  values: new Map([['onboarding_seen', '1']]),
+  failRead: undefined as Error | undefined,
+  failWrite: undefined as Error | undefined,
+  reset() {
+    mockKvStore.values = new Map([['onboarding_seen', '1']]);
+    mockKvStore.failRead = undefined;
+    mockKvStore.failWrite = undefined;
+  },
+};
+
+export const kvStoreModule = {
+  __esModule: true,
+  default: {
+    getItemSync(key: string) {
+      if (mockKvStore.failRead) throw mockKvStore.failRead;
+      return mockKvStore.values.get(key) ?? null;
+    },
+    setItemSync(key: string, value: string) {
+      if (mockKvStore.failWrite) throw mockKvStore.failWrite;
+      mockKvStore.values.set(key, value);
+    },
+  },
+};
+
 export function resetNativeMocks() {
   mockCamera.reset();
   mockPicker.reset();
   mockManipulator.reset();
   mockSqlite.reset();
+  mockKvStore.reset();
   fakeFs.reset();
   uuid = 0;
 }

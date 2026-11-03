@@ -1,6 +1,10 @@
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 
-import { colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
+import { cameraColors, colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
+
+// Keeps labels on a dark photo inside their fixed-height buttons at large text sizes.
+const ON_DARK_FONT_SCALE = 1.3;
 
 type Props = {
   label: string;
@@ -10,12 +14,25 @@ type Props = {
   disabled?: boolean;
   // What a disabled button says instead, e.g. "Pick an answer".
   disabledLabel?: string;
+  // `onDark`: over a dark photo, where the `primary` fill would disappear.
+  tone?: 'default' | 'onDark';
+  // Decorative, beside the label.
+  icon?: ReactNode;
 };
 
 // The one primary action on a screen (56pt, `primary` fill).
-export function Button({ label, onPress, busy = false, disabled = false, disabledLabel }: Props) {
+export function Button({
+  label,
+  onPress,
+  busy = false,
+  disabled = false,
+  disabledLabel,
+  tone = 'default',
+  icon,
+}: Props) {
   const off = disabled || busy;
   const text = disabled && disabledLabel ? disabledLabel : label;
+  const onDark = tone === 'onDark';
   return (
     <Pressable
       onPress={onPress}
@@ -25,13 +42,24 @@ export function Button({ label, onPress, busy = false, disabled = false, disable
       accessibilityState={{ disabled: off, busy }}
       style={({ pressed }) => [
         styles.button,
+        onDark && styles.onDark,
         disabled && styles.disabled,
         pressed && styles.pressed,
       ]}>
       {busy ? (
         <ActivityIndicator color={colors.onPrimary} />
       ) : (
-        <Text style={[type.button, disabled ? styles.disabledText : styles.text]}>{text}</Text>
+        <>
+          {icon}
+          <Text
+            maxFontSizeMultiplier={onDark ? ON_DARK_FONT_SCALE : undefined}
+            style={[
+              type.button,
+              disabled ? styles.disabledText : onDark ? styles.onDarkText : styles.text,
+            ]}>
+            {text}
+          </Text>
+        </>
       )}
     </Pressable>
   );
@@ -42,7 +70,9 @@ export function TextButton({
   label,
   onPress,
   disabled = false,
-}: Pick<Props, 'label' | 'onPress' | 'disabled'>) {
+  tone = 'default',
+}: Pick<Props, 'label' | 'onPress' | 'disabled' | 'tone'>) {
+  const onDark = tone === 'onDark';
   return (
     <Pressable
       onPress={onPress}
@@ -52,7 +82,11 @@ export function TextButton({
       accessibilityState={{ disabled }}
       hitSlop={spacing.xs}
       style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}>
-      <Text style={[type.bodyStrong, styles.link]}>{label}</Text>
+      <Text
+        maxFontSizeMultiplier={onDark ? ON_DARK_FONT_SCALE : undefined}
+        style={[type.bodyStrong, styles.link, onDark && styles.onDarkLink]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -62,10 +96,15 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: radius.sm,
     backgroundColor: colors.primary,
+    flexDirection: 'row',
+    gap: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
+  onDark: { backgroundColor: cameraColors.text },
+  onDarkText: { color: colors.text },
+  onDarkLink: { color: cameraColors.text },
   disabled: { backgroundColor: colors.disabled },
   pressed: { opacity: 0.85 },
   text: { color: colors.onPrimary },

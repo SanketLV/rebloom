@@ -9,6 +9,7 @@ jest.mock(
 );
 jest.mock('expo-crypto', () => require('./src/testing/nativeMocks').cryptoModule);
 jest.mock('expo-sqlite', () => require('./src/testing/nativeMocks').sqliteModule);
+jest.mock('expo-sqlite/kv-store', () => require('./src/testing/nativeMocks').kvStoreModule);
 
 beforeEach(() => {
   require('./src/testing/nativeMocks').resetNativeMocks();
