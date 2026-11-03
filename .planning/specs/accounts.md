@@ -51,7 +51,7 @@ From Settings → Account, a user can sign in with a 6-digit email code, with Go
 - Email screen: one email field (`keyboardType="email-address"`, `autoComplete="email"`, `textContentType="emailAddress"`, no autocorrect or auto-capitalize), "Send code" button, and the line "We'll email you a 6-digit code. No password needed."
 - The email is normalized before checking or sending (review rule): strip invisible characters (`\p{Cf}`), trim, lowercase. Then a shape check (`x@y.z`, at most 254 characters). "Send code" is disabled until it passes.
 - "Send code" → `signInWithOtp({ email, options: { shouldCreateUser: true } })`. Signing in and creating an account are the same step, and the screen never says whether the address already has an account.
-- Code screen: "Enter the code we sent to <email>", a 6-digit field (`keyboardType="number-pad"`, `textContentType="oneTimeCode"` on iOS, `autoComplete="one-time-code"` on Android, so the code can be filled from the email or a notification). Paste is cleaned to digits only ("123 456", "123-456" work). At 6 digits it verifies on its own: `verifyOtp({ email, token, type: 'email' })` → the foundation's `setSessionFromAuth`.
+- Code screen: "Enter the code we sent to <email>", a 6-digit field (`keyboardType="number-pad"`, `textContentType="oneTimeCode"` on iOS, `autoComplete="one-time-code"` on Android, so the code can be filled from the email or a notification). Paste is cleaned to digits only ("123 456", "123-456" work). At 6 digits it verifies on its own: `verifyOtp({ email, token, type: 'email' })` → the foundation's `setSessionFromAuth`. A "Continue" button (enabled at 6 digits) does the same, for screen-reader users and when autofill doesn't trigger a change; both go through one single-flight call. "Can't find it? Check your spam folder." under the button.
 - "Send a new code" is disabled for 60 seconds after each send, with the countdown shown and announced to screen readers. "Use a different email" goes back.
 - Errors in plain words: wrong code ("That code isn't right. Check the email or send a new one."), expired code, too many tries (`rate_limited`), offline. The code field keeps focus and is cleared on a wrong code.
 - Code lifetime: 10 minutes (`otp_expiry = 600`).
@@ -62,12 +62,12 @@ From Settings → Account, a user can sign in with a 6-digit email code, with Go
 - The project's email rate limit is raised from the default 30 per hour to a number that fits the email service's plan (set in the plan; see Open Questions).
 - The local stack uses its own mail catcher; nothing sends real email in development.
 
-*Account screen* (`/account`, pushed from a new "Account" row on Settings)
-- Settings stays a placeholder except for this one row (44pt+ tall, label, chevron). The row shows "Sign in" when signed out and the account email when signed in. The row only appears when the backend is configured (foundation `config.ts`).
-- Signed out: title "Your Rebloom account", one line on what an account is for ("Sign in to back up your plants. Scanning works without an account."), then the sign-in options: Apple (iOS, phase 3), Google (phase 2), "Continue with email" (phase 1). All buttons the same size; the Apple button is Apple's own `AppleAuthenticationButton`.
-- Signed in: the email, how they signed in ("Signed in with Google"), "Sign out" and "Delete account".
+*Account screens* (artboards 16, 18, 18a–c in the design canvas)
+- Settings stays a placeholder except for the account card at the top (artboard 16), which only appears when the backend is configured (foundation `config.ts`). Three states: guest ("Guest · Plants are saved on this phone only", button "Save plants" → Sign in), signed in (the email, "Signed in with Google", button "Account" → Account), signed out after `session_expired` ("Signed out · Sign in again to keep your account", button "Sign in"). Buttons 44pt tall.
+- Sign in (`/account/sign-in`, artboard 18): close (X), "Keep your plants safe", "Save your plants, photos and treatment history, so nothing is lost if you change phones.", then Apple (iOS, phase 3), Google (phase 2), "Continue with email" (phase 1), "Not now", and "Scanning works without an account. We never post anything or sell your data." All sign-in buttons the same size; in the app the Apple button is Apple's own `AppleAuthenticationButton`.
+- Account (`/account`, artboard 18c, signed in only): the email, "Signed in with Google / Apple / email", a "Backup" row (filled in by the backup spec; hidden until then), "Sign out", "Delete account" (in `severe`), and "Signing out never removes plants from this phone." 
 - "Sign out": a confirm sheet ("Sign out? Your plants stay on this phone.") → foundation `signOut()`. Never touches plants, scans or photos on the phone.
-- When the foundation reports `session_expired`, the Account row and screen say "Signed out. Sign in again." No other screen changes.
+- When the foundation reports `session_expired`, the Settings card shows its signed-out state. No other screen changes.
 
 *Delete account*
 - "Delete account" → a sheet: "Delete your Rebloom account? This can't be undone. Your plants stay on this phone." with "Delete account" (`severe` button) and "Cancel". The busy state is announced to screen readers and the button can't be pressed twice.
@@ -138,12 +138,14 @@ Production auth settings (dashboard, mirrored in `supabase/config.toml` where th
 
 | Route / element | Type | Design reference |
 |---|---|---|
-| Settings → "Account" row | Row on the placeholder Settings screen | Artboard 16 Settings (row style) |
-| `/account` | Stack screen: signed-out options / signed-in details | None yet (see Open Questions) |
-| `/account/email` | Stack screen | None yet |
-| `/account/code` | Stack screen | None yet |
-| Sign-out sheet, delete sheet | Bottom sheets on `/account` | Existing `BottomSheet` |
-| `/auth/callback` | Route for the Google deep link; no UI unless it fails | None |
+| Settings account card | Card on the placeholder Settings screen (guest / signed in / signed out) | 16 Settings (`account` tweak) |
+| `/account/sign-in` | Stack screen | 18 Sign in |
+| `/account/email` | Stack screen | 18a Sign in · email |
+| `/account/code` | Stack screen (wrong / expired / too many tries / resend states) | 18b Sign in · code (`status`, `resendReady` tweaks) |
+| `/account` | Stack screen, signed in | 18c Account (`method` tweak) |
+| Sign-out sheet | Bottom sheet on `/account` (existing `BottomSheet`) | Sheet · Sign out |
+| Delete sheet | Bottom sheet on `/account` (ready / deleting / failed) | Sheet · Delete account (`state` tweak) |
+| `/auth/callback` | Route for the Google deep link; UI only when it fails | State · Sign-in didn't finish |
 
 All colors, type, radius and spacing come from `tokens.ts`. Touch targets ≥ 44×44, every interactive element has an accessibility label and role, busy states and countdowns are announced to screen readers, and the screens scroll at 200% text on an iPhone SE.
 
@@ -167,7 +169,7 @@ All colors, type, radius and spacing come from `tokens.ts`. Touch targets ≥ 44
 16. **Delete fails** (offline, 5xx): error on the sheet, still signed in, nothing deleted. **Delete succeeded but the reply was lost**: a retry gets 204 and the app finishes signing out.
 17. **Account deleted on another phone**: this phone's next refresh is rejected → foundation `session_expired` → "Signed out. Sign in again." Plants on the phone stay.
 18. **Android Back** on the code screen → email screen; on email → Account; on Account → Settings. Never stuck in the browser sheet.
-19. **Backend not configured** (no env in a local build): no Account row, so no dead end.
+19. **Backend not configured** (no env in a local build): no account card on Settings, so no dead end.
 20. **Small screens and large text**: every account screen scrolls, the main button stays reachable above the keyboard.
 
 ## Testing Criteria
@@ -178,7 +180,7 @@ Written test-first. Screens with the foundation's session module and the Supabas
 - [ ] Email: a valid address → "Send code" calls `signInWithOtp` once with the normalized address and `shouldCreateUser: true` → code screen.
 - [ ] Code: 6 digits typed → `verifyOtp` once with type `email` → session set → back on Account, signed-in view with the email and "Signed in with email".
 - [ ] Local stack: send a code, read it from the mail catcher, verify, and the token works for an RLS-protected request.
-- [ ] Signed-in Settings row shows the email; signed out shows "Sign in".
+- [ ] Settings card: guest → "Save plants"; signed in → the email and "Account"; after `session_expired` → "Signed out" and "Sign in".
 - [ ] Sign out → confirm → signed-out view; plants table and photo files untouched (counted before and after).
 - [ ] Delete → confirm → the function is called with the user's token → signed out with "Your account is deleted." Local stack: the user and their rows (test-only table) are gone; another user's rows are not.
 - [ ] Google (mocked browser): `openAuthSessionAsync` returns `rebloom://auth/callback?code=abc` → `exchangeCodeForSession('abc')` → signed in with "Signed in with Google".
@@ -201,8 +203,8 @@ Written test-first. Screens with the foundation's session module and the Supabas
 - [ ] Local stack, delete function: no token → 401; a token for user A with user B's id in the body → only A is deleted; called twice → 204 both times.
 - [ ] Local stack: Google-style and email sign-in with the same verified email → the same user id (identity linking works as the spec assumes; if not, stop and report).
 - [ ] Delete fails (mocked 500) → error on the sheet, still signed in.
-- [ ] `session_expired` from the foundation → the "Signed out. Sign in again." text on the row and screen.
-- [ ] Backend not configured → no Account row.
+- [ ] `session_expired` from the foundation → the signed-out state of the Settings card.
+- [ ] Backend not configured → no account card on Settings.
 - [ ] No hex colors outside `tokens.ts` (existing guard test).
 - [ ] Device checks (added to the `.handoff/` device checklist): real email arrives (inbox, not spam) at Gmail, Outlook and iCloud, and through an Apple relay address; code autofill on iOS and Android; Google in a development build on the Android phone and the iOS simulator; Apple on a real iPhone; Android Back from the browser sheet; 200% text on iPhone SE.
 
@@ -224,7 +226,7 @@ Written test-first. Screens with the foundation's session module and the Supabas
 - **Which domain sends the emails?** Needed for phase 1 (SPF/DKIM/DMARC). The landing page's domain works if you own it; a subdomain like `auth.<domain>` keeps sign-in mail separate from any future newsletter.
 - **Email limits**: the email service's free plan has a daily cap. Pick the plan and the Supabase hourly limit together in the plan, sized for launch.
 - **Apple token revocation on delete**: Apple asks apps that offer Sign in with Apple to revoke the user's Apple tokens when they delete their account. Check in the plan whether Supabase does this; if not, `delete-account` calls Apple's revoke endpoint, which needs an Apple signing key kept as a function secret.
-- ~~Designs?~~ **Decided 2026-11-03:** draw the account screens (Account signed out / signed in, email, code, sign-out and delete sheets, "Sign-in didn't finish") in the design canvas before building phase 1. The UI Changes table gets the artboard names then.
+- ~~Designs?~~ **Decided 2026-11-03:** draw the account screens (Account signed out / signed in, email, code, sign-out and delete sheets, "Sign-in didn't finish") in the design canvas before building phase 1. Done the same day: artboards 18 (updated), 18a, 18b, 18c, 16 (account card states) and three sheets/states, listed in UI Changes.
 
 ---
 
