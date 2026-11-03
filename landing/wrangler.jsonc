@@ -1,0 +1,15 @@
+// Cloudflare Workers with static assets: serves the pre-rendered dist/ from `npm run build`. No Worker script.
+// Deploy: `npm run deploy` (needs CLOUDFLARE_API_TOKEN). Docs:
+// https://developers.cloudflare.com/workers/static-assets/routing/static-site-generation/
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rebloom",
+  "account_id": "43328a3d08c11642008ce9462580b94e",
+  "compatibility_date": "2026-11-03",
+  "assets": {
+    "directory": "./dist/",
+    // privacy.html is served at /privacy; /privacy.html redirects there.
+    "html_handling": "auto-trailing-slash"
+  },
+  "workers_dev": true
+}
