@@ -4,6 +4,8 @@ import { renderRouter } from 'expo-router/testing-library';
 import { Text } from 'react-native';
 
 import RootLayout from '@/app/_layout';
+import { fakeSession } from '@/testing/fakeAuthServer';
+import { fakeLocalStorage } from '@/testing/fakeLocalStorage';
 import { DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
 import { mockSqlite } from '@/testing/nativeMocks';
 
@@ -80,4 +82,28 @@ test('start-up deletes stored photos left by a save that never finished', async 
   await renderRouter({ _layout: RootLayout, index: Child });
   await screen.findByText('child screen');
   expect(fakeFs.under(`${DOCUMENT}/photos`)).toEqual([]);
+});
+
+test('opening the app and its tabs makes no network request, even with the backend configured', async () => {
+  mockFontState = [true, null];
+  // An expired stored session: any use of the backend would have to refresh it over the network.
+  fakeLocalStorage.setItem('sb-abc-auth-token', JSON.stringify(fakeSession({ expiresIn: -60 })));
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc.supabase.co';
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
+  const fetchMock = jest.fn(() => Promise.reject(new TypeError('Network request failed')));
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  try {
+    await renderRouter('./src/app', { initialUrl: '/' });
+    await screen.findByRole('tab', { name: 'Today' }, { timeout: 5000 });
+    await fireEvent.press(screen.getByRole('tab', { name: 'My Plants' }));
+    await fireEvent.press(screen.getByRole('tab', { name: 'Today' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Profile and settings' }));
+    expect(screen).toHavePathname('/settings');
+    expect(fetchMock).not.toHaveBeenCalled();
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
+    delete process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  }
 });

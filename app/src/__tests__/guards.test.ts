@@ -49,3 +49,28 @@ test('image picker asks for photos only and leaves the camera permission alone',
   // `false` here would block android.permission.CAMERA, which expo-camera needs.
   expect(picker).not.toHaveProperty('cameraPermission');
 });
+
+// Supabase foundation: nothing a user can reach imports the backend yet, so an app start makes
+// no network request. The accounts spec lifts this for its own screens only.
+test('screens and features never import src/backend', () => {
+  const IMPORTS_BACKEND = /(?:from\s+|require\(\s*|import\(\s*)['"](?:@\/backend|(?:\.{1,2}\/)+(?:[\w-]+\/)*backend)(?:\/[\w-]+)*['"]/;
+  const offenders = ['app', 'scan', 'plants', 'storage', 'photos', 'diagnosis', 'components', 'lib', 'theme']
+    .flatMap((dir) => sourceFiles(join(SRC, dir)))
+    .filter((file) => IMPORTS_BACKEND.test(readFileSync(file, 'utf8')))
+    .map((file) => relative(SRC, file));
+  expect(offenders).toEqual([]);
+});
+
+test('the backend import guard catches the import styles it is meant to', () => {
+  const IMPORTS_BACKEND = /(?:from\s+|require\(\s*|import\(\s*)['"](?:@\/backend|(?:\.{1,2}\/)+(?:[\w-]+\/)*backend)(?:\/[\w-]+)*['"]/;
+  for (const line of [
+    "import { getSession } from '@/backend/session';",
+    "import { getSupabase } from '../backend/supabase';",
+    "import { x } from '../../backend';",
+    "const s = require('@/backend/session');",
+    "const s = await import('../backend/session');",
+  ]) {
+    expect(line).toMatch(IMPORTS_BACKEND);
+  }
+  expect("import { x } from '@/backendless';").not.toMatch(IMPORTS_BACKEND);
+});
