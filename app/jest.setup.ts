@@ -9,7 +9,13 @@ jest.mock(
 );
 jest.mock('expo-crypto', () => require('./src/testing/nativeMocks').cryptoModule);
 jest.mock('expo-sqlite', () => require('./src/testing/nativeMocks').sqliteModule);
+// The real one installs a SQLite-backed global `localStorage` (used for the Supabase session).
+jest.mock('expo-sqlite/localStorage/install', () => {
+  require('./src/testing/fakeLocalStorage').installFakeLocalStorage();
+  return {};
+});
 
 beforeEach(() => {
   require('./src/testing/nativeMocks').resetNativeMocks();
+  require('./src/testing/fakeLocalStorage').fakeLocalStorage.clear();
 });
