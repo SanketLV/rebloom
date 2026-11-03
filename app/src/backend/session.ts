@@ -4,6 +4,8 @@
 
 import type { AuthChangeEvent, Session, Subscription, SupabaseClient } from '@supabase/supabase-js';
 
+import { TimeoutError, withTimeout } from '@/lib/async';
+
 import { toBackendError, type BackendError } from './errors';
 import { getSupabase, resetSupabaseForTests } from './supabase';
 
@@ -21,10 +23,15 @@ type SessionListener = (event: SessionEvent) => void;
 /** What every supabase-js sign-in method returns (verifyOtp, exchangeCodeForSession, …). */
 type AuthResult = { data: { session: Session | null } | null; error: unknown };
 
+// supabase-js retries a refresh for up to ~30 s while offline; never make a caller wait that long.
+export const SESSION_TIMEOUT_MS = 10_000;
+
 const listeners = new Set<SessionListener>();
 let subscription: Subscription | null = null;
-// Who we last told listeners about: a user id, null (signed out), undefined (not known yet).
+// Who is signed in, as far as we know: a user id, null (signed out), undefined (not known yet).
 let currentUserId: string | null | undefined;
+// The user listeners last heard `signed_in` for. A session restored at start-up isn't announced.
+let announcedUserId: string | null = null;
 // Set only while signOut() runs, to tell a sign-out the user asked for from one the server forced.
 let signingOut = false;
 
@@ -42,23 +49,31 @@ function emit(event: SessionEvent) {
 }
 
 function noteSignedIn(user: SessionUser) {
-  if (currentUserId === user.id) return;
   currentUserId = user.id;
+  if (announcedUserId === user.id) return;
+  announcedUserId = user.id;
   emit({ type: 'signed_in', user });
 }
 
 function noteSignedOut() {
   if (currentUserId === null) return;
   currentUserId = null;
+  announcedUserId = null;
   emit({ type: 'signed_out', reason: signingOut ? 'user' : 'session_expired' });
 }
 
 function handleAuthChange(event: AuthChangeEvent, session: Session | null) {
   if (event === 'SIGNED_OUT') return noteSignedOut();
+  if (event === 'INITIAL_SESSION') {
+    if (currentUserId === undefined) currentUserId = session ? session.user.id : null;
+    return;
+  }
   if (!session) return;
   const user = toUser(session);
-  if (event === 'INITIAL_SESSION') {
-    if (currentUserId === undefined) currentUserId = user.id;
+  if (currentUserId === undefined) {
+    // supabase-js restoring the stored session as the client starts: not a new sign-in.
+    currentUserId = user.id;
+    if (event === 'TOKEN_REFRESHED') emit({ type: 'refreshed', user });
     return;
   }
   if (currentUserId !== user.id) return noteSignedIn(user);
@@ -75,11 +90,20 @@ function client(): SupabaseClient | null {
   return supabase;
 }
 
-/** The stored session, or null. Makes a request only when the stored token has expired. */
+/**
+ * The stored session, or null. Makes a request only when the stored token has expired, and
+ * answers within SESSION_TIMEOUT_MS (`offline`, session kept) if that refresh can't get through.
+ */
 export async function getSession(): Promise<Result<Session | null>> {
   const supabase = client();
   if (!supabase) return { ok: false, error: 'not_configured' };
-  const { data, error } = await supabase.auth.getSession();
+  let response: Awaited<ReturnType<SupabaseClient['auth']['getSession']>>;
+  try {
+    response = await withTimeout(supabase.auth.getSession(), SESSION_TIMEOUT_MS);
+  } catch (error) {
+    return { ok: false, error: error instanceof TimeoutError ? 'offline' : toBackendError(error) };
+  }
+  const { data, error } = response;
   if (error) return { ok: false, error: toBackendError(error) };
   if (data.session && currentUserId === undefined) currentUserId = data.session.user.id;
   if (!data.session && currentUserId === undefined) currentUserId = null;
@@ -119,7 +143,12 @@ export async function signOut(): Promise<Result<null>> {
   signingOut = true;
   try {
     const { error } = await supabase.auth.signOut();
-    if (error) return { ok: false, error: toBackendError(error) };
+    if (error) {
+      // The phone must end up signed out even when the server can't be told. supabase-js 2.118
+      // already clears the session here; this covers a version that doesn't.
+      await supabase.auth.signOut({ scope: 'local' });
+      return { ok: false, error: toBackendError(error) };
+    }
     return { ok: true, value: null };
   } finally {
     signingOut = false;
@@ -132,6 +161,7 @@ export function resetSessionForTests(): void {
   subscription = null;
   listeners.clear();
   currentUserId = undefined;
+  announcedUserId = null;
   signingOut = false;
   resetSupabaseForTests();
 }

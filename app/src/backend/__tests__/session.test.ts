@@ -1,13 +1,17 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { AppState } from 'react-native';
 
 import { FakeAuthServer, fakeSession } from '@/testing/fakeAuthServer';
 import { fakeLocalStorage } from '@/testing/fakeLocalStorage';
+import { fakeFs } from '@/testing/fileSystemFake';
 
 import {
   getCurrentUser,
   getSession,
   onSessionChange,
   resetSessionForTests,
+  SESSION_TIMEOUT_MS,
   setSessionFromAuth,
   signOut,
   type SessionEvent,
@@ -40,9 +44,32 @@ beforeEach(() => {
 
 afterEach(() => {
   resetSessionForTests();
+  jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 describe('reading the session', () => {
+  test('opening the app with a stored session announces nothing (it is not a new sign-in)', async () => {
+    storeSession({ userId: 'u-7' });
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    await getCurrentUser();
+    await Promise.resolve();
+
+    expect(events).toEqual([]);
+  });
+
+  test('opening the app with nothing stored announces nothing', async () => {
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    await getSession();
+    await Promise.resolve();
+
+    expect(events).toEqual([]);
+  });
+
   test('nothing stored → null, without a request', async () => {
     expect(await getSession()).toEqual({ ok: true, value: null });
     expect(await getCurrentUser()).toEqual({ ok: true, value: null });
@@ -113,5 +140,116 @@ describe('setSessionFromAuth', () => {
     await Promise.resolve();
 
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('signOut', () => {
+  test('clears the session, and listeners hear signed_out (user)', async () => {
+    await signInWithCode();
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    expect(await signOut()).toEqual({ ok: true, value: null });
+
+    expect(fakeLocalStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(events).toEqual([{ type: 'signed_out', reason: 'user' }]);
+    expect(await getCurrentUser()).toEqual({ ok: true, value: null });
+  });
+
+  test('offline: the phone is signed out anyway, and the result says offline', async () => {
+    await signInWithCode();
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    server.next.logout = 'offline';
+
+    expect(await signOut()).toEqual({ ok: false, error: 'offline' });
+
+    expect(fakeLocalStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(await getCurrentUser()).toEqual({ ok: true, value: null });
+    expect(events).toEqual([{ type: 'signed_out', reason: 'user' }]);
+  });
+
+  test('a server error on logout still signs the phone out', async () => {
+    await signInWithCode();
+    server.next.logout = 'server_error';
+
+    expect(await signOut()).toEqual({ ok: false, error: 'unknown' });
+    expect(fakeLocalStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  test('never touches plants, scans or photos on the phone', async () => {
+    const photo = 'file:///document/photos/scan-1.jpg';
+    fakeFs.put(photo);
+    await signInWithCode();
+
+    await signOut();
+
+    expect(fakeFs.uris()).toEqual([photo]);
+    for (const file of ['session.ts', 'supabase.ts', 'config.ts', 'errors.ts']) {
+      const source = readFileSync(join(__dirname, '..', file), 'utf8');
+      expect(source).not.toMatch(/from '@\/(storage|photos|scan|plants)/);
+      expect(source).not.toMatch(/['"]expo-file-system['"]|['"]expo-sqlite['"]/);
+    }
+  });
+});
+
+describe('when the server ends the session', () => {
+  test('a refresh the server rejects → signed out with session_expired, heard once', async () => {
+    storeSession({ userId: 'u-3', expiresIn: -60 });
+    server.next.refresh = 'rejected';
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    // supabase-js refreshes as the client starts, removes the session when the server says no,
+    // and then reports "no session" rather than an error.
+    const result = await getSession();
+    await getSession();
+
+    expect(result).toEqual({ ok: true, value: null });
+    expect(fakeLocalStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(events).toEqual([{ type: 'signed_out', reason: 'session_expired' }]);
+  });
+
+  test('offline: answers within 10 s with offline, and keeps the session (offline is not expiry)', async () => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask', 'nextTick', 'setImmediate'] });
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    storeSession({ userId: 'u-4', expiresIn: -60 });
+    server.next.refresh = 'offline';
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    const pending = getSession();
+    await jest.advanceTimersByTimeAsync(SESSION_TIMEOUT_MS);
+
+    expect(await pending).toEqual({ ok: false, error: 'offline' });
+    expect(JSON.parse(fakeLocalStorage.getItem(STORAGE_KEY)!).user.id).toBe('u-4');
+    expect(events).toEqual([]);
+    expect(server.callsTo('/auth/v1/token?grant_type=refresh_token')).toBeGreaterThan(1);
+  });
+
+  test('a 429 on the refresh of an expired token signs the phone out (supabase-js behaviour)', async () => {
+    // supabase-js only keeps the session for network failures and 5xx; any other refresh error
+    // with an expired access token removes it. Reported as session_expired.
+    storeSession({ userId: 'u-5', expiresIn: -60 });
+    server.next.refresh = 'rate_limited';
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    expect(await getSession()).toEqual({ ok: true, value: null });
+    expect(fakeLocalStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(events).toEqual([{ type: 'signed_out', reason: 'session_expired' }]);
+  });
+
+  test('a successful refresh keeps the user signed in and reports refreshed', async () => {
+    storeSession({ userId: 'u-6', expiresIn: -60 });
+    server.sessionOptions = { userId: 'u-6' };
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    const result = await getCurrentUser();
+
+    expect(result).toMatchObject({ ok: true, value: { id: 'u-6' } });
+    expect(server.callsTo('/auth/v1/token?grant_type=refresh_token')).toBe(1);
+    expect(events.map((e) => e.type)).toEqual(['refreshed']);
   });
 });
