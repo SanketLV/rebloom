@@ -40,6 +40,7 @@ export default function OnboardingScreen() {
   // The page an animated scroll of ours is heading for. Until it arrives, its
   // positions must not overwrite the index, which is already right.
   const scrollTarget = useRef<number | null>(null);
+  const lastX = useRef(0);
   const shownAt = useRef(0);
   const announced = useRef(index);
 
@@ -71,8 +72,11 @@ export default function OnboardingScreen() {
   useEffect(() => {
     if (laidOutWidth.current === width) return;
     laidOutWidth.current = width;
-    scrollTarget.current = null;
-    pager.current?.scrollTo({ x: index * width, animated: false });
+    // The offset moves to fit the new width, and those positions aren't a page change.
+    // If it's already in place no event comes, so nothing is waited for.
+    const x = index * width;
+    scrollTarget.current = Math.abs(lastX.current - x) > 1 ? index : null;
+    pager.current?.scrollTo({ x, animated: false });
   }, [width, index]);
 
   useFocusEffect(
@@ -91,6 +95,7 @@ export default function OnboardingScreen() {
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (width === 0) return;
     const { x } = event.nativeEvent.contentOffset;
+    lastX.current = x;
     if (scrollTarget.current !== null) {
       if (Math.abs(x - scrollTarget.current * width) > 1) return;
       scrollTarget.current = null;

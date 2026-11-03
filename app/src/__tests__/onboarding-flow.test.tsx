@@ -61,6 +61,12 @@ async function scrollEvent(x: number) {
   await fireEvent(pager(), 'scroll', { nativeEvent: { contentOffset: { x, y: 0 } } });
 }
 
+async function layOut(width: number) {
+  await fireEvent(screen.getByTestId('onboarding-screen'), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width, height: 900 } },
+  });
+}
+
 async function swipeTo(x: number) {
   await fireEvent(pager(), 'scrollBeginDrag');
   await scrollEvent(x);
@@ -327,13 +333,52 @@ describe('swiping', () => {
     expect(screen.getByText(title(1))).toBeOnTheScreen();
   });
 
-  test('a scroll before the first layout has a width to divide by is ignored', async () => {
+  test('a scroll while the screen has no width is ignored', async () => {
     await renderFirstLaunch();
-    await fireEvent(screen.getByTestId('onboarding-screen'), 'layout', {
-      nativeEvent: { layout: { x: 0, y: 0, width: 0, height: 0 } },
-    });
+    await layOut(0);
     await scrollEvent(0);
     expect(button('Next')).toBeOnTheScreen();
+  });
+
+  test('arrival allows for a fractional width', async () => {
+    await renderFirstLaunch();
+    await pressNext();
+    await scrollEvent(width() + 0.5);
+    await scrollEvent(width() * 2);
+    expect(screen.getByText(title(2))).toBeOnTheScreen();
+  });
+
+  test('a second Next on the way replaces the target', async () => {
+    await renderFirstLaunch();
+    await pressNext(2);
+    // The first target's position is now on the way, so it changes nothing.
+    await scrollEvent(width());
+    expect(screen.getByText(title(2))).toBeOnTheScreen();
+    await scrollEvent(width() * 2);
+    await scrollEvent(width() * 3);
+    expect(screen.getByText(title(3))).toBeOnTheScreen();
+  });
+
+  test('a narrower screen clamping the offset does not change the screen', async () => {
+    await renderFirstLaunch();
+    await pressNext(2);
+    await scrollEvent(width() * 2);
+    await layOut(400);
+    // Native clamps the old offset to the new content width, then obeys the realign.
+    await scrollEvent(1200);
+    expect(screen.getByText(title(2))).toBeOnTheScreen();
+    await scrollEvent(800);
+    expect(screen.getByText(title(2))).toBeOnTheScreen();
+    // Realigned: it follows again.
+    await scrollEvent(1200);
+    expect(screen.getByText(title(3))).toBeOnTheScreen();
+  });
+
+  test('a width change with no offset change keeps following', async () => {
+    await renderFirstLaunch();
+    await layOut(400);
+    await scrollEvent(400);
+    expect(screen.getByText(title(1))).toBeOnTheScreen();
   });
 
   test('Next animates to the next page', async () => {
@@ -345,9 +390,7 @@ describe('swiping', () => {
   test('a width change keeps the current screen aligned, without animating', async () => {
     await renderFirstLaunch();
     await pressNext();
-    await fireEvent(screen.getByTestId('onboarding-screen'), 'layout', {
-      nativeEvent: { layout: { x: 0, y: 0, width: 500, height: 900 } },
-    });
+    await layOut(500);
     expect(scrollTo()).toHaveBeenLastCalledWith({ x: 500, animated: false });
   });
 });
