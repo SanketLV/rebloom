@@ -107,7 +107,7 @@ export function OnboardingPage({ screen, size, topInset, footerHeight, showLogo,
           <ScrollView
             testID="onboarding-text"
             style={{ maxHeight: Math.max(0, size.height - topInset - TEXT_FADE - footerHeight) }}
-            contentContainerStyle={styles.text}
+            contentContainerStyle={styles.textContent}
             bounces={false}
             overScrollMode="never">
             <Text
@@ -136,6 +136,6 @@ const styles = StyleSheet.create({
     backgroundColor: photoScrim,
     paddingHorizontal: spacing.xl,
   },
-  text: { gap: spacing.sm },
+  textContent: { gap: spacing.sm },
   onPhoto: { color: cameraColors.text },
 });
