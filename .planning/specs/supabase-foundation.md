@@ -65,7 +65,7 @@ The app has one session module that holds the signed-in user's Supabase session,
 - `config.ts`: reads the two `EXPO_PUBLIC_` variables. The backend counts as configured only if both are present and the URL is `https://` (plain `http://` is allowed only in development builds, `__DEV__`). Not configured → every backend call returns `not_configured`; the app never crashes over it.
 - `supabase.ts`: makes the client lazily, on the first `getSupabase()` call, never at import time. Options as in the SDK 58 guide (`storage: localStorage`, `autoRefreshToken: true`, `persistSession: true`, `detectSessionInUrl: false`) plus `flowType: 'pkce'`, which the accounts spec needs for Google and Apple browser sign-in. The `AppState` listener from the guide (`startAutoRefresh` when active, `stopAutoRefresh` otherwise) is added when the client is made.
 - `session.ts`, the only module that reads or changes the session:
-  - `getSession()`: the stored session or `null`, from local storage only, no network call.
+  - `getSession()`: the stored session or `null`, from local storage. It makes a request only when the stored access token has expired (supabase-js refreshes it then), and answers within 10 seconds: offline, it returns `offline` and keeps the session (supabase-js would otherwise retry for about 30 seconds).
   - `getCurrentUser()`: `{ id, email, provider }` or `null`, from the stored session.
   - `onSessionChange(listener)`: called on sign-in, sign-out, refresh and expiry; returns an unsubscribe function.
   - `setSessionFromAuth(result)`: the single entry point the accounts spec's sign-in methods hand their result to, so storage and listeners behave the same for every method.
@@ -135,6 +135,7 @@ None. No screen imports the backend in this spec.
 3. **Sign out while offline**: the phone is signed out at once; the server session expires on its own. Plants on the phone are untouched.
 4. **Refresh rejected** (user deleted on another device, token revoked): signed out with `session_expired`; listeners hear it once, not on every retry.
 5. **Token expires while the app is in the background**: auto-refresh stops in the background and starts on return; the first request after return uses a refreshed token. An expired token while offline keeps the stored session and refreshes once online; being offline is never treated as `session_expired`.
+5b. **Refresh rate-limited (429) after the access token expired**: supabase-js 2.118 removes the stored session for any refresh error except network failures and 5xx, so this signs the phone out; reported as `session_expired`. Found while building (2026-11-03); accepted, since the refresh limit is per IP and generous. Revisit if users report surprise sign-outs.
 6. **Phone clock wrong**: Supabase checks tokens with the server's clock, so a skewed phone clock must not sign the user out or loop refreshing. Device-check item.
 7. **App data wiped or app reinstalled**: no stored session, so signed out. The user signs in again (accounts spec) and gets the same account.
 8. **Signed-in user reaches the waitlist**: `select`, `insert`, `update` and `delete` on `public.waitlist` are refused; `join_waitlist()` still behaves as it does for visitors.
@@ -162,7 +163,8 @@ Written test-first. App logic in Jest with the Supabase client mocked at the mod
 - [ ] `signOut` while the server call rejects with a network error → the session is cleared anyway and the result is `offline`.
 - [ ] A refresh rejected by the server → signed out with `session_expired`, listener called once.
 - [ ] A refresh that fails with a network error → still signed in, no `session_expired`.
-- [ ] HTTP 429 → `rate_limited`.
+- [ ] HTTP 429 on a sign-in or other call → `rate_limited`; a 429 on the refresh of an expired token → signed out with `session_expired` (edge case 5b).
+- [ ] Offline with an expired token: `getSession()` answers `offline` within 10 seconds and the session is kept.
 - [ ] Release-mode config with an `http://` URL → not configured.
 - [ ] Importing `src/backend/session.ts` makes no client and no request until a function is called (fetch mock not called).
 - [ ] App start (root layout render, the existing tests) → fetch mock never called; no file under `src/app/`, `src/scan/`, `src/plants/` or `src/storage/` imports `src/backend/` (grep test, like the no-hex test).
