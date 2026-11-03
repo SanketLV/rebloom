@@ -167,7 +167,7 @@ All colors, type, radius and spacing come from `tokens.ts`. Touch targets ≥ 44
 14. **iPhone (Apple) user moves to Android**: no Apple button there; they sign in with an email code to the address the Account screen showed (relay addresses forward because the sending domain is registered).
 15. **Double tap** on "Send code", Google, Apple, "Sign out", "Delete account": one request each (single-flight, button disabled while busy).
 16. **Delete fails** (offline, 5xx): error on the sheet, still signed in, nothing deleted. **Delete succeeded but the reply was lost**: a retry gets 204 and the app finishes signing out.
-17. **Account deleted on another phone**: this phone's next refresh is rejected → foundation `session_expired` → "Signed out. Sign in again." Plants on the phone stay.
+17. **Account deleted on another phone**: this phone's next refresh is rejected → foundation `session_expired` → the Settings card shows "Signed out". Plants on the phone stay.
 18. **Android Back** on the code screen → email screen; on email → Account; on Account → Settings. Never stuck in the browser sheet.
 19. **Backend not configured** (no env in a local build): no account card on Settings, so no dead end.
 20. **Small screens and large text**: every account screen scrolls, the main button stays reachable above the keyboard.
