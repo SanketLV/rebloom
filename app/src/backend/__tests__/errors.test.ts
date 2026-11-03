@@ -1,5 +1,5 @@
 import { AuthApiError, AuthRetryableFetchError, AuthUnknownError } from '@supabase/supabase-js';
-import fc from 'fast-check';
+import * as fc from 'fast-check';
 
 import { BACKEND_ERRORS, toBackendError } from '../errors';
 
