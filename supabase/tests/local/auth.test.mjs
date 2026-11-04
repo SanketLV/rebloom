@@ -99,6 +99,7 @@ test('a signed-in user can still join the waitlist (a reserved address, never st
 
 test('a visitor (publishable key only) can call ping()', async () => {
   const r = await post('/rest/v1/rpc/ping', {});
-  assert.equal(r.status, 200, await r.text());
-  assert.equal(await r.json(), true);
+  const body = await r.text();
+  assert.equal(r.status, 200, body);
+  assert.equal(JSON.parse(body), true);
 });
