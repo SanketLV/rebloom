@@ -14,6 +14,8 @@
 
 **Tasks 14–15 (2026-11-04)**: local API tests 7/7 on Sanket's machine (one test bug found on the first run: the status assertion's message consumed the response body; fixed). Docs written: `supabase/README.md`, Backend sections in `app/README.md` and `CLAUDE.md`, `.handoff/device-checklist.md`. Full run: typecheck and lint clean; app tests 388/391 with the 3 failures in the known flaky route-rendering set; static Supabase checks 10/10; on Sanket's machine `supabase test db` 34/34, `supabase/tests/*.test.mjs` 29/29, local API 7/7. Left: break-test, swarm offer, Sanket's read of the diff, then task 16.
 
+**Break-test (2026-11-04)**: 8 findings, reported before fixing. Fixed 1–7 test-first (offline sign-out kept the session; API roles had TRUNCATE on new tables, now removed by migration `20261104060000_default_privileges`; a throwing listener broke sign-in; storage failures threw; a malformed URL crashed the client; account switch had no signed_out; the import guard missed new folders). Finding 8 (client-set timestamps) moved to the backup spec. On Sanket's machine after the fixes: `supabase test db` 38/38, local API 7/7. Left: adversarial review (offered), Sanket's read of the diff, task 16.
+
 **Stack**: Expo SDK 58 · TypeScript strict · jest-expo 58 + @testing-library/react-native 14 · Supabase CLI v3 (in v3, `migration list`, `db diff` and `db push` target the **local** database unless given `--remote`; `--linked` is gone) (`npx supabase@3`, or Homebrew; the exact version goes in `supabase/README.md`) · Docker. New app dependency: `@supabase/supabase-js` (2.118.0 is current on npm today; `npx expo install` picks the version). Already installed: `expo-sqlite`, `fast-check`.
 
 **Facts checked (2026-11-03)**
