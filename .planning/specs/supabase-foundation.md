@@ -40,7 +40,7 @@ The app has one session module that holds the signed-in user's Supabase session,
 **1. Migration history matches production** (do this first, before any other backend change)
 - Read the SQL recorded for each of the four remote migrations and confirm it matches the local file of the same name. If any differ, stop and report the difference.
 - When they match, rename the local files to the remote version numbers (`20261031143232_waitlist.sql`, `20261031144424_waitlist_hardening.sql`, `20261031173425_waitlist_swarm_fixes.sql`, `20261031173802_waitlist_trim_order.sql`). Renaming is safer than `supabase migration repair` because the repo then shows what production actually ran.
-- `supabase migration list` (linked to production) shows all four as applied on both sides, and nothing pending.
+- `supabase migration list --remote` (the linked production project) shows all four as applied on both sides, and nothing pending.
 
 **2. Local development stack**
 - `supabase init` creates `supabase/config.toml` next to the existing `migrations/` and `tests/` folders. Nothing in those folders changes except the renames above, and moving the two SQL-editor scripts (`waitlist_normalize.sql`, `waitlist_storage.sql`) to `supabase/scripts/`, because `supabase test db` runs every `.sql` file under `supabase/tests/` as a pgTAP test.

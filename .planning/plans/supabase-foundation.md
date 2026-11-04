@@ -8,10 +8,10 @@
 
 **Build notes (tasks 7–13, 2026-11-03)**: `npx expo install` can't reach the Expo API from the cloud session (proxy 403), so supabase-js was installed with `EXPO_OFFLINE=1 npx expo install @supabase/supabase-js` (same result: the SDK doesn't pin it). The spike passed: the session tests run the real supabase-js against `src/testing/fakeAuthServer.ts`. The full app suite has flaky route-rendering tests that fail 1–5 per run before and after this work (each file passes alone); tracked as a separate task.
 
-**Stack**: Expo SDK 58 · TypeScript strict · jest-expo 58 + @testing-library/react-native 14 · Supabase CLI v3 (`npx supabase@3`, or Homebrew; the exact version goes in `supabase/README.md`) · Docker. New app dependency: `@supabase/supabase-js` (2.118.0 is current on npm today; `npx expo install` picks the version). Already installed: `expo-sqlite`, `fast-check`.
+**Stack**: Expo SDK 58 · TypeScript strict · jest-expo 58 + @testing-library/react-native 14 · Supabase CLI v3 (in v3, `migration list`, `db diff` and `db push` target the **local** database unless given `--remote`; `--linked` is gone) (`npx supabase@3`, or Homebrew; the exact version goes in `supabase/README.md`) · Docker. New app dependency: `@supabase/supabase-js` (2.118.0 is current on npm today; `npx expo install` picks the version). Already installed: `expo-sqlite`, `fast-check`.
 
 **Facts checked (2026-11-03)**
-- **Migration history**: the live project recorded `20261031143232 waitlist`, `20261031144424 waitlist_hardening`, `20261031173425 waitlist_swarm_fixes`, `20261031173802 waitlist_trim_order`. Production stored the SQL without comments, with the regex escapes (`­` …) written as the actual characters. After removing `--` comment lines, decoding `\uXXXX`, and removing spaces, tabs and newlines, the md5 of each local file equals the md5 of the recorded SQL, for all four. So the content matches and only the version numbers differ. Task 1 confirms this again with `supabase db diff --linked`.
+- **Migration history**: the live project recorded `20261031143232 waitlist`, `20261031144424 waitlist_hardening`, `20261031173425 waitlist_swarm_fixes`, `20261031173802 waitlist_trim_order`. Production stored the SQL without comments, with the regex escapes (`­` …) written as the actual characters. After removing `--` comment lines, decoding `\uXXXX`, and removing spaces, tabs and newlines, the md5 of each local file equals the md5 of the recorded SQL, for all four. So the content matches and only the version numbers differ. Task 1 confirms this again with `supabase db diff --remote`.
 - **Security advisor**: `ping()` is executable by `authenticated` (WARN); `join_waitlist()` by `anon` and `authenticated` (intended); `waitlist` has RLS on with no policies (INFO, intended).
 - **SDK 58 "Using Supabase" guide** (Expo repo at `expo@58.0.0`; `docs.expo.dev` is blocked in the cloud session): `import 'expo-sqlite/localStorage/install'`; `createClient(url, key, { auth: { storage: localStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false } })`; the `AppState` listener calling `startAutoRefresh` / `stopAutoRefresh`; env names `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; no `react-native-url-polyfill`.
 - **`supabase test db`** runs `pg_prove` on every `.sql` / `.pg` file under `supabase/tests/`, each in its own rolled-back transaction. The two SQL-editor scripts there today (`waitlist_normalize.sql`, `waitlist_storage.sql`, which ends in an error on purpose) would be picked up and fail, so they move to `supabase/scripts/` (task 2).
@@ -92,7 +92,7 @@ Each task is one commit. **Strict TDD**: write the test, watch it fail, then imp
 
 | # | Task | Files | Test (written first) |
 |---|---|---|---|
-| 1 | Rename the 4 migrations to the recorded versions. Then `supabase link --project-ref vhxcgmupopeochwvmwcv`, `supabase migration list` (4 on both sides, none pending), `supabase db diff --linked` (no changes). Paste both outputs in the PR. If the diff isn't empty: stop and report | `supabase/migrations/*` | T1 |
+| 1 | Rename the 4 migrations to the recorded versions. Then `supabase link --project-ref vhxcgmupopeochwvmwcv`, `supabase migration list --remote` (4 on both sides, none pending), `supabase db diff --remote` (no changes). Paste both outputs in the PR. If the diff isn't empty: stop and report | `supabase/migrations/*` | T1 |
 | 2 | Move the two SQL-editor scripts to `supabase/scripts/`, keeping their header comments | `supabase/scripts/*` | T1 also checks no `.sql` file sits directly in `supabase/tests/` |
 | 3 | `supabase init`; set the auth settings and the two templates; `supabase start` and `supabase db reset` run clean | `supabase/config.toml`, `supabase/templates/*` | T2 |
 
@@ -132,7 +132,7 @@ Each task is one commit. **Strict TDD**: write the test, watch it fail, then imp
 
 | # | Task | Files | Check |
 |---|---|---|---|
-| 16 | After the break-test, the swarm offer and Sanket's read of the diff, and after merge: `supabase migration list` → `supabase db push --dry-run` (only `<ts>_ping_grant` listed) → `supabase db push` → `supabase migration list` (5 and 5). The security advisor no longer lists `ping()` for `authenticated`. Run the keep-alive workflow by hand (it passes). `node --test "supabase/tests/*.test.mjs"` passes against production. Sanket checks anonymous sign-ins are off in the dashboard | none | Outputs pasted in the PR |
+| 16 | After the break-test, the swarm offer and Sanket's read of the diff, and after merge: `supabase migration list --remote` → `supabase db push --remote --dry-run` (only `<ts>_ping_grant` listed) → `supabase db push --remote` → `supabase migration list --remote` (5 and 5). The security advisor no longer lists `ping()` for `authenticated`. Run the keep-alive workflow by hand (it passes). `node --test "supabase/tests/*.test.mjs"` passes against production. Sanket checks anonymous sign-ins are off in the dashboard | none | Outputs pasted in the PR |
 
 ---
 
@@ -172,7 +172,7 @@ Edge cases from the spec: 1 → task 1 + T1 · 2 → T7 · 3 → T11 · 4 → T1
 | supabase-js doesn't load or behave under jest-expo (globals, timers) | Task 7 spike first. Fallback: session tests use a typed fake of `client.auth` (typed against the real package, so `tsc` catches drift), and the real library is covered by the local-stack tests and the device checks |
 | A rejected refresh and a user sign-out produce the same event | The `signingOut` flag; T11 covers both orders |
 | `signOut()` keeps the local session when the server call fails | The `scope: 'local'` fallback; T11 |
-| `supabase db diff --linked` reports grant or comment noise even though the SQL matches | Read the diff: only real schema changes stop the task. Record anything ignored in the PR |
+| `supabase db diff --remote` reports grant or comment noise even though the SQL matches | Read the diff: only real schema changes stop the task. Record anything ignored in the PR |
 | A pushed migration hits production with a mistake | Production changes only in task 16, after review; `--dry-run` first; the only new migration is one `revoke` |
 | Tests create users in production | The local guard (T13); the static tests make no requests; the existing production tests use reserved domains and no auth |
 | The lazy `require` doesn't work with the React Compiler / typed routes | Fallback in Architecture; T9 still holds |
