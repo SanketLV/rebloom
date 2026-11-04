@@ -2,6 +2,10 @@
 
 Plant care app. `app/` is the Expo app (see `app/AGENTS.md`), `landing/` the landing page, `supabase/` the backend.
 
+## Ask first
+
+- **Never make a payment or delete anything without asking the user specifically first and getting a yes.** That covers buying domains, plans or credits; and deleting cloud resources (Supabase, Resend, Cloudflare, GitHub), keys, data, branches or files. One yes covers only the action it was asked for.
+
 ## Backend
 
 - One Supabase project (`rebloom`) serves the landing waitlist and the app. **Production changes only through `npx -y supabase@3 db push --remote` of reviewed, merged migrations**: never the dashboard or SQL editor. Build and test on the local stack (`npx -y supabase@3 start`, Docker).
