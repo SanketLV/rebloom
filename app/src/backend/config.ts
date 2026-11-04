@@ -2,22 +2,29 @@
 // (app/.env.example). Missing or unusable values mean "no backend": every backend call then
 // returns `not_configured` and the app works exactly as it does offline.
 
-export type BackendConfig =
-  | { configured: true; url: string; key: string }
-  | { configured: false };
+export type BackendConfig = { configured: true; url: string; key: string } | { configured: false };
 
 type BackendEnv = { url?: string; key?: string };
 
-// Scheme, then a host with no spaces or path characters, then anything without spaces.
-const HTTPS_URL = /^https:\/\/[^\s/?#@]+[^\s]*$/i;
-const HTTP_OR_HTTPS_URL = /^https?:\/\/[^\s/?#@]+[^\s]*$/i;
+// Parsed with the same URL parser supabase-js uses, so anything accepted here also makes a
+// client (a looser check let `https://[` through, and creating the client then threw).
+function usableUrl(url: string, isDev: boolean): boolean {
+  if (/\s/.test(url)) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const schemeOk = parsed.protocol === 'https:' || (isDev && parsed.protocol === 'http:');
+  return schemeOk && parsed.hostname !== '' && !parsed.username && !parsed.password;
+}
 
 /** Pure: plain `http://` (a local stack on the LAN) is accepted in development builds only. */
 export function readBackendConfig(env: BackendEnv, isDev: boolean): BackendConfig {
   const url = (env.url ?? '').trim();
   const key = (env.key ?? '').trim();
-  if (!url || !key) return { configured: false };
-  if (!(isDev ? HTTP_OR_HTTPS_URL : HTTPS_URL).test(url)) return { configured: false };
+  if (!url || !key || !usableUrl(url, isDev)) return { configured: false };
   return { configured: true, url, key };
 }
 

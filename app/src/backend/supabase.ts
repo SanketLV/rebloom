@@ -38,18 +38,25 @@ export function getSupabase(): SupabaseClient | null {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('expo-sqlite/localStorage/install');
 
-  client = createClient(config.url, config.key, {
-    auth: {
-      storage: globalThis.localStorage,
-      storageKey: SESSION_STORAGE_KEY,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-      flowType: 'pkce',
-    },
-    // Looked up per request, so a fetch swapped in later (tests, polyfills) is used.
-    global: { fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args) },
-  });
+  try {
+    client = createClient(config.url, config.key, {
+      auth: {
+        storage: globalThis.localStorage,
+        storageKey: SESSION_STORAGE_KEY,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+        flowType: 'pkce',
+      },
+      // Looked up per request, so a fetch swapped in later (tests, polyfills) is used.
+      global: { fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args) },
+    });
+  } catch (error) {
+    // A config readBackendConfig accepted but supabase-js didn't: no backend, never a crash.
+    console.error('[backend] could not create the Supabase client', error);
+    client = null;
+    return null;
+  }
   followAppState(client.auth);
   return client;
 }

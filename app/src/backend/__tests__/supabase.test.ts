@@ -136,6 +136,17 @@ describe('getSupabase', () => {
     expect(started).toBe(1);
   });
 
+  test('if supabase-js still refuses the config, the backend is off instead of crashing', () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
+    createClientMock.mockImplementationOnce(() => {
+      throw new Error('Invalid supabaseUrl');
+    });
+
+    expect(getSupabase()).toBeNull();
+    expect(logged).toHaveBeenCalled();
+    expect(AppState.addEventListener).not.toHaveBeenCalled();
+  });
+
   test('reset removes the AppState listener and forgets the client', () => {
     const first = getSupabase()!;
     resetSupabaseForTests();

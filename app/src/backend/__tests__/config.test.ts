@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import * as fc from 'fast-check';
 
 import { readBackendConfig } from '../config';
@@ -22,6 +23,9 @@ describe('readBackendConfig', () => {
     ['not a URL', { url: 'abc.supabase.co', key: KEY }],
     ['another scheme', { url: 'ftp://abc.supabase.co', key: KEY }],
     ['nothing at all', {}],
+    ['a host the URL parser rejects', { url: 'https://[', key: KEY }],
+    ['a port above 65535', { url: 'https://abc.supabase.co:99999', key: KEY }],
+    ['user and password in the URL', { url: 'https://me:secret@abc.supabase.co', key: KEY }],
   ])('%s → not configured', (_name, env) => {
     expect(readBackendConfig(env, true)).toEqual({ configured: false });
   });
@@ -35,6 +39,24 @@ describe('readBackendConfig', () => {
   test('trims spaces and newlines around both values', () => {
     expect(readBackendConfig({ url: '  https://abc.supabase.co\n', key: ` ${KEY}\t` }, false)).toEqual(
       { configured: true, url: 'https://abc.supabase.co', key: KEY },
+    );
+  });
+
+  test('property: every URL it accepts can really make a Supabase client', () => {
+    const urlish = fc.oneof(
+      fc.webUrl(),
+      fc.tuple(fc.constantFrom('https://', 'http://'), fc.string()).map(([scheme, rest]) => scheme + rest),
+      fc
+        .tuple(fc.domain(), fc.integer({ min: -10, max: 100000 }))
+        .map(([host, port]) => `https://${host}:${port}`),
+    );
+    fc.assert(
+      fc.property(urlish, fc.boolean(), (url, isDev) => {
+        const result = readBackendConfig({ url, key: KEY }, isDev);
+        if (!result.configured) return;
+        expect(() => createClient(result.url, result.key, { auth: { persistSession: false } })).not.toThrow();
+      }),
+      { numRuns: 300 },
     );
   });
 
