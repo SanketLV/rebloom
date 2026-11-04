@@ -343,3 +343,167 @@ describe('break-test fixes', () => {
     ]);
   });
 });
+
+describe('adversarial review fixes (sign-out)', () => {
+  const settle = async () => {
+    for (let i = 0; i < 300; i += 1) await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    for (let i = 0; i < 300; i += 1) await Promise.resolve();
+  };
+  const tag = (e: SessionEvent) => (e.type === 'signed_out' ? `out:${e.reason}` : e.type);
+  const sessionKeys = () => fakeLocalStorage.keys().filter((k) => k.startsWith(STORAGE_KEY));
+
+  // Finding 3: a refresh finishing during signOut could save the session again or announce
+  // signed_in (supabase-js's own guard only sees its own removal).
+  test.each(Array.from({ length: 41 }, (_, n) => n))(
+    'a refresh landing %i microtasks around signOut never signs the phone back in',
+    async (hops) => {
+      jest.spyOn(console, 'warn').mockImplementation(() => {});
+      storeSession({ userId: 'u-a', expiresIn: -60 });
+      server.sessionOptions = { userId: 'u-a' };
+      const release = server.hold('refresh');
+      const events: SessionEvent[] = [];
+      onSessionChange((event) => events.push(event));
+      void getSession();
+      await settle();
+
+      release();
+      for (let i = 0; i < hops; i += 1) await Promise.resolve();
+      await signOut();
+      await settle();
+
+      expect(sessionKeys()).toEqual([]);
+      expect(await getCurrentUser()).toEqual({ ok: true, value: null });
+      const afterOut = events.slice(events.findIndex((e) => e.type === 'signed_out') + 1);
+      expect(afterOut.map(tag)).not.toContain('signed_in');
+    },
+  );
+
+  test('signOut in the same tick the client starts: no signed_in afterwards, and the next sign-in is announced', async () => {
+    storeSession({ userId: 'u-a' });
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    await signOut();
+    await settle();
+
+    expect(events.map(tag)).toEqual(['out:user']);
+    expect(sessionKeys()).toEqual([]);
+
+    server.sessionOptions = { userId: 'u-a' };
+    await signInWithCode();
+    expect(events.map(tag)).toEqual(['out:user', 'signed_in']);
+  });
+
+  test('a real sign-in right after signOut is kept (passing the call to setSessionFromAuth)', async () => {
+    await signInWithCode();
+    await signOut();
+    server.sessionOptions = { userId: 'u-b' };
+    const client = getSupabase()!;
+
+    const result = await setSessionFromAuth(
+      client.auth.verifyOtp({ email: 'b@example.com', token: '123456', type: 'email' }),
+    );
+    await settle();
+
+    expect(result).toMatchObject({ ok: true, value: { id: 'u-b' } });
+    expect(JSON.parse(fakeLocalStorage.getItem(STORAGE_KEY)!).user.id).toBe('u-b');
+  });
+
+  // Finding 14: getSession returned unknown when a signOut landed during its own refresh.
+  test('getSession during a concurrent signOut answers no session', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await getSession();
+    storeSession({ userId: 'u-a', expiresIn: -60 });
+    const release = server.hold('refresh');
+    const pending = getSession();
+    await settle();
+    const out = signOut();
+    release();
+
+    expect(await pending).toEqual({ ok: true, value: null });
+    await out;
+    expect(sessionKeys()).toEqual([]);
+  });
+
+  // Finding 4: the server's answer to logout was read wrongly in both directions.
+  test('the server already ended the session → ok', async () => {
+    await signInWithCode();
+    server.next.logout = 'session_gone';
+    expect(await signOut()).toEqual({ ok: true, value: null });
+  });
+
+  test('expired access token: refreshes once, then ends the session on the server', async () => {
+    storeSession({ userId: 'u-a', expiresIn: -60 });
+    server.sessionOptions = { userId: 'u-a' };
+
+    expect(await signOut()).toEqual({ ok: true, value: null });
+    expect(server.callsTo('/auth/v1/token?grant_type=refresh_token')).toBeGreaterThanOrEqual(1);
+    const logout = server.fetch.mock.calls.find(([url]) => String(url).includes('/auth/v1/logout'));
+    expect(String(logout?.[0])).toContain('scope=local');
+    expect(sessionKeys()).toEqual([]);
+  });
+
+  test('the server says the token is bad: refreshes once and retries the logout', async () => {
+    await signInWithCode();
+    server.next.logout = 'bad_jwt';
+    const logoutCalls = () => server.callsTo('/auth/v1/logout');
+
+    const result = await signOut();
+
+    expect(logoutCalls()).toBe(2);
+    expect(result).toEqual({ ok: false, error: 'unknown' });
+    expect(server.callsTo('/auth/v1/token?grant_type=refresh_token')).toBeGreaterThanOrEqual(1);
+    expect(sessionKeys()).toEqual([]);
+  });
+
+  test('expired access token and the refresh fails on the network → offline, phone signed out', async () => {
+    storeSession({ userId: 'u-a', expiresIn: -60 });
+    server.next.refresh = 'offline';
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(await signOut()).toEqual({ ok: false, error: 'offline' });
+    expect(sessionKeys()).toEqual([]);
+  });
+
+  // Finding 11: supabase-js 2.118 keeps PKCE verifiers under per-flow keys.
+  test('signOut removes every rebloom-auth key, including per-flow PKCE verifiers', async () => {
+    await signInWithCode();
+    const client = getSupabase()!;
+    await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: 'rebloom://auth/callback', skipBrowserRedirect: true },
+    });
+    expect(sessionKeys().length).toBeGreaterThan(1);
+
+    await signOut();
+
+    expect(sessionKeys()).toEqual([]);
+  });
+
+  // Finding 12: a failure removing a side key was reported as nothing removed.
+  test('a side key that cannot be removed does not stop the sign-out', async () => {
+    await signInWithCode();
+    fakeLocalStorage.setItem(`${STORAGE_KEY}-code-verifier`, 'verifier');
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    const realRemove = fakeLocalStorage.removeItem.bind(fakeLocalStorage);
+    jest.spyOn(fakeLocalStorage, 'removeItem').mockImplementation((key: string) => {
+      if (key.endsWith('-code-verifier')) throw new Error('disk error');
+      realRemove(key);
+    });
+
+    expect(await signOut()).toEqual({ ok: true, value: null });
+    expect(fakeLocalStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(events.map(tag)).toEqual(['out:user']);
+  });
+
+  // Finding 13: signOut with nobody signed in announced signed_out.
+  test('signOut with nobody signed in announces nothing', async () => {
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    expect(await signOut()).toEqual({ ok: true, value: null });
+    await settle();
+    expect(events).toEqual([]);
+  });
+});

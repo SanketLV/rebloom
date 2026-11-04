@@ -15,6 +15,29 @@ import { getBackendConfig } from './config';
 export const SESSION_STORAGE_KEY = 'rebloom-auth';
 
 let client: SupabaseClient | null = null;
+let sessionWritesBlocked = false;
+
+/**
+ * While the user has signed out, supabase-js may not write the session back (a refresh it had in
+ * flight would otherwise save it again, after signOut cleared it). PKCE verifiers still go through,
+ * so a browser sign-in can start. session.ts lifts this when a sign-in begins.
+ */
+export function blockSessionWrites(blocked: boolean): void {
+  sessionWritesBlocked = blocked;
+}
+
+const isSessionKey = (key: string) =>
+  key === SESSION_STORAGE_KEY || key === `${SESSION_STORAGE_KEY}-user`;
+
+// What supabase-js reads and writes: the SQLite-backed localStorage, with the block above.
+const sessionStorage = {
+  getItem: (key: string) => globalThis.localStorage.getItem(key),
+  setItem: (key: string, value: string) => {
+    if (sessionWritesBlocked && isSessionKey(key)) return;
+    globalThis.localStorage.setItem(key, value);
+  },
+  removeItem: (key: string) => globalThis.localStorage.removeItem(key),
+};
 let appStateSubscription: NativeEventSubscription | null = null;
 
 function followAppState(auth: SupabaseClient['auth']) {
@@ -41,7 +64,7 @@ export function getSupabase(): SupabaseClient | null {
   try {
     client = createClient(config.url, config.key, {
       auth: {
-        storage: globalThis.localStorage,
+        storage: sessionStorage,
         storageKey: SESSION_STORAGE_KEY,
         autoRefreshToken: true,
         persistSession: true,
@@ -67,4 +90,5 @@ export function resetSupabaseForTests(): void {
   appStateSubscription = null;
   if (client) void client.auth.stopAutoRefresh();
   client = null;
+  sessionWritesBlocked = false;
 }

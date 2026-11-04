@@ -112,6 +112,18 @@ export class FakeAuthServer {
     return this.calls.filter((c) => c.path === path).length;
   }
 
+  private holds: Partial<Record<'verify' | 'refresh' | 'logout', Promise<void>>> = {};
+
+  /** Delays the next answers from an endpoint until the returned function is called. */
+  hold(endpoint: 'verify' | 'refresh' | 'logout'): () => void {
+    let release = () => {};
+    this.holds[endpoint] = new Promise<void>((resolve) => (release = resolve));
+    return () => {
+      delete this.holds[endpoint];
+      release();
+    };
+  }
+
   readonly fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(
       typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
@@ -123,6 +135,16 @@ export class FakeAuthServer {
         ? `?grant_type=${url.searchParams.get('grant_type')}`
         : '');
     this.calls.push({ method, path });
+
+    const endpoint =
+      path === '/auth/v1/verify'
+        ? 'verify'
+        : path === '/auth/v1/token?grant_type=refresh_token'
+          ? 'refresh'
+          : path === '/auth/v1/logout'
+            ? 'logout'
+            : null;
+    if (endpoint && this.holds[endpoint]) await this.holds[endpoint];
 
     if (path === '/auth/v1/verify') {
       if (this.next.verify !== 'ok') return failure(this.next.verify, 'otp_expired');

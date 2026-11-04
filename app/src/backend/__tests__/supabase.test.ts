@@ -87,8 +87,10 @@ describe('getSupabase', () => {
     const [url, key, options] = createClientMock.mock.calls[0];
     expect(url).toBe(URL);
     expect(key).toBe(KEY);
+    const storage = options?.auth?.storage as Storage;
+    storage.setItem('probe', 'x');
+    expect(fakeLocalStorage.getItem('probe')).toBe('x');
     expect(options?.auth).toMatchObject({
-      storage: fakeLocalStorage,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,

@@ -2,12 +2,26 @@
 // hand their results to setSessionFromAuth; everything else reads through here. Nothing here
 // touches plants, scans or photos on the phone.
 
-import type { AuthChangeEvent, Session, Subscription, SupabaseClient } from '@supabase/supabase-js';
+import {
+  isAuthApiError,
+  isAuthSessionMissingError,
+  type AuthChangeEvent,
+  type AuthError,
+  type Session,
+  type Subscription,
+  type SupabaseClient,
+} from '@supabase/supabase-js';
 
 import { TimeoutError, withTimeout } from '@/lib/async';
 
+import { getBackendConfig } from './config';
 import { toBackendError, type BackendError } from './errors';
-import { getSupabase, resetSupabaseForTests, SESSION_STORAGE_KEY } from './supabase';
+import {
+  blockSessionWrites,
+  getSupabase,
+  resetSupabaseForTests,
+  SESSION_STORAGE_KEY,
+} from './supabase';
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: BackendError };
 
@@ -34,6 +48,16 @@ let currentUserId: string | null | undefined;
 let announcedUserId: string | null = null;
 // Set only while signOut() runs, to tell a sign-out the user asked for from one the server forced.
 let signingOut = false;
+// After signOut(), the phone stays signed out until a sign-in goes through setSessionFromAuth.
+// signOut clears storage itself, so supabase-js's own guards don't see it, and supabase-js can still
+// bring the old session back (a refresh that was in flight, an event queued while it started):
+// such a session is removed again and never announced.
+let blockedUntilSignIn = false;
+
+function setBlocked(blocked: boolean) {
+  blockedUntilSignIn = blocked;
+  blockSessionWrites(blocked);
+}
 
 function toUser(session: Session): SessionUser {
   const provider = session.user.app_metadata?.provider;
@@ -77,6 +101,10 @@ function noteSignedOut() {
 }
 
 function handleAuthChange(event: AuthChangeEvent, session: Session | null) {
+  if (blockedUntilSignIn && event !== 'SIGNED_OUT') {
+    if (session && hasStoredSession()) removeSessionKeys();
+    return;
+  }
   if (event === 'SIGNED_OUT') return noteSignedOut();
   if (event === 'INITIAL_SESSION') {
     if (currentUserId === undefined) currentUserId = session ? session.user.id : null;
@@ -111,6 +139,10 @@ function client(): SupabaseClient | null {
 export async function getSession(): Promise<Result<Session | null>> {
   const supabase = client();
   if (!supabase) return { ok: false, error: 'not_configured' };
+  if (blockedUntilSignIn) {
+    if (hasStoredSession()) removeSessionKeys();
+    return { ok: true, value: null };
+  }
   // Nothing stored: no session, without waiting on supabase-js (which may still be retrying a
   // refresh it started before a sign-out).
   if (!hasStoredSession()) {
@@ -124,7 +156,12 @@ export async function getSession(): Promise<Result<Session | null>> {
     return { ok: false, error: error instanceof TimeoutError ? 'offline' : toBackendError(error) };
   }
   const { data, error } = response;
-  if (error) return { ok: false, error: toBackendError(error) };
+  // A signOut landed while supabase-js was working: the answer is "signed out", whatever it says.
+  if (blockedUntilSignIn) return { ok: true, value: null };
+  if (error) {
+    if (!hasStoredSession()) return { ok: true, value: null };
+    return { ok: false, error: toBackendError(error) };
+  }
   if (data.session && currentUserId === undefined) currentUserId = data.session.user.id;
   if (!data.session && currentUserId === undefined) currentUserId = null;
   return { ok: true, value: data.session };
@@ -157,15 +194,23 @@ export async function setSessionFromAuth(
     Promise.resolve(pending).catch(() => {});
     return { ok: false, error: 'not_configured' };
   }
+  // A sign-in is starting: let its session through (set before awaiting, so the SIGNED_IN that
+  // supabase-js sends during the call isn't taken for the old session coming back).
+  const wasBlocked = blockedUntilSignIn;
+  setBlocked(false);
+  const fail = (error: BackendError): Result<SessionUser> => {
+    setBlocked(wasBlocked);
+    return { ok: false, error };
+  };
   let result: AuthResult;
   try {
     result = await pending;
   } catch (error) {
-    return { ok: false, error: toBackendError(error) };
+    return fail(toBackendError(error));
   }
-  if (result.error) return { ok: false, error: toBackendError(result.error) };
+  if (result.error) return fail(toBackendError(result.error));
   const session = result.data?.session;
-  if (!session) return { ok: false, error: 'unknown' };
+  if (!session) return fail('unknown');
   // supabase-js has already stored it; tell listeners now (its own SIGNED_IN is then a no-op).
   const user = toUser(session);
   noteSignedIn(user);
@@ -180,51 +225,146 @@ function hasStoredSession(): boolean {
   }
 }
 
-function storedAccessToken(): string | null {
+type StoredSession = { access_token: string; refresh_token?: string; expires_at?: number };
+
+function storedSession(): StoredSession | null {
   try {
     const raw = globalThis.localStorage.getItem(SESSION_STORAGE_KEY);
-    const token = raw ? (JSON.parse(raw) as { access_token?: unknown }).access_token : null;
-    return typeof token === 'string' ? token : null;
+    const parsed = raw ? (JSON.parse(raw) as Partial<StoredSession>) : null;
+    return parsed && typeof parsed.access_token === 'string' ? (parsed as StoredSession) : null;
   } catch {
     return null;
   }
 }
 
 /**
+ * Removes every key supabase-js keeps under our storage key (the session, `-user`, PKCE
+ * verifiers, whose layout changes between versions), the session itself last. Returns false only
+ * if the session itself is still stored.
+ */
+function removeSessionKeys(): boolean {
+  const storage = globalThis.localStorage;
+  const keys: string[] = [];
+  try {
+    for (let i = 0; i < storage.length; i += 1) {
+      const key = storage.key(i);
+      if (key && key !== SESSION_STORAGE_KEY && key.startsWith(`${SESSION_STORAGE_KEY}-`)) {
+        keys.push(key);
+      }
+    }
+  } catch {
+    keys.push(`${SESSION_STORAGE_KEY}-code-verifier`, `${SESSION_STORAGE_KEY}-user`);
+  }
+  for (const key of keys) {
+    try {
+      storage.removeItem(key);
+    } catch {
+      // A side key left behind holds no session; keep going.
+    }
+  }
+  try {
+    storage.removeItem(SESSION_STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const isBadJwt = (error: AuthError) =>
+  isAuthApiError(error) && (error.code === 'bad_jwt' || error.status === 401);
+
+const serverSessionGone = (error: AuthError) =>
+  isAuthSessionMissingError(error) ||
+  (isAuthApiError(error) && (error.code === 'user_not_found' || error.status === 404));
+
+/**
+ * A fresh access token for the logout call, straight from the token endpoint so supabase-js's
+ * state isn't touched. `null` value: the server no longer knows this refresh token (nothing to end).
+ */
+async function freshAccessToken(refreshToken: string | undefined): Promise<Result<string | null>> {
+  const config = getBackendConfig();
+  if (!config.configured || !refreshToken) return { ok: true, value: null };
+  const response = await globalThis.fetch(
+    `${config.url.replace(/\/+$/, '')}/auth/v1/token?grant_type=refresh_token`,
+    {
+      method: 'POST',
+      headers: { apikey: config.key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    },
+  );
+  if (response.status === 429) return { ok: false, error: 'rate_limited' };
+  if (response.status >= 500) return { ok: false, error: 'unknown' };
+  if (!response.ok) return { ok: true, value: null };
+  const body = (await response.json()) as { access_token?: unknown };
+  return typeof body.access_token === 'string'
+    ? { ok: true, value: body.access_token }
+    : { ok: false, error: 'unknown' };
+}
+
+/** Tells the server to end this session only. The phone is already signed out. */
+async function endServerSession(
+  supabase: SupabaseClient,
+  stored: StoredSession,
+): Promise<Result<null>> {
+  const done: Result<null> = { ok: true, value: null };
+  const expired =
+    typeof stored.expires_at === 'number' && stored.expires_at * 1000 <= Date.now() + 30_000;
+  let token: string | null = stored.access_token;
+  if (expired) {
+    const fresh = await freshAccessToken(stored.refresh_token);
+    if (!fresh.ok) return fresh;
+    if (!fresh.value) return done;
+    token = fresh.value;
+  }
+  let { error } = await supabase.auth.admin.signOut(token, 'local');
+  if (error && isBadJwt(error) && !expired) {
+    const fresh = await freshAccessToken(stored.refresh_token);
+    if (!fresh.ok) return fresh;
+    if (!fresh.value) return done;
+    ({ error } = await supabase.auth.admin.signOut(fresh.value, 'local'));
+  }
+  if (!error || serverSessionGone(error)) return done;
+  return { ok: false, error: toBackendError(error) };
+}
+
+/**
  * Signs this phone out at once, even offline: the stored session is removed here, not by
  * supabase-js (which refreshes an expired token first and, offline, keeps the session). Then the
- * server is told to end this session only, within SESSION_TIMEOUT_MS; if it can't be told the
- * result says so, but the phone is signed out either way. Plants, scans and photos are untouched.
+ * server is told to end this session only, within SESSION_TIMEOUT_MS, refreshing an expired access
+ * token once to do it; if it can't be told the result says so, but the phone is signed out either
+ * way. Plants, scans and photos are untouched.
  */
 export async function signOut(): Promise<Result<null>> {
   const supabase = client();
   if (!supabase) return { ok: false, error: 'not_configured' };
-  const accessToken = storedAccessToken();
+  const stored = storedSession();
+  const wasSignedIn = stored !== null || typeof currentUserId === 'string';
 
-  signingOut = true;
-  try {
-    for (const key of [SESSION_STORAGE_KEY, `${SESSION_STORAGE_KEY}-code-verifier`, `${SESSION_STORAGE_KEY}-user`]) {
-      globalThis.localStorage.removeItem(key);
-    }
-  } catch {
+  setBlocked(true);
+  if (!removeSessionKeys()) {
     // The session is still on the phone: say so, and don't tell listeners it's gone.
-    signingOut = false;
+    setBlocked(false);
     return { ok: false, error: 'unknown' };
   }
-  noteSignedOut();
+  signingOut = true;
+  if (wasSignedIn) noteSignedOut();
+  else currentUserId = null;
   signingOut = false;
 
-  if (!accessToken) return { ok: true, value: null };
+  if (!stored) return { ok: true, value: null };
+  let result: Result<null>;
   try {
-    const { error } = await withTimeout(supabase.auth.admin.signOut(accessToken, 'local'), SESSION_TIMEOUT_MS);
-    // 401/403/404: the server no longer knows this session, which is what we wanted.
-    if (error && !(error.status === 401 || error.status === 403 || error.status === 404)) {
-      return { ok: false, error: toBackendError(error) };
-    }
+    result = await withTimeout(endServerSession(supabase, stored), SESSION_TIMEOUT_MS);
   } catch (error) {
-    return { ok: false, error: error instanceof TimeoutError ? 'offline' : toBackendError(error) };
+    result = {
+      ok: false,
+      error: error instanceof TimeoutError ? 'offline' : toBackendError(error),
+    };
   }
-  return { ok: true, value: null };
+  // A refresh supabase-js had in flight may have saved the session again meanwhile (its event,
+  // when it comes, is ignored): remove it before returning, so a restart can't restore it.
+  if (blockedUntilSignIn && hasStoredSession()) removeSessionKeys();
+  return result;
 }
 
 /** Tests only. */
@@ -235,5 +375,6 @@ export function resetSessionForTests(): void {
   currentUserId = undefined;
   announcedUserId = null;
   signingOut = false;
+  setBlocked(false);
   resetSupabaseForTests();
 }
