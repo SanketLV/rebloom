@@ -3,7 +3,13 @@ import { WaitlistForm } from './WaitlistForm';
 export function Hero() {
   return (
     <header className="hero relative isolate flex min-h-[100svh] flex-col overflow-hidden text-surface">
-      <div className="hero-media" aria-hidden="true" />
+      {/* An <img>, not a CSS background, so the browser finds it in the HTML instead of after the stylesheet. */}
+      <div className="hero-media" aria-hidden="true">
+        <picture>
+          <source media="(max-aspect-ratio: 4/5)" srcSet="/assets/hero-tall.webp" />
+          <img src="/assets/hero-wide.webp" width={1600} height={896} alt="" fetchPriority="high" />
+        </picture>
+      </div>
       <nav className="wrap flex w-full items-center justify-between py-[22px] [&_a]:px-1 [&_a]:py-3 [&_a]:text-[15px] [&_a]:font-semibold [&_a]:no-underline" aria-label="Main">
         <a href="/" aria-label="Rebloom home"><img src="/assets/rebloom-logo-bloom.svg" alt="Rebloom" width={111} height={30} className="h-[30px] w-auto" /></a>
         <a href="#how" className="hover:underline hover:underline-offset-4">How it works</a>

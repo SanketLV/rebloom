@@ -40,6 +40,54 @@ const hydrate = async (ui = <LandingPage />) => {
 const visible = () => [...container.querySelectorAll<HTMLElement>('article[data-s]')].filter(a => !a.hidden).map(a => a.dataset.s);
 const slider = () => container.querySelector<HTMLInputElement>('input[type=range]')!;
 
+describe('scroll reveal and hydration', () => {
+  const belowTheFold = () => vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top: 5000 } as DOMRect);
+
+  it('keeps reveal state out of the server HTML', () => {
+    const html = renderToString(<LandingPage />);
+    expect(html).toContain('data-reveal');
+    expect(html).not.toContain('data-reveal-state');
+    expect(html).not.toMatch(/opacity:\s*0/);
+  });
+
+  it('hides below-the-fold items after hydration, without a mismatch', async () => {
+    belowTheFold();
+    const errors = vi.spyOn(console, 'error');
+    const recoverable = vi.fn();
+    await act(async () => { root = hydrateRoot(container, <LandingPage />, { onRecoverableError: recoverable }); });
+    expect(errors).not.toHaveBeenCalled();
+    expect(recoverable).not.toHaveBeenCalled();
+    const items = [...container.querySelectorAll<HTMLElement>('[data-reveal]')];
+    expect(items.length).toBeGreaterThanOrEqual(6);
+    expect(items.every(el => el.dataset.revealState === 'hidden')).toBe(true);
+  });
+
+  it('never hides the recovery panel', async () => {
+    belowTheFold();
+    await act(async () => { root = hydrateRoot(container, <LandingPage />); });
+    const panel = container.querySelector<HTMLElement>('input[type="range"]')!.closest('li')!;
+    expect(panel.hasAttribute('data-reveal')).toBe(false);
+  });
+
+  it('shows everything when the page crashes after the reveal started', async () => {
+    belowTheFold();
+    const fallbackHtml = container.innerHTML;
+    let crash: () => void = () => {};
+    const Crash = () => {
+      const [failed, setFailed] = useState(false);
+      crash = () => setFailed(true);
+      if (failed) throw new Error('boom');
+      return <LandingPage />;
+    };
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await act(async () => { root = hydrateRoot(container, <RootBoundary fallbackHtml={fallbackHtml}><Crash /></RootBoundary>); });
+    expect(container.querySelectorAll('[data-reveal-state="hidden"]').length).toBeGreaterThan(0);
+    act(() => crash());
+    expect(container.querySelector('h1')).not.toBeNull();
+    expect(container.querySelectorAll('[data-reveal-state]')).toHaveLength(0);
+  });
+});
+
 describe('LandingPage hydration', () => {
   it('hydrates the pre-rendered HTML without a single mismatch', async () => {
     expect(await hydrate()).toEqual([]);

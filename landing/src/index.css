@@ -39,12 +39,14 @@
      Wide keeps the sprout right of the headline; tall keeps it above the text. */
   /* Background here, not bg-olive: a utility would beat the phone override below. */
   .hero { background: theme('colors.olive'); }
-  .hero-media { position: absolute; inset: 0; z-index: -2; background: theme('colors.olive') url(/assets/hero-wide.webp) 72% center / cover no-repeat; }
+  .hero-media { position: absolute; inset: 0; z-index: -2; background: theme('colors.olive'); }
+  .hero-media img, .final-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .hero-media img { object-position: 72% center; }
   /* FLUX won't place the sprout high on request, so on phones lift the photo and fade its foot into dark olive. */
   @media (max-aspect-ratio: 4/5) {
     .hero { background: theme('colors.ink'); }
-    .hero-media { inset: -16% 0 16% 0; background-image: url(/assets/hero-tall.webp); background-position: center top;
-      mask-image: linear-gradient(180deg, #000 70%, transparent); }
+    .hero-media { inset: -16% 0 16% 0; mask-image: linear-gradient(180deg, #000 70%, transparent); }
+    .hero-media img { object-position: center top; }
   }
   .hero::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(30,38,25,.35) 0%, transparent 30%, transparent 45%, rgba(30,38,25,.7) 100%); }
 
@@ -96,8 +98,7 @@
 
   /* ---------- Final CTA ---------- */
   /* Bookends the hero: the sprout at the top, the thriving plant at the bottom. */
-  .final-media { position: absolute; inset: 0; z-index: -2; background: theme('colors.olive') url(/assets/lush-wide.webp) center / cover no-repeat; }
-  @media (max-aspect-ratio: 4/5) { .final-media { background-image: url(/assets/lush-tall.webp); } }
+  .final-media { position: absolute; inset: 0; z-index: -2; background: theme('colors.olive'); }
   .final::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(30,38,25,.15) 0%, rgba(30,38,25,.55) 55%, rgba(30,38,25,.92) 100%); }
 
   /* ---------- Privacy page ---------- */
@@ -110,3 +111,38 @@
   /* Preflight zeroes paragraph margins; the privacy page relied on the browser's 1em. */
   .privacy main p { margin: 1em 0; }
 }
+
+/* ---------- Motion ---------- */
+/* transform and opacity only. Outside @layer: Tailwind drops layered rules whose classes it can't find in the content. */
+:root { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+
+/* Scroll reveal: src/lib/reveal.ts sets the state after hydration, so nothing starts hidden in the HTML. */
+[data-reveal-state="hidden"] { opacity: 0; transform: translateY(16px); }
+[data-reveal-state="shown"] { transition: opacity 500ms var(--ease-out), transform 500ms var(--ease-out); }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Removing `hidden` restarts these, so each chip tap replays the fade. */
+  [data-swap] img[data-s], [data-swap] article[data-s] { animation: fade-in 200ms var(--ease-out) both; }
+  .hero-media img { animation: hero-in 700ms var(--ease-out) both; }
+  .symptoms label, .waitlist button { transition: transform 160ms var(--ease-out); }
+  .symptoms label:active, .waitlist button:not([aria-disabled="true"]):active { transform: scale(0.97); }
+  /* Browsers without scroll timelines keep the photo still and fully covering its section. */
+  @supports (animation-timeline: view()) {
+    .final-media img { animation: final-settle linear both; animation-timeline: view(); animation-range: entry 0% cover 50%; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal-state="hidden"] { transform: none; }
+  /* !important beats the inline stagger delay. */
+  [data-reveal-state="shown"] { transition: opacity 200ms linear; transition-delay: 0s !important; }
+  .hero-media img { animation: fade-in 200ms linear both; }
+}
+
+@media print {
+  [data-reveal-state="hidden"] { opacity: 1; transform: none; }
+}
+
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes hero-in { from { opacity: 0; transform: scale(1.03); } }
+@keyframes final-settle { from { transform: scale(1.08); } }

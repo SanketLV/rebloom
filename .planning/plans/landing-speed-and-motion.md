@@ -208,3 +208,13 @@ Data layer and API tests don't apply: the spec changes neither.
 - [x] Integration tests planned
 - [x] UI tests planned
 - [x] Spec edge cases covered
+
+## Build notes (2026-11-04)
+
+Changes from the plan, found by measuring:
+
+- **Chip preload watches the plate with a 100 px margin, not the section with 600 px.** The section starts at the fold, so it counted as near on page load and fetched 3 photos (about 171 KB) for every visitor.
+- **Photos have three versions, not two:** 480, 720 and the original (480, 600 and the original for the recovery photos), with `sizes` matched to measured column widths. With two, `uses-responsive-images` failed on mobile and tablet.
+- **Commits are grouped by phase,** as `/spartan:build` asks, not one per task.
+- **The waitlist check uses a mocked RPC, not the local stack.** `WAITLIST.url` is fixed to production in `lib/waitlist.ts`, so a real sign-up from the built page would reach production.
+- **Mobile LCP target missed.** Simulated LCP is 2.1 s against a 1.8 s target, the same as the baseline, and stays 2.1 s with the hero fade removed.
