@@ -54,7 +54,8 @@ create table public.example (
   deleted_at timestamptz              -- soft delete, as in the app's SQLite schema
 );
 alter table public.example enable row level security;
-revoke all on table public.example from anon;
+revoke all on table public.example from anon, authenticated;
+grant select, insert, update on table public.example to authenticated;
 create policy "owner reads"   on public.example for select to authenticated using ((select auth.uid()) = user_id);
 create policy "owner inserts" on public.example for insert to authenticated with check ((select auth.uid()) = user_id);
 create policy "owner updates" on public.example for update to authenticated
@@ -63,8 +64,8 @@ create index on public.example (user_id) where deleted_at is null;
 ```
 
 - RLS on, policies `to authenticated` only, and **every** policy checks `(select auth.uid()) = user_id`. Never `using (true)`: anyone can make an account with an email address, so "authenticated" means "anyone".
-- No delete policy. Rows are soft-deleted; hard deletes happen only through `on delete cascade` when the user is deleted.
-- `anon` gets nothing. Column names are `snake_case`.
+- No delete grant or policy. Rows are soft-deleted; hard deletes happen only through `on delete cascade` when the user is deleted.
+- Grants: revoke everything, then give `authenticated` exactly `select, insert, update`; `anon` gets nothing. Supabase's default grants would otherwise add delete and, before migration `20261104060000_default_privileges`, TRUNCATE (which ignores RLS: one user could empty everyone's rows), TRIGGER, REFERENCES and MAINTAIN. `grants.test.sql` fails if any table gives an API role those four. Column names are `snake_case`.
 - Storage paths start with the owner's id (`<user_id>/…`), with the same owner check on `storage.objects`. Storage files are **not** removed by the cascade: whatever deletes a user must remove them too.
 
 ## Rules for every function

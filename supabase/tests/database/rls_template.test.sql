@@ -2,7 +2,7 @@
 -- Runs with `supabase test db`; the table only exists inside this rolled-back transaction.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(15);
 
 -- ---- the template, as in supabase/README.md ----
 create table public.example (
@@ -13,13 +13,17 @@ create table public.example (
   deleted_at timestamptz
 );
 alter table public.example enable row level security;
-revoke all on table public.example from anon;
+revoke all on table public.example from anon, authenticated;
+grant select, insert, update on table public.example to authenticated;
 create policy "owner reads"   on public.example for select to authenticated using ((select auth.uid()) = user_id);
 create policy "owner inserts" on public.example for insert to authenticated with check ((select auth.uid()) = user_id);
 create policy "owner updates" on public.example for update to authenticated
   using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create index on public.example (user_id) where deleted_at is null;
 -- ---- end of template ----
+
+select table_privs_are('public', 'example', 'authenticated', array['SELECT', 'INSERT', 'UPDATE'],
+  'signed-in users get exactly select, insert and update');
 
 insert into auth.users (id, email) values
   ('aaaaaaaa-0000-4000-8000-000000000001', 'a@example.org'),
@@ -64,9 +68,14 @@ select throws_ok(
   $$update public.example set user_id = 'bbbbbbbb-0000-4000-8000-000000000002' where id = 'aaaaaaaa-1111-4000-8000-000000000001'$$,
   '42501', null,
   'A cannot hand their row to B');
-select is_empty(
-  $$delete from public.example returning 1$$,
-  'A cannot hard-delete (no delete policy; rows go only with the user)');
+select throws_ok(
+  $$delete from public.example$$,
+  '42501', null,
+  'A cannot hard-delete (rows go only with the user)');
+select throws_ok(
+  $$truncate public.example$$,
+  '42501', null,
+  'A cannot truncate the table (TRUNCATE ignores row level security)');
 reset role;
 
 -- ---- as a visitor (anon) ----

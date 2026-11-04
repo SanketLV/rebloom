@@ -14,7 +14,8 @@ create table public.prop (
   deleted_at timestamptz
 );
 alter table public.prop enable row level security;
-revoke all on table public.prop from anon;
+revoke all on table public.prop from anon, authenticated;
+grant select, insert, update on table public.prop to authenticated;
 create policy "owner reads"   on public.prop for select to authenticated using ((select auth.uid()) = user_id);
 create policy "owner inserts" on public.prop for insert to authenticated with check ((select auth.uid()) = user_id);
 create policy "owner updates" on public.prop for update to authenticated
@@ -84,6 +85,18 @@ begin
       if changed <> 0 then
         bad := bad || format('round %s: user %s soft-deleted %s rows of others', round, i, changed);
       end if;
+
+      begin
+        truncate public.prop;
+        bad := bad || format('round %s: user %s truncated the table', round, i);
+      exception when insufficient_privilege then null;
+      end;
+
+      begin
+        delete from public.prop where user_id <> u;
+        bad := bad || format('round %s: user %s ran a delete', round, i);
+      exception when insufficient_privilege then null;
+      end;
 
       begin
         update public.prop set user_id = other where user_id = u;

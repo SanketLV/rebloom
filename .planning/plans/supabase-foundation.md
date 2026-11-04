@@ -138,7 +138,7 @@ Each task is one commit. **Strict TDD**: write the test, watch it fail, then imp
 
 | # | Task | Files | Check |
 |---|---|---|---|
-| 16 | After the break-test, the swarm offer and Sanket's read of the diff, and after merge: `supabase migration list --remote` → `supabase db push --remote --dry-run` (only `<ts>_ping_grant` listed) → `supabase db push --remote` → `supabase migration list --remote` (5 and 5). The security advisor no longer lists `ping()` for `authenticated`. Run the keep-alive workflow by hand (it passes). `node --test "supabase/tests/*.test.mjs"` passes against production. Sanket checks anonymous sign-ins are off in the dashboard | none | Outputs pasted in the PR |
+| 16 | After the break-test, the swarm offer and Sanket's read of the diff, and after merge: `supabase migration list --remote` → `supabase db push --remote --dry-run` (only `20261104050000_ping_grant` and `20261104060000_default_privileges` listed) → `supabase db push --remote` → `supabase migration list --remote` (6 and 6). The security advisor no longer lists `ping()` for `authenticated`. Run the keep-alive workflow by hand (it passes). `node --test "supabase/tests/*.test.mjs"` passes against production. Sanket checks anonymous sign-ins are off in the dashboard | none | Outputs pasted in the PR |
 
 ---
 

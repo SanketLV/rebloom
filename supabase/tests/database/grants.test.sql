@@ -1,7 +1,7 @@
 -- Who may call what, and which tables are private. Runs with `supabase test db` (pgTAP, rolled back).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(18);
+select plan(20);
 
 -- waitlist_normalize_email: the migration spells the stripped characters as \uXXXX escapes, while
 -- production holds the characters themselves (see the plan's task 1 result). Same behaviour: every
@@ -60,6 +60,26 @@ select is_empty($$
   select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind in ('r', 'p') and not c.relrowsecurity
 $$, 'every table in public has row level security on');
+
+-- TRUNCATE ignores row level security, MAINTAIN includes LOCK TABLE, TRIGGER lets a role add
+-- triggers: no API role may hold them on any table (break-test finding 2).
+select is_empty($$
+  select c.relname || ': ' || a.privilege_type || ' for ' || pg_get_userbyid(a.grantee)
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace, aclexplode(c.relacl) a
+  where n.nspname = 'public' and c.relkind in ('r', 'p')
+    and a.grantee in ('anon'::regrole, 'authenticated'::regrole)
+    and a.privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES', 'MAINTAIN')
+$$, 'no table in public gives anon or authenticated TRUNCATE, TRIGGER, REFERENCES or MAINTAIN');
+
+create table public.zz_default_grants_probe (id int);
+select is_empty($$
+  select a.privilege_type || ' for ' || pg_get_userbyid(a.grantee)
+  from pg_class c, aclexplode(c.relacl) a
+  where c.oid = 'public.zz_default_grants_probe'::regclass
+    and a.grantee in ('anon'::regrole, 'authenticated'::regrole)
+    and a.privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES', 'MAINTAIN')
+$$, 'a new table does not get TRUNCATE, TRIGGER, REFERENCES or MAINTAIN for anon or authenticated by default');
+drop table public.zz_default_grants_probe;
 
 select is_empty($$
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
