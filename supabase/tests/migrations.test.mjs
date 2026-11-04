@@ -22,6 +22,7 @@ const EXPECTED = [
   // supabase-foundation, pushed in task 16.
   '20261104050000_ping_grant.sql',
   '20261104060000_default_privileges.sql',
+  '20261104070000_no_password_signups.sql',
 ];
 
 test('every migration is the expected file, in order (none renamed, re-dated or slipped in)', () => {

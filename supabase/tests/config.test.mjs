@@ -49,6 +49,10 @@ test('no anonymous accounts, no phone sign-in; email sign-in by code is on', () 
   assert.equal(config['auth.email'].enabled, true);
 });
 
+test('an email address counts only once its owner has confirmed it', () => {
+  assert.equal(config['auth.email'].enable_confirmations, true);
+});
+
 test('email codes are 6 digits and last 10 minutes', () => {
   assert.equal(config['auth.email'].otp_length, 6);
   assert.equal(config['auth.email'].otp_expiry, 600);

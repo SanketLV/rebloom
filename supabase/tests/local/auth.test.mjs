@@ -76,6 +76,26 @@ test('an email code signs in, and the email holds only the code', async () => {
   assert.ok(!again.ok, `a used code must not work twice, got ${again.status}`);
 });
 
+test('a password sign-up is refused (no account takeover before the owner signs up)', async () => {
+  const victim = `takeover-${RUN}@example.com`;
+  const signup = await post('/auth/v1/signup', { email: victim, password: 'Sup3r-secret-pw!' });
+  const body = await signup.text();
+  assert.ok(!signup.ok, `password sign-up should be refused, got ${signup.status} ${body}`);
+
+  // The owner can still sign in by code to that address, and the attacker's password never works.
+  const sent = await post('/auth/v1/otp', { email: victim, create_user: true });
+  assert.equal(sent.status, 200, await sent.text());
+  const { code } = await readCode(victim);
+  const verified = await post('/auth/v1/verify', { type: 'email', email: victim, token: code });
+  assert.equal(verified.status, 200, await verified.text());
+
+  const attacker = await post('/auth/v1/token?grant_type=password', {
+    email: victim,
+    password: 'Sup3r-secret-pw!',
+  });
+  assert.ok(!attacker.ok, `the password must not sign in, got ${attacker.status}`);
+});
+
 test('a signed-in user cannot read the waitlist', async (t) => {
   if (!token) return t.skip('sign-in failed');
   const r = await fetch(`${URL_}/rest/v1/waitlist?select=id`, { headers: userHeaders(token) });

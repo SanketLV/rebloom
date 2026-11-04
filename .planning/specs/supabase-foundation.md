@@ -59,6 +59,7 @@ The app has one session module that holds the signed-in user's Supabase session,
 - Revoke `execute` on `public.ping()` from `authenticated` (the security advisor flags it; the migration meant it for `anon` only). The keep-alive job uses the publishable key as `anon`, so it keeps working.
 - `join_waitlist()` stays callable by `anon` and `authenticated`. That was intended: a signed-in app user calling it is no different from a visitor.
 - Remove TRUNCATE, REFERENCES, TRIGGER and MAINTAIN from the default grants `anon` and `authenticated` get on new `public` tables (break-test finding 2, 2026-11-04): TRUNCATE ignores RLS, so one signed-in user could empty a table. The template also grants only `select, insert, update`.
+- Refuse password sign-ups with a trigger on `auth.users` (adversarial review finding 1, 2026-11-04): Rebloom never uses passwords, and a password sign-up made with someone else's email would let its maker into that person's account once they sign in by code. Local `config.toml` also turns email confirmation on, as on hosted projects.
 - No other change to the waitlist table, its functions or the keep-alive workflow.
 
 **5. App client** (`app/src/backend/`)

@@ -126,6 +126,8 @@ Production auth settings (dashboard, mirrored in `supabase/config.toml` where th
 |---|---|
 | Anonymous sign-ins | off |
 | Email provider | on, sign-in by code, `otp_expiry` 600s |
+| Confirm email | on (the hosted default; never turn it off) |
+| Password sign-ups | refused by the foundation's migration `20261104070000_no_password_signups` (prevents taking over an account before its owner signs up); the app never offers passwords |
 | Phone provider | off |
 | Custom SMTP | on (phase 1) |
 | Email rate limit | raised from 30/hour (number in the plan) |
