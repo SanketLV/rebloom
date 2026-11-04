@@ -7,6 +7,7 @@ import { Button, TextButton } from '@/components/Button';
 import { ChevronLeftIcon } from '@/components/icons';
 import { headerLabel, isDemoDiagnoser } from '@/diagnosis/confidence';
 import { QUESTIONS } from '@/diagnosis/questions';
+import { goBackOr } from '@/lib/goBack';
 import { DemoTag } from '@/scan/components/DemoTag';
 import { useScanSession } from '@/scan/session';
 import { colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
@@ -57,7 +58,7 @@ export default function QuestionsScreen() {
     router.push('/scan/result');
   };
 
-  const back = () => (step === 0 ? router.back() : setStep(step - 1));
+  const back = () => (step === 0 ? goBackOr('/scan') : setStep(step - 1));
 
   const notSure = () => {
     session.answer(question.id, 'not_sure');
