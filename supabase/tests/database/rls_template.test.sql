@@ -2,7 +2,7 @@
 -- Runs with `supabase test db`; the table only exists inside this rolled-back transaction.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(18);
 
 -- ---- the template, as in supabase/README.md ----
 create table public.example (
@@ -24,6 +24,17 @@ create index on public.example (user_id) where deleted_at is null;
 
 select table_privs_are('public', 'example', 'authenticated', array['SELECT', 'INSERT', 'UPDATE'],
   'signed-in users get exactly select, insert and update');
+select is_empty($$
+  select tablename || '.' || policyname from pg_policies
+  where schemaname = 'public' and tablename = 'example'
+    and not (
+      roles = '{authenticated}'
+      and permissive = 'PERMISSIVE'
+      and cmd in ('SELECT', 'INSERT', 'UPDATE')
+      and (cmd = 'INSERT' or (qual ~ 'auth\.uid\(\)' and qual ~ 'user_id'))
+      and (cmd = 'SELECT' or (with_check ~ 'auth\.uid\(\)' and with_check ~ 'user_id'))
+    )
+$$, 'every template policy is for authenticated only, and checks auth.uid() against user_id');
 
 insert into auth.users (id, email) values
   ('aaaaaaaa-0000-4000-8000-000000000001', 'a@example.org'),
@@ -31,6 +42,9 @@ insert into auth.users (id, email) values
 -- B's row, written as the owner of the table (bypasses RLS).
 insert into public.example (id, user_id) values
   ('bbbbbbbb-1111-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002');
+-- And a soft-deleted one: deleted rows must stay as private as live ones.
+insert into public.example (id, user_id, deleted_at) values
+  ('bbbbbbbb-1111-4000-8000-000000000002', 'bbbbbbbb-0000-4000-8000-000000000002', now());
 
 -- ---- as user A ----
 select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-4000-8000-000000000001","role":"authenticated"}', true);
@@ -68,6 +82,14 @@ select throws_ok(
   $$update public.example set user_id = 'bbbbbbbb-0000-4000-8000-000000000002' where id = 'aaaaaaaa-1111-4000-8000-000000000001'$$,
   '42501', null,
   'A cannot hand their row to B');
+-- With no where clause, only the update policy's with check stands in the way.
+select throws_ok(
+  $$update public.example set user_id = 'bbbbbbbb-0000-4000-8000-000000000002'$$,
+  '42501', null,
+  'A cannot hand their rows to B with an update that has no where clause');
+select is_empty(
+  $$select 1 from public.example where deleted_at is not null and user_id <> 'aaaaaaaa-0000-4000-8000-000000000001'$$,
+  'A cannot see B''s soft-deleted rows either');
 select throws_ok(
   $$delete from public.example$$,
   '42501', null,
@@ -90,8 +112,8 @@ select is_empty(
   'deleting A removes A''s rows');
 select results_eq(
   'select count(*) from public.example',
-  array[1::bigint],
-  'B''s row is still there');
+  array[2::bigint],
+  'B''s rows are still there');
 
 select * from finish();
 rollback;

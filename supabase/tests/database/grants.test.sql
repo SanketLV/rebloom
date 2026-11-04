@@ -1,7 +1,7 @@
 -- Who may call what, and which tables are private. Runs with `supabase test db` (pgTAP, rolled back).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(26);
 
 -- waitlist_normalize_email: the migration spells the stripped characters as \uXXXX escapes, while
 -- production holds the characters themselves (see the plan's task 1 result). Same behaviour: every
@@ -120,6 +120,18 @@ select is_empty($$
     and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
     and p.oid::regprocedure::text not in ('ping()', 'join_waitlist(text,text)')
 $$, 'no security definer function in public is callable by the API roles, apart from the two reviewed ones');
+
+select is_empty($$
+  select tablename || '.' || policyname from pg_policies
+  where schemaname = 'public' 
+    and not (
+      roles = '{authenticated}'
+      and permissive = 'PERMISSIVE'
+      and cmd in ('SELECT', 'INSERT', 'UPDATE')
+      and (cmd = 'INSERT' or (qual ~ 'auth\.uid\(\)' and qual ~ 'user_id'))
+      and (cmd = 'SELECT' or (with_check ~ 'auth\.uid\(\)' and with_check ~ 'user_id'))
+    )
+$$, 'every policy in public is for authenticated only, covers select/insert/update, and checks auth.uid() against user_id');
 
 -- New objects are closed to anon by default (adversarial review finding 2: a view someone forgets
 -- to lock down would otherwise be readable without signing in).

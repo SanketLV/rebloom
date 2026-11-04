@@ -48,6 +48,8 @@ begin
         made := made + 1;
       end loop;
     end loop;
+    -- Soft-delete about a third of the rows: deleted rows must stay as private as live ones.
+    update public.prop set deleted_at = now() where random() < 0.33;
     insert into prop_stats values (n_users, made);
 
     for i in 1..n_users loop
@@ -103,6 +105,16 @@ begin
         get diagnostics changed = row_count;
         if changed <> 0 then
           bad := bad || format('round %s: user %s handed %s rows to someone else', round, i, changed);
+        end if;
+      exception when insufficient_privilege then null;
+      end;
+
+      -- No where clause: only the update policy's with check stands in the way.
+      begin
+        update public.prop set user_id = other;
+        get diagnostics changed = row_count;
+        if changed <> 0 then
+          bad := bad || format('round %s: user %s handed %s rows away with a bare update', round, i, changed);
         end if;
       exception when insufficient_privilege then null;
       end;
