@@ -1,7 +1,7 @@
 // Static checks on supabase/config.toml, the local stack's auth settings (no network).
 // Production's dashboard settings are set by the accounts spec; this keeps local close to them.
 //
-//   node --test "supabase/tests/*.test.mjs"
+//   node --test "supabase/tests/*.test.mjs"   (static, no network)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

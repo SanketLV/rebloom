@@ -2,7 +2,7 @@
 // records versions, so a renamed or re-dated file would be run again (or skipped) by
 // `supabase db push --remote`. A new migration is added to EXPECTED on purpose, at the end.
 //
-//   node --test "supabase/tests/*.test.mjs"
+//   node --test "supabase/tests/*.test.mjs"   (static, no network)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

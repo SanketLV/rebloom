@@ -20,7 +20,8 @@ In CLI v3, `migration list`, `db diff`, `db push` and `db reset` act on the **lo
 | New migration | `npx -y supabase@3 migration new <snake_case_name>` |
 | Database tests (pgTAP) | `npx -y supabase@3 test db` |
 | Local API tests (sign-in, access rules) | `node --test "supabase/tests/local/*.test.mjs"` |
-| Static checks + production waitlist tests | `node --test "supabase/tests/*.test.mjs"` |
+| Static checks (no network) | `node --test "supabase/tests/*.test.mjs"` |
+| Waitlist tests against **production** (opt-in) | `REBLOOM_PROD_TESTS=1 node --test "supabase/tests/production/*.test.mjs"` (PowerShell: `$env:REBLOOM_PROD_TESTS=1; node --test …`) |
 | Connect the CLI to production (once per machine) | `npx -y supabase@3 login`, then `npx -y supabase@3 link --project-ref vhxcgmupopeochwvmwcv` |
 | Compare production with the migrations | `npx -y supabase@3 migration list --remote`, `npx -y supabase@3 db diff --remote` |
 | Ship reviewed migrations | `npx -y supabase@3 db push --remote --dry-run`, then without `--dry-run` |
@@ -36,7 +37,8 @@ Local services: API `http://127.0.0.1:54321`, database `127.0.0.1:54322`, Mailpi
 | `migrations/` | Every schema change, in order. The first four are the waitlist and keep the version numbers production recorded |
 | `tests/database/*.test.sql` | pgTAP: grants, the RLS template, a seeded random RLS property test |
 | `tests/local/*.test.mjs` | Through the local API. A guard refuses any non-local address before the first request |
-| `tests/*.test.mjs` | Static checks (migration names, config) and the waitlist tests, which run against **production** with reserved `example.com` addresses that are never stored |
+| `tests/*.test.mjs` | Static checks: migration names and order, config, keep-alive schedule, pgTAP files |
+| `tests/production/*.test.mjs` | The waitlist tests, against **production**, only with `REBLOOM_PROD_TESTS=1` and their own `PROD_SUPABASE_URL` / `PROD_SUPABASE_PUBLISHABLE_KEY`. They use reserved `example.com` addresses that are never stored |
 | `scripts/` | SQL-editor checks for the waitlist (run by hand; not part of `test db`) |
 
 `supabase test db` runs every `.sql` file under `tests/` as a pgTAP test, so only pgTAP files go there.
@@ -66,7 +68,7 @@ create index on public.example (user_id) where deleted_at is null;
 - RLS on, policies `to authenticated` only, and **every** policy checks `(select auth.uid()) = user_id`. Never `using (true)`: anyone can make an account with an email address, so "authenticated" means "anyone".
 - No delete grant or policy. Rows are soft-deleted; hard deletes happen only through `on delete cascade` when the user is deleted.
 - Grants: revoke everything, then give `authenticated` exactly `select, insert, update`; `anon` gets nothing. Supabase's default grants would otherwise add delete and, before migration `20261104060000_default_privileges`, TRUNCATE (which ignores RLS: one user could empty everyone's rows), TRIGGER, REFERENCES and MAINTAIN. `grants.test.sql` fails if any table gives an API role those four. Column names are `snake_case`.
-- Storage paths start with the owner's id (`<user_id>/…`), with the same owner check on `storage.objects`. Storage files are **not** removed by the cascade: whatever deletes a user must remove them too.
+- Storage buckets are private (`public = false`): a public bucket serves every file by URL with no RLS check, photos and their location metadata included. Paths start with the owner's id (`<user_id>/…`), with the same owner check on `storage.objects`. Storage files are **not** removed by the cascade: whatever deletes a user must remove them too.
 
 ## Things that get around row level security
 

@@ -142,7 +142,7 @@ None. No screen imports the backend in this spec.
 7. **App data wiped or app reinstalled**: no stored session, so signed out. The user signs in again (accounts spec) and gets the same account.
 8. **Signed-in user reaches the waitlist**: `select`, `insert`, `update` and `delete` on `public.waitlist` are refused; `join_waitlist()` still behaves as it does for visitors.
 9. **Another user's id in a request**: a signed-in user who sends someone else's `user_id` on insert, or filters by it on select/update, gets nothing back or an RLS error, never the other user's row.
-10. **Backend test pointed at production**: the new tests refuse to run unless `SUPABASE_URL` is a local address, so they can never make users in production. (The existing waitlist tests keep running against production, as today.)
+10. **Backend test pointed at production**: the new tests refuse to run unless `SUPABASE_URL` is a local address, so they can never make users in production. (The waitlist tests against production moved to `supabase/tests/production/` and run only with `REBLOOM_PROD_TESTS=1`, with their own `PROD_SUPABASE_URL`.)
 11. **Phone on the local stack**: the phone can't reach `localhost`; the README says to use the LAN address. Release builds refuse `http://` (edge case 2).
 
 ## Testing Criteria
@@ -159,7 +159,7 @@ Written test-first. App logic in Jest with the Supabase client mocked at the mod
 - [ ] Local stack: a user signed in by email code can use their token for an RLS-protected request.
 - [ ] RLS template: user A inserts, reads, updates and soft-deletes their own row.
 - [ ] `ping()` still answers for `anon`; `join_waitlist()` still accepts a valid `example.com` email (existing tests still pass).
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` in `app/`, and `node --test "supabase/tests/*.test.mjs"` all pass.
+- [ ] `npm run typecheck`, `npm run lint`, `npm test` in `app/`, and `node --test "supabase/tests/*.test.mjs"` (static, no network) all pass.
 
 ### Edge cases
 - [ ] `signOut` while the server call rejects with a network error → the session is cleared anyway and the result is `offline`.
