@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, TextButton } from '@/components/Button';
 import { hiddenBehindSheet } from '@/components/BottomSheet';
 import { CloseIcon, GalleryIcon, HelpIcon, LockIcon } from '@/components/icons';
-import { goBackOr } from '@/lib/goBack';
+import { goBackOr, useAndroidBackOr } from '@/lib/goBack';
 import { useSingleFlight } from '@/lib/useSingleFlight';
 import { PermissionSheet } from '@/scan/components/PermissionSheet';
 import { TipsSheet } from '@/scan/components/TipsSheet';
@@ -76,6 +76,7 @@ export default function CameraScreen() {
   });
 
   const sheetOpen = permissionSheetOpen || tipsOpen;
+  useAndroidBackOr('/', !sheetOpen);
 
   return (
     <View style={styles.screen}>

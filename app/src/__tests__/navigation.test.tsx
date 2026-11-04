@@ -1,5 +1,7 @@
-import { fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
+import { router } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
+import { BackHandler } from 'react-native';
 
 import { mockCamera } from '@/testing/nativeMocks';
 
@@ -9,8 +11,31 @@ jest.mock('expo-font', () => ({
   useFonts: () => [true, null],
 }));
 
-// Navigation, not permissions, is under test here.
-beforeEach(() => mockCamera.setPermission('granted'));
+// Android Back: calls the newest hardwareBackPress listener that's still
+// registered. If none handles it, the OS default runs: pop if there's history,
+// otherwise leave the app (here: nothing happens, so the path stays put).
+const androidBack = {
+  listeners: [] as { handler: () => boolean | null | undefined; removed: boolean }[],
+  async press() {
+    await act(async () => {
+      for (const entry of [...androidBack.listeners].reverse()) {
+        if (!entry.removed && entry.handler()) return;
+      }
+      if (router.canGoBack()) router.back();
+    });
+  },
+};
+
+beforeEach(() => {
+  androidBack.listeners = [];
+  jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_event, handler) => {
+    const entry = { handler: handler as () => boolean, removed: false };
+    androidBack.listeners.push(entry);
+    return { remove: () => void (entry.removed = true) };
+  });
+  // Navigation, not permissions, is under test here.
+  mockCamera.setPermission('granted');
+});
 
 // Screens appear once the local database has opened.
 async function renderApp(initialUrl = '/') {
@@ -104,4 +129,55 @@ test('Settings opened from Today shows no fallback Back', async () => {
   await fireEvent.press(screen.getByRole('button', { name: 'Profile and settings' }));
   await screen.findByRole('header', { name: 'Settings' });
   expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+});
+
+// Android system Back on a cold link: with nothing beneath, the OS default
+// would close the app. It must go to Today, like the on-screen exit.
+describe('Android Back on a cold link', () => {
+  test.each([
+    ['/scan', 'button', 'Close camera'],
+    ['/scan/treatment', 'header', 'Treatment plan'],
+    ['/settings', 'header', 'Settings'],
+  ] as const)('%s goes to Today', async (initialUrl, role, name) => {
+    await renderRouter('./src/app', { initialUrl });
+    await screen.findByRole(role, { name });
+    expect(screen).toHavePathname(initialUrl);
+
+    await androidBack.press();
+    expect(screen).toHavePathname('/');
+    expect(await screen.findByRole('tab', { name: 'Today' })).toBeSelected();
+  });
+
+  test('on /scan, Back closes the camera-permission sheet before leaving', async () => {
+    mockCamera.setPermission('undetermined');
+    await renderRouter('./src/app', { initialUrl: '/scan' });
+    await screen.findByRole('button', { name: 'Choose a photo instead' });
+
+    await androidBack.press();
+    expect(screen).toHavePathname('/scan');
+    expect(await screen.findByText('Camera is off')).toBeOnTheScreen();
+
+    await androidBack.press();
+    expect(screen).toHavePathname('/');
+  });
+});
+
+describe('Android Back with history is unchanged', () => {
+  test('Settings opened from Today returns to Today', async () => {
+    await renderApp();
+    await fireEvent.press(screen.getByRole('button', { name: 'Profile and settings' }));
+    await screen.findByRole('header', { name: 'Settings' });
+
+    await androidBack.press();
+    expect(screen).toHavePathname('/');
+  });
+
+  test('Scan opened from My Plants returns to My Plants', async () => {
+    await renderApp('/plants');
+    await fireEvent.press(screen.getByRole('button', { name: 'Scan' }));
+    await screen.findByRole('button', { name: 'Close camera' });
+
+    await androidBack.press();
+    expect(screen).toHavePathname('/plants');
+  });
 });

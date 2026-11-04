@@ -1,10 +1,11 @@
 import { ChevronLeftIcon } from '@/components/icons';
 import { IconButton } from '@/components/IconButton';
 import { Placeholder } from '@/components/Placeholder';
-import { goBackOr } from '@/lib/goBack';
+import { goBackOr, useAndroidBackOr } from '@/lib/goBack';
 import { colors } from '@/theme/tokens';
 
 export default function TreatmentScreen() {
+  useAndroidBackOr('/');
   return (
     <Placeholder
       title="Treatment plan"
