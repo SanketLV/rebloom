@@ -76,24 +76,25 @@ test('an email code signs in, and the email holds only the code', async () => {
   assert.ok(!again.ok, `a used code must not work twice, got ${again.status}`);
 });
 
-test('a password sign-up is refused (no account takeover before the owner signs up)', async () => {
+test('a password set by someone else before the owner signs up never signs in', async () => {
   const victim = `takeover-${RUN}@example.com`;
-  const signup = await post('/auth/v1/signup', { email: victim, password: 'Sup3r-secret-pw!' });
-  const body = await signup.text();
-  assert.ok(!signup.ok, `password sign-up should be refused, got ${signup.status} ${body}`);
+  const password = 'Sup3r-secret-pw!';
+  const signIn = () => post('/auth/v1/token?grant_type=password', { email: victim, password });
 
-  // The owner can still sign in by code to that address, and the attacker's password never works.
+  // The attacker signs up with the victim's address. The account stays unconfirmed...
+  await post('/auth/v1/signup', { email: victim, password });
+  const early = await signIn();
+  assert.ok(!early.ok, `an unconfirmed account must not sign in, got ${early.status} ${await early.text()}`);
+
+  // ...until the owner signs in by code, which confirms it and clears the attacker's password.
   const sent = await post('/auth/v1/otp', { email: victim, create_user: true });
   assert.equal(sent.status, 200, await sent.text());
   const { code } = await readCode(victim);
   const verified = await post('/auth/v1/verify', { type: 'email', email: victim, token: code });
   assert.equal(verified.status, 200, await verified.text());
 
-  const attacker = await post('/auth/v1/token?grant_type=password', {
-    email: victim,
-    password: 'Sup3r-secret-pw!',
-  });
-  assert.ok(!attacker.ok, `the password must not sign in, got ${attacker.status}`);
+  const late = await signIn();
+  assert.ok(!late.ok, `the attacker's password must not sign in after the owner confirms, got ${late.status}`);
 });
 
 test('a signed-in user cannot read the waitlist', async (t) => {

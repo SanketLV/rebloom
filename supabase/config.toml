@@ -227,8 +227,8 @@ enabled = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-# Rebloom: on, as on hosted projects (an unconfirmed address must never count as owned; password
-# sign-ups are refused outright by migration 20261104070000).
+# Rebloom: on, as on hosted projects. An unconfirmed address must never count as owned, and
+# migration 20261104070000 (clearing passwords on confirmation) depends on it.
 enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
