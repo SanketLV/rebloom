@@ -48,3 +48,60 @@ test('tab bar switches between Today and My Plants', async () => {
   expect(screen).toHavePathname('/plants');
   expect(screen.getByRole('tab', { name: 'My Plants' })).toBeSelected();
 });
+
+// Cold start from a rebloom:// link: no history under the route, so a plain
+// router.back() has nowhere to go. Every exit must still leave the screen.
+describe('cold link with no history', () => {
+  test('Close camera on /scan goes to Today', async () => {
+    await renderRouter('./src/app', { initialUrl: '/scan' });
+    const close = await screen.findByRole('button', { name: 'Close camera' });
+    expect(screen).toHavePathname('/scan');
+
+    await fireEvent.press(close);
+    expect(screen).toHavePathname('/');
+    expect(await screen.findByRole('tab', { name: 'Today' })).toBeSelected();
+  });
+
+  test('Back on /scan/treatment goes to Today', async () => {
+    await renderRouter('./src/app', { initialUrl: '/scan/treatment' });
+    const back = await screen.findByRole('button', { name: 'Back' });
+    expect(screen).toHavePathname('/scan/treatment');
+
+    await fireEvent.press(back);
+    expect(screen).toHavePathname('/');
+    expect(await screen.findByRole('tab', { name: 'Today' })).toBeSelected();
+  });
+
+  test('Settings has a Back button that goes to Today', async () => {
+    await renderRouter('./src/app', { initialUrl: '/settings' });
+    await screen.findByRole('header', { name: 'Settings' });
+    expect(screen).toHavePathname('/settings');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(screen).toHavePathname('/');
+    expect(await screen.findByRole('tab', { name: 'Today' })).toBeSelected();
+  });
+
+  // No scan in progress: these redirect to the camera, which must still close.
+  test.each(['/scan/analyzing', '/scan/questions', '/scan/result'])(
+    '%s lands on the camera, and Close camera goes to Today',
+    async (initialUrl) => {
+      await renderRouter('./src/app', { initialUrl });
+      const close = await screen.findByRole('button', { name: 'Close camera' });
+      expect(screen).toHavePathname('/scan');
+
+      await fireEvent.press(close);
+      expect(screen).toHavePathname('/');
+      expect(await screen.findByRole('tab', { name: 'Today' })).toBeSelected();
+    },
+  );
+});
+
+// With history the native back button stays (it isn't in the jest tree); the
+// fallback must not add a second one beside it.
+test('Settings opened from Today shows no fallback Back', async () => {
+  await renderApp();
+  await fireEvent.press(screen.getByRole('button', { name: 'Profile and settings' }));
+  await screen.findByRole('header', { name: 'Settings' });
+  expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+});
