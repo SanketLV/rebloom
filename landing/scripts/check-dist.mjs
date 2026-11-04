@@ -49,12 +49,16 @@ const normalize = h => h
 for (const name of Object.keys(pages))
   check(normalize(head(pages[name])) === normalize(head(read(`${name}.html`, root))), `${name}: <head> matches the template`);
 for (const tag of [
-  '<link rel="preconnect" href="https://fonts.googleapis.com">',
-  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
   '<link rel="preconnect" href="https://vhxcgmupopeochwvmwcv.supabase.co" crossorigin>',
+  '<link rel="preload" href="/fonts/instrument-serif-latin.woff2" as="font" type="font/woff2" crossorigin>',
+  '<link rel="preload" href="/fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin>',
   '<meta property="og:image" content="/assets/og.png">',
   '<link rel="manifest" href="/site.webmanifest">',
 ]) check(index.includes(tag), `index head: ${tag}`);
+
+// Fonts are self-hosted: Google gets no request, and the privacy page doesn't claim otherwise.
+for (const [name, html] of Object.entries(pages))
+  check(!/fonts\.googleapis\.com|fonts\.gstatic\.com|Google Fonts/.test(html), `${name}: no Google Fonts reference`);
 
 // Every local URL resolves to a built file, with exact case (Windows matches case-insensitively, Linux hosts don't).
 const css = readdirSync(new URL('assets/', dist)).filter(f => f.endsWith('.css')).map(f => read(`assets/${f}`)).join('\n');

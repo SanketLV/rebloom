@@ -25,7 +25,7 @@ export function PrivacyPage() {
         <p>To send you one email when Rebloom launches. We do this because you asked us to by joining (your consent). We won't send anything else, and we won't sell your address. We'll only share it with the service we use to send that one email.</p>
 
         <h2>Where it's kept</h2>
-        <p>The waitlist is stored with Supabase on servers in the United States. If you're in the UK or EU, this means your email leaves those regions; the transfer is covered by Supabase's data processing agreement, which includes the standard contractual clauses approved for such transfers. The page's fonts are loaded from Google Fonts, which means Google sees your IP address when the page loads.</p>
+        <p>The waitlist is stored with Supabase on servers in the United States. If you're in the UK or EU, this means your email leaves those regions; the transfer is covered by Supabase's data processing agreement, which includes the standard contractual clauses approved for such transfers.</p>
 
         <h2>How long</h2>
         <p>Until the launch email has been sent. After that we delete the list.</p>

@@ -1,3 +1,16 @@
+/* Self-hosted latin subsets (OFL, see public/fonts). */
+@font-face { font-family: 'Instrument Serif'; src: url(/fonts/instrument-serif-latin.woff2) format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url(/fonts/figtree-latin.woff2) format('woff2'); font-weight: 400 700; font-display: swap; }
+
+/* System fonts resized to match the web fonts, so text keeps its line breaks when the web font arrives.
+   Georgia and Arial cover Windows, macOS and iOS; Noto Serif and Roboto cover Android. A missing local() falls
+   through to the next face. Computed once with @capsizecss/metrics: size-adjust = web xWidthAvg / system
+   xWidthAvg (each per em); the overrides are the web font's ascent and descent divided by size-adjust. */
+@font-face { font-family: 'Instrument Serif Georgia'; src: local('Georgia'); size-adjust: 76.49%; ascent-override: 129.43%; descent-override: 40.53%; line-gap-override: 0%; }
+@font-face { font-family: 'Instrument Serif Noto'; src: local('Noto Serif'); size-adjust: 70.89%; ascent-override: 139.65%; descent-override: 43.73%; line-gap-override: 0%; }
+@font-face { font-family: 'Figtree Arial'; src: local('Arial'); size-adjust: 99.6%; ascent-override: 95.39%; descent-override: 25.1%; line-gap-override: 0%; }
+@font-face { font-family: 'Figtree Roboto'; src: local('Roboto'); size-adjust: 99.81%; ascent-override: 95.18%; descent-override: 25.05%; line-gap-override: 0%; }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
