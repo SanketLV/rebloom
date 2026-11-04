@@ -84,7 +84,7 @@ The app has one session module that holds the signed-in user's Supabase session,
 
 ### Out of scope (each gets its own spec)
 - **Sign-in and accounts** (`.planning/specs/accounts.md`): email code, Google, Apple, the sign-in screens, account deletion, custom SMTP, production provider settings and redirect URLs.
-- **Cloud backup** itself: plant/scan tables, the photo bucket, upload and restore, the Settings "Backup" screen.
+- **Cloud backup** itself: plant/scan tables, the photo bucket, upload and restore, the Settings "Backup" screen. Carry over from the break-test (finding 8): the template lets the app set `created_at` and `updated_at` to anything, and sync will rely on `updated_at`; decide there whether the server sets them (a trigger) or sync tolerates a wrong phone clock.
 - Privacy policy for the app and store data-safety labels (accounts spec).
 - A second hosted Supabase project, Supabase branching, EAS environment variables.
 - Feedback upload, the Gemini second look, RevenueCat.
