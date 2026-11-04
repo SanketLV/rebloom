@@ -1,7 +1,7 @@
 -- Who may call what, and which tables are private. Runs with `supabase test db` (pgTAP, rolled back).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(20);
+select plan(25);
 
 -- waitlist_normalize_email: the migration spells the stripped characters as \uXXXX escapes, while
 -- production holds the characters themselves (see the plan's task 1 result). Same behaviour: every
@@ -86,16 +86,49 @@ select is_empty($$
   where n.nspname = 'public'
     and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
     and has_function_privilege('anon', p.oid, 'execute')
-    and p.proname not in ('ping', 'join_waitlist')
-$$, 'no function in public is callable by anon except ping and join_waitlist');
+    and p.oid::regprocedure::text not in ('ping()', 'join_waitlist(text,text)')
+$$, 'no function in public is callable by anon except ping() and join_waitlist(text,text)');
 
 select is_empty($$
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
     and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
     and has_function_privilege('authenticated', p.oid, 'execute')
-    and p.proname not in ('join_waitlist')
-$$, 'no function in public is callable by signed-in users except join_waitlist');
+    and p.oid::regprocedure::text not in ('join_waitlist(text,text)')
+$$, 'no function in public is callable by signed-in users except join_waitlist(text,text)');
+
+-- Objects that get around row level security (adversarial review finding 2). A view runs as its
+-- owner unless security_invoker is set; materialized and foreign tables have no RLS at all;
+-- a security definer function runs as its owner.
+select is_empty($$
+  select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'v'
+    and not coalesce(c.reloptions @> array['security_invoker=true'], false)
+    and (has_table_privilege('anon', c.oid, 'select') or has_table_privilege('authenticated', c.oid, 'select'))
+$$, 'every view the API roles can read in public uses security_invoker = true');
+
+select is_empty($$
+  select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind in ('m', 'f')
+    and (has_table_privilege('anon', c.oid, 'select') or has_table_privilege('authenticated', c.oid, 'select'))
+$$, 'no materialized view or foreign table in public is readable by the API roles');
+
+select is_empty($$
+  select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.prosecdef
+    and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+    and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
+    and p.oid::regprocedure::text not in ('ping()', 'join_waitlist(text,text)')
+$$, 'no security definer function in public is callable by the API roles, apart from the two reviewed ones');
+
+-- New objects are closed to anon by default (adversarial review finding 2: a view someone forgets
+-- to lock down would otherwise be readable without signing in).
+create table public.zz_anon_probe (id int);
+create view public.zz_anon_probe_view as select id from public.zz_anon_probe;
+select ok(not has_table_privilege('anon', 'public.zz_anon_probe', 'select'), 'a new table gives anon nothing by default');
+select ok(not has_table_privilege('anon', 'public.zz_anon_probe_view', 'select'), 'a new view gives anon nothing by default');
+drop view public.zz_anon_probe_view;
+drop table public.zz_anon_probe;
 
 select * from finish();
 rollback;

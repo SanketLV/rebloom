@@ -68,6 +68,16 @@ create index on public.example (user_id) where deleted_at is null;
 - Grants: revoke everything, then give `authenticated` exactly `select, insert, update`; `anon` gets nothing. Supabase's default grants would otherwise add delete and, before migration `20261104060000_default_privileges`, TRUNCATE (which ignores RLS: one user could empty everyone's rows), TRIGGER, REFERENCES and MAINTAIN. `grants.test.sql` fails if any table gives an API role those four. Column names are `snake_case`.
 - Storage paths start with the owner's id (`<user_id>/…`), with the same owner check on `storage.objects`. Storage files are **not** removed by the cascade: whatever deletes a user must remove them too.
 
+## Things that get around row level security
+
+`tests/database/grants.test.sql` fails on each of these:
+
+- **Views** run as their owner, so they skip the table's policies, unless created `with (security_invoker = true)`. Every view the API roles can read must have it.
+- **Materialized views and foreign tables** have no row level security at all. Don't grant them to `anon` or `authenticated`; keep them out of `public` or unexposed.
+- **Security definer functions** run as their owner. Don't put them in `public`. If one really must be callable (like `join_waitlist`), it checks `auth.uid()` itself, is reviewed, and is added to the allowlist in `grants.test.sql` by full signature (`name(argtypes)`), never by name.
+
+Since migration `20261104060000_default_privileges`, new tables and views give `anon` nothing by default; `authenticated` still gets select/insert/update/delete on them until a table revokes it, which is why the template revokes first.
+
 ## Rules for every function
 
 Supabase grants every new function in `public` to `anon` and `authenticated` directly, so `revoke … from public` alone leaves them callable (that's how `ping()` ended up open to signed-in users). Every new function:
@@ -77,7 +87,7 @@ revoke execute on function public.my_function(text) from public, anon, authentic
 grant execute on function public.my_function(text) to authenticated;  -- only what it needs
 ```
 
-`tests/database/grants.test.sql` fails if any function in `public` is callable by `anon` other than `ping` and `join_waitlist`, or by `authenticated` other than `join_waitlist`. Add a new function to that list in the same change, on purpose.
+`tests/database/grants.test.sql` fails if any function in `public` is callable by `anon` other than `ping()` and `join_waitlist(text,text)`, or by `authenticated` other than `join_waitlist(text,text)`. The lists use full signatures, so a new overload doesn't slip through under a known name. Add a new function to them in the same change, on purpose.
 
 Security definer functions: `set search_path = ''` and fully qualified names, as the waitlist functions do.
 
