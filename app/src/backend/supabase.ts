@@ -7,6 +7,13 @@ import { AppState, type AppStateStatus, type NativeEventSubscription } from 'rea
 
 import { getBackendConfig } from './config';
 
+/**
+ * Where the session lives in localStorage. Set explicitly (supabase-js would derive
+ * `sb-<ref>-auth-token`) so signOut can clear it without asking supabase-js, which refreshes
+ * first. supabase-js also uses `<key>-code-verifier` (PKCE) and `<key>-user`.
+ */
+export const SESSION_STORAGE_KEY = 'rebloom-auth';
+
 let client: SupabaseClient | null = null;
 let appStateSubscription: NativeEventSubscription | null = null;
 
@@ -34,6 +41,7 @@ export function getSupabase(): SupabaseClient | null {
   client = createClient(config.url, config.key, {
     auth: {
       storage: globalThis.localStorage,
+      storageKey: SESSION_STORAGE_KEY,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,

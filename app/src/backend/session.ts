@@ -7,7 +7,7 @@ import type { AuthChangeEvent, Session, Subscription, SupabaseClient } from '@su
 import { TimeoutError, withTimeout } from '@/lib/async';
 
 import { toBackendError, type BackendError } from './errors';
-import { getSupabase, resetSupabaseForTests } from './supabase';
+import { getSupabase, resetSupabaseForTests, SESSION_STORAGE_KEY } from './supabase';
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: BackendError };
 
@@ -16,7 +16,7 @@ export type SessionUser = { id: string; email: string | null; provider: string |
 export type SessionEvent =
   | { type: 'signed_in'; user: SessionUser }
   | { type: 'refreshed'; user: SessionUser }
-  | { type: 'signed_out'; reason: 'user' | 'session_expired' };
+  | { type: 'signed_out'; reason: 'user' | 'session_expired' | 'switched_account' };
 
 type SessionListener = (event: SessionEvent) => void;
 
@@ -44,11 +44,25 @@ function toUser(session: Session): SessionUser {
   };
 }
 
+// Listeners run inside supabase-js's event handling and inside sign-in calls: one that throws must
+// not fail the sign-in or keep the others from hearing the event.
 function emit(event: SessionEvent) {
-  for (const listener of [...listeners]) listener(event);
+  for (const listener of [...listeners]) {
+    try {
+      listener(event);
+    } catch (error) {
+      console.error('[session] a listener threw', error);
+    }
+  }
 }
 
 function noteSignedIn(user: SessionUser) {
+  if (currentUserId && currentUserId !== user.id) {
+    // Another account signed in without a sign-out first: end the previous one for listeners.
+    currentUserId = null;
+    announcedUserId = null;
+    emit({ type: 'signed_out', reason: 'switched_account' });
+  }
   currentUserId = user.id;
   if (announcedUserId === user.id) return;
   announcedUserId = user.id;
@@ -97,6 +111,12 @@ function client(): SupabaseClient | null {
 export async function getSession(): Promise<Result<Session | null>> {
   const supabase = client();
   if (!supabase) return { ok: false, error: 'not_configured' };
+  // Nothing stored: no session, without waiting on supabase-js (which may still be retrying a
+  // refresh it started before a sign-out).
+  if (!hasStoredSession()) {
+    if (currentUserId === undefined) currentUserId = null;
+    return { ok: true, value: null };
+  }
   let response: Awaited<ReturnType<SupabaseClient['auth']['getSession']>>;
   try {
     response = await withTimeout(supabase.auth.getSession(), SESSION_TIMEOUT_MS);
@@ -125,9 +145,24 @@ export function onSessionChange(listener: SessionListener): () => void {
   };
 }
 
-/** The one place every sign-in method's result goes, so all of them behave the same. */
-export async function setSessionFromAuth(result: AuthResult): Promise<Result<SessionUser>> {
-  if (!client()) return { ok: false, error: 'not_configured' };
+/**
+ * The one place every sign-in method's result goes, so all of them behave the same. Pass the call
+ * itself (`setSessionFromAuth(supabase.auth.verifyOtp(...))`): supabase-js throws, rather than
+ * returning an error, when the session can't be stored, and that becomes `unknown` here.
+ */
+export async function setSessionFromAuth(
+  pending: AuthResult | Promise<AuthResult>,
+): Promise<Result<SessionUser>> {
+  if (!client()) {
+    Promise.resolve(pending).catch(() => {});
+    return { ok: false, error: 'not_configured' };
+  }
+  let result: AuthResult;
+  try {
+    result = await pending;
+  } catch (error) {
+    return { ok: false, error: toBackendError(error) };
+  }
   if (result.error) return { ok: false, error: toBackendError(result.error) };
   const session = result.data?.session;
   if (!session) return { ok: false, error: 'unknown' };
@@ -137,22 +172,59 @@ export async function setSessionFromAuth(result: AuthResult): Promise<Result<Ses
   return { ok: true, value: user };
 }
 
+function hasStoredSession(): boolean {
+  try {
+    return globalThis.localStorage.getItem(SESSION_STORAGE_KEY) !== null;
+  } catch {
+    return true; // can't tell: let supabase-js decide (its errors map to a code)
+  }
+}
+
+function storedAccessToken(): string | null {
+  try {
+    const raw = globalThis.localStorage.getItem(SESSION_STORAGE_KEY);
+    const token = raw ? (JSON.parse(raw) as { access_token?: unknown }).access_token : null;
+    return typeof token === 'string' ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Signs this phone out at once, even offline: the stored session is removed here, not by
+ * supabase-js (which refreshes an expired token first and, offline, keeps the session). Then the
+ * server is told to end this session only, within SESSION_TIMEOUT_MS; if it can't be told the
+ * result says so, but the phone is signed out either way. Plants, scans and photos are untouched.
+ */
 export async function signOut(): Promise<Result<null>> {
   const supabase = client();
   if (!supabase) return { ok: false, error: 'not_configured' };
+  const accessToken = storedAccessToken();
+
   signingOut = true;
   try {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      // The phone must end up signed out even when the server can't be told. supabase-js 2.118
-      // already clears the session here; this covers a version that doesn't.
-      await supabase.auth.signOut({ scope: 'local' });
+    for (const key of [SESSION_STORAGE_KEY, `${SESSION_STORAGE_KEY}-code-verifier`, `${SESSION_STORAGE_KEY}-user`]) {
+      globalThis.localStorage.removeItem(key);
+    }
+  } catch {
+    // The session is still on the phone: say so, and don't tell listeners it's gone.
+    signingOut = false;
+    return { ok: false, error: 'unknown' };
+  }
+  noteSignedOut();
+  signingOut = false;
+
+  if (!accessToken) return { ok: true, value: null };
+  try {
+    const { error } = await withTimeout(supabase.auth.admin.signOut(accessToken, 'local'), SESSION_TIMEOUT_MS);
+    // 401/403/404: the server no longer knows this session, which is what we wanted.
+    if (error && !(error.status === 401 || error.status === 403 || error.status === 404)) {
       return { ok: false, error: toBackendError(error) };
     }
-    return { ok: true, value: null };
-  } finally {
-    signingOut = false;
+  } catch (error) {
+    return { ok: false, error: error instanceof TimeoutError ? 'offline' : toBackendError(error) };
   }
+  return { ok: true, value: null };
 }
 
 /** Tests only. */

@@ -4,6 +4,7 @@ import { renderRouter } from 'expo-router/testing-library';
 import { Text } from 'react-native';
 
 import RootLayout from '@/app/_layout';
+import { SESSION_STORAGE_KEY } from '@/backend/supabase';
 import { fakeSession } from '@/testing/fakeAuthServer';
 import { fakeLocalStorage } from '@/testing/fakeLocalStorage';
 import { DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
@@ -87,7 +88,7 @@ test('start-up deletes stored photos left by a save that never finished', async 
 test('opening the app and its tabs makes no network request, even with the backend configured', async () => {
   mockFontState = [true, null];
   // An expired stored session: any use of the backend would have to refresh it over the network.
-  fakeLocalStorage.setItem('sb-abc-auth-token', JSON.stringify(fakeSession({ expiresIn: -60 })));
+  fakeLocalStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(fakeSession({ expiresIn: -60 })));
   process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc.supabase.co';
   process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
   const fetchMock = jest.fn(() => Promise.reject(new TypeError('Network request failed')));

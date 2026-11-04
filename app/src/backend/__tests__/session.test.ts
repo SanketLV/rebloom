@@ -16,10 +16,7 @@ import {
   signOut,
   type SessionEvent,
 } from '../session';
-import { getSupabase } from '../supabase';
-
-// The default storage key supabase-js derives from the project URL (sb-<ref>-auth-token).
-const STORAGE_KEY = 'sb-abc-auth-token';
+import { getSupabase, SESSION_STORAGE_KEY as STORAGE_KEY } from '../supabase';
 
 let server: FakeAuthServer;
 
@@ -251,5 +248,98 @@ describe('when the server ends the session', () => {
     expect(result).toMatchObject({ ok: true, value: { id: 'u-6' } });
     expect(server.callsTo('/auth/v1/token?grant_type=refresh_token')).toBe(1);
     expect(events.map((e) => e.type)).toEqual(['refreshed']);
+  });
+});
+
+describe('break-test fixes', () => {
+  // Finding 1: supabase-js refreshes before signing out, so offline with an expired token it used
+  // to wait ~40 s and leave the session stored.
+  test('signOut offline with an expired token signs the phone out within 10 s', async () => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask', 'nextTick', 'setImmediate'] });
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    storeSession({ userId: 'u-9', expiresIn: -60 });
+    server.next.refresh = 'offline';
+    server.next.logout = 'offline';
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    let result: unknown = 'pending';
+    void signOut().then((r) => (result = r));
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(fakeLocalStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(events).toEqual([{ type: 'signed_out', reason: 'user' }]);
+    await jest.advanceTimersByTimeAsync(SESSION_TIMEOUT_MS);
+    expect(result).toEqual({ ok: false, error: 'offline' });
+    expect(await getCurrentUser()).toEqual({ ok: true, value: null });
+  });
+
+  test('signOut removes the PKCE verifier too, and asks the server to end only this session', async () => {
+    await signInWithCode();
+    fakeLocalStorage.setItem(`${STORAGE_KEY}-code-verifier`, 'verifier');
+
+    expect(await signOut()).toEqual({ ok: true, value: null });
+
+    expect(fakeLocalStorage.getItem(`${STORAGE_KEY}-code-verifier`)).toBeNull();
+    const logout = server.fetch.mock.calls.find(([url]) => String(url).includes('/auth/v1/logout'));
+    expect(String(logout?.[0])).toContain('scope=local');
+  });
+
+  // Finding 3: a listener that throws used to make sign-in throw and starve later listeners.
+  test('a listener that throws neither breaks sign-in nor stops the other listeners', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const later = jest.fn();
+    onSessionChange(() => {
+      throw new Error('listener bug');
+    });
+    onSessionChange(later);
+
+    const result = await signInWithCode();
+
+    expect(result).toMatchObject({ ok: true });
+    expect(later).toHaveBeenCalledWith(expect.objectContaining({ type: 'signed_in' }));
+    expect(logged).toHaveBeenCalled();
+  });
+
+  // Finding 4: storage failures used to throw out of the Result-returning functions.
+  test("a sign-in whose session can't be stored returns unknown instead of throwing", async () => {
+    jest.spyOn(fakeLocalStorage, 'setItem').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    const client = getSupabase()!;
+
+    const result = await setSessionFromAuth(
+      client.auth.verifyOtp({ email: 'sam@example.com', token: '123456', type: 'email' }),
+    );
+
+    expect(result).toEqual({ ok: false, error: 'unknown' });
+  });
+
+  test("signOut when storage can't be cleared returns unknown and says nothing to listeners", async () => {
+    await signInWithCode();
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    jest.spyOn(fakeLocalStorage, 'removeItem').mockImplementation(() => {
+      throw new Error('disk error');
+    });
+
+    expect(await signOut()).toEqual({ ok: false, error: 'unknown' });
+    expect(events).toEqual([]);
+  });
+
+  // Finding 6: switching accounts used to announce the new user without signing out the old one.
+  test('signing in as someone else first signs out the previous user', async () => {
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    server.sessionOptions = { userId: 'u-a', email: 'a@example.com' };
+    await signInWithCode();
+    server.sessionOptions = { userId: 'u-b', email: 'b@example.com' };
+    await signInWithCode();
+
+    expect(events.map((e) => (e.type === 'signed_out' ? `out:${e.reason}` : `${e.type}:${'user' in e ? e.user.id : ''}`))).toEqual([
+      'signed_in:u-a',
+      'out:switched_account',
+      'signed_in:u-b',
+    ]);
   });
 });
