@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { RECOVERY_WIDTHS, srcSetFor } from '../lib/photos';
 
-const SIZES = '(min-width: 1280px) 480px, (min-width: 760px) 36vw, calc(100vw - 80px)';
+const SIZES = '(min-width: 1280px) 480px, (min-width: 760px) 36vw, (min-width: 560px) 480px, calc(100vw - 80px)';
 
 const valueText = (d: number) => `Day ${d} of 7${d === 7 ? ', recovered' : d === 1 ? ', drooping' : ''}`;
 

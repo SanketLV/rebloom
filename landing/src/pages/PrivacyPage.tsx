@@ -9,7 +9,7 @@ export function PrivacyPage() {
       </header>
       <main className="mx-auto max-w-[680px] px-[clamp(16px,4vw,32px)] pb-24 pt-[clamp(48px,8vw,96px)] [&_h2]:mb-2 [&_h2]:mt-10 [&_h2]:font-sans [&_h2]:text-[19px] [&_h2]:font-bold [&_h2]:leading-[1.3] [&_h2]:tracking-normal">
         <h1 className="mb-3 text-[clamp(2.6rem,7vw,4rem)] leading-none">Privacy</h1>
-        <p className="text-[14px]">Last updated 31 October 2026</p>
+        <p className="text-[14px]">Last updated 4 November 2026</p>
         {/* TODO before launch: GDPR wants the controller's legal name and country under "Who we are", and the
             transfer sentence is only true once Supabase's DPA is signed (dashboard: Organization > Legal Documents). */}
 

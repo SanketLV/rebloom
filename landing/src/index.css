@@ -128,7 +128,7 @@
   .symptoms label:active, .waitlist button:not([aria-disabled="true"]):active { transform: scale(0.97); }
   /* Browsers without scroll timelines keep the photo still and fully covering its section. */
   @supports (animation-timeline: view()) {
-    .final-media img { animation: final-settle linear both; animation-timeline: view(); animation-range: entry 0% cover 50%; }
+    .final-media img { animation: final-settle linear both; animation-timeline: view(); animation-range: entry 0% entry 100%; }
   }
 }
 

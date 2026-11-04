@@ -27,7 +27,7 @@ export function FieldNotes() {
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
     if (saveData || typeof IntersectionObserver === 'undefined') return;
     const io = new IntersectionObserver((entries, obs) => {
-      if (!entries[0].isIntersecting) return;
+      if (!entries.some(e => e.isIntersecting)) return;
       obs.disconnect();
       setNear(true);
     }, { rootMargin: '100px 0px' });

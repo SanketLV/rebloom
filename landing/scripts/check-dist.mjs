@@ -75,7 +75,7 @@ check(/@supports \(animation-timeline:\s*view\(\)\)\s*\{[^{}]*\{[^{}]*animation-
 // Every local URL resolves to a built file, with exact case (Windows matches case-insensitively, Linux hosts don't).
 const manifest = JSON.parse(read('site.webmanifest'));
 // React writes srcSet and imageSrcSet in camelCase; HTML doesn't care, this regex has to.
-const srcsetUrls = Object.values(pages).flatMap(h => [...h.matchAll(/\b(?:src|image)set="([^"]+)"/gi)]
+const srcsetUrls = Object.values(pages).flatMap(h => [...h.matchAll(/\b(?:image)?srcset="([^"]+)"/gi)]
   .flatMap(m => m[1].split(',').map(candidate => candidate.trim().split(/\s+/)[0])));
 check(new Set(srcsetUrls.filter(u => u.endsWith('-480.webp'))).size === 10, 'index: all 10 in-page photos have smaller versions');
 const urls = [...new Set([

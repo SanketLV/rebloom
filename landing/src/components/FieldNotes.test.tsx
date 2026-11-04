@@ -35,6 +35,13 @@ describe('FieldNotes photo preload', () => {
     expect(observers[0].disconnect).toHaveBeenCalled();
   });
 
+  it('reads every entry in a batch, not just the first', () => {
+    stubObserver();
+    const { container } = render(<FieldNotes />);
+    act(() => observers[0].cb([{ isIntersecting: false }, { isIntersecting: true }] as IntersectionObserverEntry[], observers[0] as unknown as IntersectionObserver));
+    expect(loadingOf(container)).toEqual(['eager', 'eager', 'eager']);
+  });
+
   it('stays lazy when the section has not come near', () => {
     stubObserver();
     const { container } = render(<FieldNotes />);
