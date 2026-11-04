@@ -1,0 +1,4 @@
+# Keep SQL files LF on every machine. Postgres stores a function body exactly as written, so a
+# Windows checkout with CRLF would put \r into every function the migrations create, and
+# `supabase db diff` would then report every function as changed.
+*.sql text eol=lf
