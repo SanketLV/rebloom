@@ -3,7 +3,7 @@
 **Spec**: .planning/specs/supabase-foundation.md
 **Epic**: Cloud backup of plants (step 1 of 3)
 **Created**: 2026-11-03
-**Status**: draft
+**Status**: done
 **Risk**: high
 
 **Build notes (tasks 7–13, 2026-11-03)**: `npx expo install` can't reach the Expo API from the cloud session (proxy 403), so supabase-js was installed with `EXPO_OFFLINE=1 npx expo install @supabase/supabase-js` (same result: the SDK doesn't pin it). The spike passed: the session tests run the real supabase-js against `src/testing/fakeAuthServer.ts`. The full app suite has flaky route-rendering tests that fail 1–5 per run before and after this work (each file passes alone); tracked as a separate task.
@@ -19,6 +19,8 @@
 **Adversarial review, round 2 (2026-11-04)**: three reviewers (database, session logic, tests/docs), 16 findings after merging duplicates; all fixed test-first. Highlights: passwords cleared when an address is confirmed (pre-sign-up account takeover; migration `20261104070000`; the first version refused password sign-ups and broke code sign-ups on the local stack, since the auth server gives those a random password), views/materialized views/definer functions covered by the rules and tests, sign-out made race-proof (supabase-js can't write the session back while signed out), logout results read correctly, the fake auth server answers like real Supabase, RLS tests now fail on the reviewer's weakened templates, migrations check their own effect, the import guard parses imports, production tests opt-in. One reviewer claim didn't hold (migrations being no-ops on production: owner and grantor there are `postgres`). In the final check the config property test found one more bad URL (`https:///&`), fixed. Harness: pgTAP 51/51. Pre-existing hex-guard gaps queued as a separate task.
 
 **After round 2, on Sanket's local stack (2026-11-04)**: `supabase test db` 52/52 (4 files), local API 8/8, including the takeover test (an attacker's password fails before and after the owner confirms by code, so confirmation goes through the update the trigger watches). Left: Sanket reads the diff, then task 16.
+
+**Task 16, production (2026-11-04)**: pushed from `feature/supabase-foundation` before merging. Dry run listed exactly `20261104050000_ping_grant`, `20261104060000_default_privileges`, `20261104070000_clear_password_on_confirm`; all three applied (their self-checks passed). Verified read-only afterwards: 7 migrations recorded; `ping()` anon yes / authenticated no; `join_waitlist()` unchanged; default grants on new public tables: anon none, authenticated `arwd`; the clear-password trigger installed and enabled, its function not callable by API roles; waitlist rows (5) intact and closed; the advisor's `ping()`-for-authenticated warning gone. Keep-alive workflow run by hand: success. Production waitlist tests (`REBLOOM_PROD_TESTS=1`) 19/19. "Confirm email" on in the dashboard. **The supabase-foundation plan is complete.**
 
 **Stack**: Expo SDK 58 · TypeScript strict · jest-expo 58 + @testing-library/react-native 14 · Supabase CLI v3 (in v3, `migration list`, `db diff` and `db push` target the **local** database unless given `--remote`; `--linked` is gone) (`npx supabase@3`, or Homebrew; the exact version goes in `supabase/README.md`) · Docker. New app dependency: `@supabase/supabase-js` (2.118.0 is current on npm today; `npx expo install` picks the version). Already installed: `expo-sqlite`, `fast-check`.
 
