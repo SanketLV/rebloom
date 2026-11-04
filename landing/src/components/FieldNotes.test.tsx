@@ -59,6 +59,23 @@ describe('FieldNotes photo preload', () => {
     expect(screen.getByRole('img', { name: 'A green leaf dusted with white powdery patches' })).toBeVisible();
   });
 
+  it.each(['2g', 'slow-2g'])('does not preload on %s; tapping a chip still shows the photo', async effectiveType => {
+    stubObserver();
+    Object.defineProperty(navigator, 'connection', { value: { effectiveType }, configurable: true });
+    const { container } = render(<FieldNotes />);
+    expect(observers).toHaveLength(0);
+    expect(loadingOf(container)).toEqual(['lazy', 'lazy', 'lazy']);
+    await userEvent.click(screen.getByRole('radio', { name: 'White powdery patches' }));
+    expect(screen.getByRole('img', { name: 'A green leaf dusted with white powdery patches' })).toBeVisible();
+  });
+
+  it.each(['3g', '4g'])('still preloads on %s', effectiveType => {
+    stubObserver();
+    Object.defineProperty(navigator, 'connection', { value: { effectiveType }, configurable: true });
+    render(<FieldNotes />);
+    expect(observers).toHaveLength(1);
+  });
+
   it('stays lazy without IntersectionObserver', () => {
     vi.stubGlobal('IntersectionObserver', undefined);
     const { container } = render(<FieldNotes />);

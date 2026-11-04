@@ -63,7 +63,7 @@ Test conditions:
 **Fonts**
 - Self-host the latin subsets of Figtree and Instrument Serif as `woff2` in `landing/public/fonts/`, with their OFL license text.
 - Remove the Google Fonts links and preconnects from `index.html` and `privacy.html`. Keep the Supabase preconnect in `index.html`.
-- Preload the fonts used above the fold.
+- No font preloads. Measured on slow 4G, they delayed first paint without preventing the font swap (see the plan's Build notes).
 - Add metric-matched fallback faces covering Windows, macOS/iOS and Android system fonts. If this can't meet the CLS target, use `font-display: optional` for the affected face and record why in the plan.
 - Remove the Google Fonts sentence from the privacy page, since it would no longer be true.
 

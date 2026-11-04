@@ -218,3 +218,6 @@ Changes from the plan, found by measuring:
 - **Commits are grouped by phase,** as `/spartan:build` asks, not one per task.
 - **The waitlist check uses a mocked RPC, not the local stack.** `WAITLIST.url` is fixed to production in `lib/waitlist.ts`, so a real sign-up from the built page would reach production.
 - **Mobile LCP target missed.** Simulated LCP is 2.1 s against a 1.8 s target, the same as the baseline, and stays 2.1 s with the hero fade removed.
+- **No font preloads, reversing the plan.** On slow 4G (median of 5 filmstrips), first text and photo appear at 757 ms without preloads and 903 ms with them, and the photo reaches 90% at 868 ms and 1028 ms. The fallback font still shows first either way. Lighthouse's simulation prefers preloads (mobile FCP 1.4 s vs 1.7 s), but its numbers don't match the recorded frames.
+- **LCP misleads on the hero.** With the composited fade, reported LCP can land hundreds of milliseconds after the photo starts showing, so judge hero timing from frames.
+- **Chip preload also skips `2g` and `slow-2g`.** iOS has no `navigator.connection`, so it always preloads.

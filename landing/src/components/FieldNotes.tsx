@@ -20,12 +20,13 @@ export function FieldNotes() {
   }, []);
 
   // Hidden photos are lazy, so they'd only start loading on tap. Fetch them as the visitor scrolls toward the plate,
-  // unless they asked to save data; then, or without IntersectionObserver, a tap still loads its photo.
+  // unless they asked to save data or are on 2G; then, or without IntersectionObserver, a tap still loads its photo.
+  // iOS has no navigator.connection, so it always preloads.
   // Watch the plate, not the section: the section starts at the fold, so it would count as near on page load and
   // charge every visitor for photos they may never see.
   useEffect(() => {
-    const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
-    if (saveData || typeof IntersectionObserver === 'undefined') return;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (connection?.saveData || connection?.effectiveType?.endsWith('2g') || typeof IntersectionObserver === 'undefined') return;
     const io = new IntersectionObserver((entries, obs) => {
       if (!entries.some(e => e.isIntersecting)) return;
       obs.disconnect();
