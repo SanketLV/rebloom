@@ -26,6 +26,8 @@ describe('readBackendConfig', () => {
     ['a host the URL parser rejects', { url: 'https://[', key: KEY }],
     ['a port above 65535', { url: 'https://abc.supabase.co:99999', key: KEY }],
     ['user and password in the URL', { url: 'https://me:secret@abc.supabase.co', key: KEY }],
+    ['no host after the scheme (found by the property test)', { url: 'https:///&', key: KEY }],
+    ['a host with characters a hostname never has', { url: 'https://a&b.co', key: KEY }],
   ])('%s → not configured', (_name, env) => {
     expect(readBackendConfig(env, true)).toEqual({ configured: false });
   });

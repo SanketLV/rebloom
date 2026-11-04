@@ -8,8 +8,11 @@ type BackendEnv = { url?: string; key?: string };
 
 // Parsed with the same URL parser supabase-js uses, so anything accepted here also makes a
 // client (a looser check let `https://[` through, and creating the client then threw).
+// A host right after the scheme: letters, digits, dots and dashes, or an IPv6 literal.
+const SCHEME_THEN_HOST = /^https?:\/\/(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[[0-9a-f:.]+\])(?::\d+)?(?:[/?#]|$)/i;
+
 function usableUrl(url: string, isDev: boolean): boolean {
-  if (/\s/.test(url)) return false;
+  if (/\s/.test(url) || !SCHEME_THEN_HOST.test(url)) return false;
   let parsed: URL;
   try {
     parsed = new URL(url);
