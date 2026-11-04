@@ -1,7 +1,56 @@
-import { AuthApiError, AuthRetryableFetchError, AuthUnknownError } from '@supabase/supabase-js';
+import {
+  AuthApiError,
+  AuthRetryableFetchError,
+  AuthUnknownError,
+  createClient,
+} from '@supabase/supabase-js';
 import * as fc from 'fast-check';
 
 import { BACKEND_ERRORS, toBackendError } from '../errors';
+
+// What real Supabase Auth answers (API version 2024-01-01: `code` + `message`, with the version
+// header), parsed by supabase-js exactly as in the app: through a real client call.
+async function realAuthError(status: number, body: object) {
+  const client = createClient('https://abc.supabase.co', 'sb_publishable_test', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      fetch: async () =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'Content-Type': 'application/json', 'X-Supabase-Api-Version': '2024-01-01' },
+        }),
+    },
+  });
+  const { error } = await client.auth.getUser('a.b.c');
+  return error;
+}
+
+describe('toBackendError with errors as supabase-js really builds them', () => {
+  test('session_not_found (403) → session_expired', async () => {
+    const error = await realAuthError(403, { code: 'session_not_found', message: 'Session not found' });
+    expect(toBackendError(error)).toBe('session_expired');
+  });
+
+  test('refresh_token_not_found (400) → session_expired', async () => {
+    const error = await realAuthError(400, { code: 'refresh_token_not_found', message: 'Invalid' });
+    expect(toBackendError(error)).toBe('session_expired');
+  });
+
+  test('user_not_found (404) → session_expired', async () => {
+    const error = await realAuthError(404, { code: 'user_not_found', message: 'User not found' });
+    expect(toBackendError(error)).toBe('session_expired');
+  });
+
+  test('over_request_rate_limit (429) → rate_limited', async () => {
+    const error = await realAuthError(429, { code: 'over_request_rate_limit', message: 'Slow down' });
+    expect(toBackendError(error)).toBe('rate_limited');
+  });
+
+  test('otp_expired (403) → unknown, never the raw message', async () => {
+    const error = await realAuthError(403, { code: 'otp_expired', message: 'Token has expired' });
+    expect(toBackendError(error)).toBe('unknown');
+  });
+});
 
 describe('toBackendError', () => {
   test('a request that never reached the server → offline', () => {
@@ -23,7 +72,7 @@ describe('toBackendError', () => {
     );
   });
 
-  test.each(['refresh_token_not_found', 'refresh_token_already_used', 'session_not_found', 'user_not_found'])(
+  test.each(['refresh_token_not_found', 'refresh_token_already_used', 'user_not_found'])(
     'the server no longer accepts the session (%s) → session_expired',
     (code) => {
       expect(toBackendError(new AuthApiError('Invalid', 400, code))).toBe('session_expired');

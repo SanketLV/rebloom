@@ -1,7 +1,17 @@
 // A `fetch` stand-in that answers the few Supabase Auth endpoints the session tests use, so the
 // real supabase-js runs against it. Switch an endpoint's behaviour with `server.next.<endpoint>`.
 
-type Mode = 'ok' | 'rejected' | 'offline' | 'rate_limited' | 'server_error';
+// rejected: the endpoint's usual refusal (verify: otp_expired, refresh: refresh_token_not_found,
+// logout: session_not_found). session_gone / bad_jwt: what logout answers when the session was
+// already ended / when the access token has expired.
+type Mode =
+  | 'ok'
+  | 'rejected'
+  | 'offline'
+  | 'rate_limited'
+  | 'server_error'
+  | 'session_gone'
+  | 'bad_jwt';
 
 export type FakeSessionOptions = {
   userId?: string;
@@ -47,25 +57,44 @@ export function fakeSession(options: FakeSessionOptions = {}) {
   };
 }
 
+// Real Supabase Auth (API version 2024-01-01) answers errors as { code, message } with this
+// header; supabase-js only reads `code` when the header is there.
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Supabase-Api-Version': '2024-01-01' },
   });
 }
 
-function failure(mode: Exclude<Mode, 'ok'>, rejectedCode: string): Promise<Response> {
+const REAL_REFUSALS = {
+  otp_expired: 403,
+  refresh_token_not_found: 400,
+  session_not_found: 403,
+} as const;
+
+function failure(
+  mode: Exclude<Mode, 'ok'>,
+  rejectedCode: keyof typeof REAL_REFUSALS,
+): Promise<Response> {
   switch (mode) {
     case 'offline':
       return Promise.reject(new TypeError('Network request failed'));
     case 'rate_limited':
       return Promise.resolve(
-        json(429, { code: 'over_request_rate_limit', msg: 'Request rate limit reached' }),
+        json(429, { code: 'over_request_rate_limit', message: 'Request rate limit reached' }),
       );
     case 'server_error':
-      return Promise.resolve(json(502, { msg: 'Bad gateway' }));
+      return Promise.resolve(json(502, { message: 'Bad gateway' }));
+    case 'session_gone':
+      return Promise.resolve(json(403, { code: 'session_not_found', message: 'Session not found' }));
+    case 'bad_jwt':
+      return Promise.resolve(
+        json(403, { code: 'bad_jwt', message: 'invalid JWT: token is expired' }),
+      );
     case 'rejected':
-      return Promise.resolve(json(400, { code: rejectedCode, msg: 'Rejected' }));
+      return Promise.resolve(
+        json(REAL_REFUSALS[rejectedCode], { code: rejectedCode, message: 'Rejected' }),
+      );
   }
 }
 
@@ -84,9 +113,15 @@ export class FakeAuthServer {
   }
 
   readonly fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    const url = new URL(
+      typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+    );
     const method = (init?.method ?? 'GET').toUpperCase();
-    const path = url.pathname + (url.searchParams.get('grant_type') ? `?grant_type=${url.searchParams.get('grant_type')}` : '');
+    const path =
+      url.pathname +
+      (url.searchParams.get('grant_type')
+        ? `?grant_type=${url.searchParams.get('grant_type')}`
+        : '');
     this.calls.push({ method, path });
 
     if (path === '/auth/v1/verify') {
@@ -101,6 +136,6 @@ export class FakeAuthServer {
       if (this.next.logout !== 'ok') return failure(this.next.logout, 'session_not_found');
       return new Response(null, { status: 204 });
     }
-    return json(404, { msg: `fake auth server: no route for ${method} ${path}` });
+    return json(404, { message: `fake auth server: no route for ${method} ${path}` });
   });
 }
