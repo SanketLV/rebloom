@@ -51,13 +51,17 @@ test('image picker asks for photos only and leaves the camera permission alone',
 });
 
 // Supabase foundation: nothing a user can reach imports the backend yet, so an app start makes
-// no network request. The accounts spec lifts this for its own screens only.
-test('screens and features never import src/backend', () => {
+// no network request. Every file under src/ is checked (not a list of folders, which a new folder
+// would slip past). The accounts spec adds its screens to ALLOWED_BACKEND_IMPORTERS on purpose.
+const ALLOWED_BACKEND_IMPORTERS: string[] = [];
+
+test('only the files listed in ALLOWED_BACKEND_IMPORTERS import src/backend', () => {
   const IMPORTS_BACKEND = /(?:from\s+|require\(\s*|import\(\s*)['"](?:@\/backend|(?:\.{1,2}\/)+(?:[\w-]+\/)*backend)(?:\/[\w-]+)*['"]/;
-  const offenders = ['app', 'scan', 'plants', 'storage', 'photos', 'diagnosis', 'components', 'lib', 'theme']
-    .flatMap((dir) => sourceFiles(join(SRC, dir)))
-    .filter((file) => IMPORTS_BACKEND.test(readFileSync(file, 'utf8')))
-    .map((file) => relative(SRC, file));
+  const offenders = sourceFiles(SRC)
+    .map((file) => relative(SRC, file).split('\\').join('/'))
+    .filter((file) => !file.startsWith('backend/') && !file.startsWith('testing/'))
+    .filter((file) => !ALLOWED_BACKEND_IMPORTERS.includes(file))
+    .filter((file) => IMPORTS_BACKEND.test(readFileSync(join(SRC, file), 'utf8')));
   expect(offenders).toEqual([]);
 });
 
