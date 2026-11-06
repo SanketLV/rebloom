@@ -9,7 +9,7 @@ export function PrivacyPage() {
       </header>
       <main className="mx-auto max-w-[680px] px-[clamp(16px,4vw,32px)] pb-24 pt-[clamp(48px,8vw,96px)] [&_h2]:mb-2 [&_h2]:mt-10 [&_h2]:font-sans [&_h2]:text-[19px] [&_h2]:font-bold [&_h2]:leading-[1.3] [&_h2]:tracking-normal">
         <h1 className="mb-3 text-[clamp(2.6rem,7vw,4rem)] leading-none">Privacy</h1>
-        <p className="text-[14px]">Last updated 31 October 2026</p>
+        <p className="text-[14px]">Last updated 4 November 2026</p>
         {/* TODO before launch: GDPR wants the controller's legal name and country under "Who we are", and the
             transfer sentence is only true once Supabase's DPA is signed (dashboard: Organization > Legal Documents). */}
 
@@ -25,7 +25,7 @@ export function PrivacyPage() {
         <p>To send you one email when Rebloom launches. We do this because you asked us to by joining (your consent). We won't send anything else, and we won't sell your address. We'll only share it with the service we use to send that one email.</p>
 
         <h2>Where it's kept</h2>
-        <p>The waitlist is stored with Supabase on servers in the United States. If you're in the UK or EU, this means your email leaves those regions; the transfer is covered by Supabase's data processing agreement, which includes the standard contractual clauses approved for such transfers. The page's fonts are loaded from Google Fonts, which means Google sees your IP address when the page loads.</p>
+        <p>The waitlist is stored with Supabase on servers in the United States. If you're in the UK or EU, this means your email leaves those regions; the transfer is covered by Supabase's data processing agreement, which includes the standard contractual clauses approved for such transfers.</p>
 
         <h2>How long</h2>
         <p>Until the launch email has been sent. After that we delete the list.</p>

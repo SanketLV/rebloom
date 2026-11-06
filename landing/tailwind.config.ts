@@ -22,8 +22,8 @@ export default {
         photo: '#CFC8B6',
       },
       fontFamily: {
-        serif: ['"Instrument Serif"', 'Georgia', 'serif'],
-        sans: ['Figtree', 'system-ui', 'sans-serif'],
+        serif: ['"Instrument Serif"', '"Instrument Serif Georgia"', '"Instrument Serif Noto"', 'Georgia', 'serif'],
+        sans: ['Figtree', '"Figtree Arial"', '"Figtree Roboto"', 'system-ui', 'sans-serif'],
       },
       spacing: {
         gutter: 'clamp(16px, 4vw, 56px)',

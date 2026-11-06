@@ -1,3 +1,4 @@
+import { srcSetFor } from '../lib/photos';
 import { RecoveryPanel } from './RecoveryPanel';
 
 const STEPS = [
@@ -13,10 +14,11 @@ export function HowItWorks() {
         <h2 id="how-title">How it works</h2>
         <ol className="steps mt-[clamp(40px,6vw,72px)] grid gap-x-8 gap-y-10 min-[760px]:grid-cols-3">
           {STEPS.map(s => (
-            <li key={s.title} className="step">
+            <li key={s.title} data-reveal className="step">
               {/* The step number sits on the photo, bottom left (CSS counter). */}
               <figure className="step-figure relative mb-5">
                 <img src={s.photo} width={896} height={1120} alt="" loading="lazy"
+                  srcSet={srcSetFor(s.photo)} sizes="(min-width: 1280px) 372px, (min-width: 760px) 29vw, calc(100vw - 32px)"
                   className="aspect-[4/5] w-full rounded bg-photo object-cover max-[899px]:max-h-[52svh] min-[760px]:aspect-square" />
               </figure>
               <h3 className="font-sans text-[20px] font-bold tracking-normal">{s.title}</h3>

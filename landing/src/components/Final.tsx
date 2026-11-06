@@ -3,7 +3,12 @@ import { WaitlistForm } from './WaitlistForm';
 export function Final() {
   return (
     <section className="final relative isolate overflow-hidden bg-olive pt-[clamp(140px,22vw,300px)] text-surface" aria-labelledby="final-title">
-      <div className="final-media" aria-hidden="true" />
+      <div className="final-media" aria-hidden="true">
+        <picture>
+          <source media="(max-aspect-ratio: 4/5)" srcSet="/assets/lush-tall.webp" />
+          <img src="/assets/lush-wide.webp" width={1600} height={896} alt="" loading="lazy" />
+        </picture>
+      </div>
       <div className="wrap">
         <h2 id="final-title" className="max-w-[12ch] text-[clamp(3.2rem,9vw,8rem)] leading-[.92] tracking-[-0.025em]">Get Rebloom first.</h2>
         <p className="mb-9 mt-7 max-w-[34ch] text-[clamp(17px,1.6vw,20px)] text-surface/[.82]">Join the waitlist and we'll email you once, on launch day.</p>
