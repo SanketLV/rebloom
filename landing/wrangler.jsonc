@@ -1,0 +1,10 @@
+// Cloudflare Workers static-assets deploy for the landing page (assets only, no Worker script).
+// `npm run deploy` builds, runs the dist checks, then uploads dist/.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "rebloom-landing",
+  "compatibility_date": "2026-11-03",
+  "assets": {
+    "directory": "./dist/"
+  }
+}
