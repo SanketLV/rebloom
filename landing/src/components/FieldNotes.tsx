@@ -2,6 +2,11 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { SYMPTOMS, type Symptom } from '../content/symptoms';
 import { srcSetFor } from '../lib/photos';
 
+const saveBandwidth = () => {
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  return !!(connection?.saveData || connection?.effectiveType?.endsWith('2g'));
+};
+
 // One symptom at a time: the checked radio picks its photo, caption and entry. All four stay in the HTML and the
 // rest get `hidden` (not :has(), which iOS < 15.4 and Firefox < 121 lack); the server renders "tips" active, so
 // the first symptom shows even without JS.
@@ -24,13 +29,13 @@ export function FieldNotes() {
   // iOS has no navigator.connection, so it always preloads.
   // Watch the plate, not the section: the section starts at the fold, so it would count as near on page load and
   // charge every visitor for photos they may never see.
+  // Checked again when the plate comes near: Save-Data or the network can change while the visitor reads.
   useEffect(() => {
-    const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-    if (connection?.saveData || connection?.effectiveType?.endsWith('2g') || typeof IntersectionObserver === 'undefined') return;
+    if (saveBandwidth() || typeof IntersectionObserver === 'undefined') return;
     const io = new IntersectionObserver((entries, obs) => {
       if (!entries.some(e => e.isIntersecting)) return;
       obs.disconnect();
-      setNear(true);
+      if (!saveBandwidth()) setNear(true);
     }, { rootMargin: '100px 0px' });
     io.observe(plate.current!);
     return () => io.disconnect();

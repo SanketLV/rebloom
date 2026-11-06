@@ -82,7 +82,7 @@ All motion uses `transform` and `opacity` only. The shared curve is `cubic-bezie
 |---|---|---|---|
 | 1 | Symptom photo and entry, on chip change | Fade in, 200 ms. Never on first paint | No animation |
 | 2 | How it works steps 1–3, Our promise rows | `opacity: 0`, `translateY(16px)` to settled, 500 ms, 60 ms stagger, once | Opacity only, 200 ms |
-| 3 | Hero photo on load | `opacity: 0→1`, `scale(1.03→1)`, 700 ms, CSS only | Opacity only, 200 ms |
+| 3 | Hero photo on first paint | `opacity: 0→1`, `scale(1.03→1)`, 700 ms, CSS only | Opacity only, 200 ms |
 | 4 | Closing photo on scroll | Scroll-linked `scale(1.08→1)` with `animation-timeline: view()` inside `@supports` | No animation |
 | 5 | Chip labels, Join button | `:active { transform: scale(0.97) }`, 160 ms | No scale |
 
@@ -142,7 +142,7 @@ Must look the same at rest at 375, 768, 1366×768 and 1440, in pages and in scre
 - **Reduced motion, including when changed mid-visit:** no reveal travel or scale, and hidden items still appear.
 - **Chip tapped before the preload finishes:** the placeholder shows, then the photo; rapid taps always end on the last chip.
 - **Preload fails or Save-Data is on:** the photo loads on tap, with no error.
-- **Slow hero photo:** the olive background stays underneath and text stays readable. LCP doesn't regress from the fade.
+- **Slow hero photo:** the olive background stays underneath and text stays readable. LCP doesn't regress from the fade. A photo arriving after the 700 ms fade appears without it; starting the fade on the load event would need JS, and the photo would stay hidden if JS failed.
 - **Phone rotated:** the hero and closing photos switch art direction with the same crop rules.
 - **No `animation-timeline` support:** the closing photo stays static and fully covers its section, with no overflow.
 - **Android has no Times New Roman or Georgia:** the fallback stack still meets the CLS target.

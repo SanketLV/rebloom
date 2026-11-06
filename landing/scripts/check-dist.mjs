@@ -56,7 +56,7 @@ for (const tag of [
 
 // Filmstrips on slow 4G (2026-11-04): font preloads held first paint back 146 ms and the hero photo 160 ms, and the
 // font still swapped at about the same moment. Matched fallbacks already stop the jump, so don't add them back.
-check(!/rel="preload"[^>]*as="font"/.test(index), 'index: no font preloads');
+check(!/<link\b(?=[^>]*\srel=["']?preload\b)(?=[^>]*\sas=["']?font\b)/i.test(index), 'index: no font preloads');
 
 // Fonts are self-hosted: Google gets no request, and the privacy page doesn't claim otherwise.
 for (const [name, html] of Object.entries(pages))
@@ -102,6 +102,7 @@ check(urls.length > 20 && missing.length === 0, `all ${urls.length} local URLs r
 
 // Old-browser output (iOS 14+ in-app browsers).
 const js = [...external.map(u => read(u.replace(/^\//, ''))), ...inline].join('\n');
+check(!/fonts\.googleapis\.com|fonts\.gstatic\.com/.test(css + js), 'css and js: no Google Fonts request');
 check(!css.includes(':has('), 'css: no :has()');
 check(!/@layer\b/.test(css), 'css: no @layer');
 check(!/\{[^{}]*&[^{}]*\{/.test(css), 'css: no nesting');

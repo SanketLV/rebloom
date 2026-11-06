@@ -9,13 +9,13 @@ const loadingOf = (container: HTMLElement) =>
   [...container.querySelectorAll('img[data-s]')].slice(1).map(img => img.getAttribute('loading'));
 
 describe('FieldNotes photo preload', () => {
-  let observers: { cb: IntersectionObserverCallback; opts?: IntersectionObserverInit; disconnect: ReturnType<typeof vi.fn> }[] = [];
+  let observers: { cb: IntersectionObserverCallback; opts?: IntersectionObserverInit; disconnect: ReturnType<typeof vi.fn>; observe: ReturnType<typeof vi.fn> }[] = [];
   const stubObserver = () => {
     observers = [];
     vi.stubGlobal('IntersectionObserver', class {
       disconnect = vi.fn();
       constructor(public cb: IntersectionObserverCallback, public opts?: IntersectionObserverInit) { observers.push(this); }
-      observe() {}
+      observe = vi.fn();
     });
   };
   const near = () => act(() => observers[0].cb([{ isIntersecting: true } as IntersectionObserverEntry], observers[0] as unknown as IntersectionObserver));
@@ -30,6 +30,8 @@ describe('FieldNotes photo preload', () => {
     const { container } = render(<FieldNotes />);
     expect(loadingOf(container)).toEqual(['lazy', 'lazy', 'lazy']);
     expect(observers[0].opts?.rootMargin).toBe('100px 0px');
+    // The plate, not the section: the section starts at the fold, so it would count as near on page load.
+    expect(observers[0].observe).toHaveBeenCalledWith(container.querySelector('figure'));
     near();
     expect(loadingOf(container)).toEqual(['eager', 'eager', 'eager']);
     expect(observers[0].disconnect).toHaveBeenCalled();
@@ -67,6 +69,17 @@ describe('FieldNotes photo preload', () => {
     expect(loadingOf(container)).toEqual(['lazy', 'lazy', 'lazy']);
     await userEvent.click(screen.getByRole('radio', { name: 'White powdery patches' }));
     expect(screen.getByRole('img', { name: 'A green leaf dusted with white powdery patches' })).toBeVisible();
+  });
+
+  it.each([{ saveData: true }, { effectiveType: '2g' }])('re-checks the connection when the plate comes near: %o', change => {
+    stubObserver();
+    const connection: { saveData?: boolean; effectiveType?: string } = { saveData: false, effectiveType: '4g' };
+    Object.defineProperty(navigator, 'connection', { value: connection, configurable: true });
+    const { container } = render(<FieldNotes />);
+    Object.assign(connection, change);
+    near();
+    expect(loadingOf(container)).toEqual(['lazy', 'lazy', 'lazy']);
+    expect(observers[0].disconnect).toHaveBeenCalled();
   });
 
   it.each(['3g', '4g'])('still preloads on %s', effectiveType => {
