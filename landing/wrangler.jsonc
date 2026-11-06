@@ -8,5 +8,12 @@
   "compatibility_date": "2026-11-03",
   "assets": {
     "directory": "./dist/"
+  },
+  // Workers Logs, query strings stripped from logged URLs (privacy.html already discloses the host's
+  // short-lived access logs). On the Workers Free plan, ingestion stops at the daily cap instead of billing.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true
   }
 }
