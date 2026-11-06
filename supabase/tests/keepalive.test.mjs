@@ -1,7 +1,7 @@
 // Swarm finding 1: Supabase wants "a few requests each day" or a free project pauses, and a paused project
 // loses every sign-up. Keep the keep-alive schedule at least daily.
 //
-//   node --test "supabase/tests/*.test.mjs"
+//   node --test "supabase/tests/*.test.mjs"   (static, no network)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

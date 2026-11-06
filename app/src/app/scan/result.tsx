@@ -11,6 +11,7 @@ import { CONDITIONS } from '@/diagnosis/conditions';
 import { isDemoDiagnoser, isLowConfidence } from '@/diagnosis/confidence';
 import { QUESTIONS } from '@/diagnosis/questions';
 import type { Answers, Severity } from '@/diagnosis/types';
+import { goBackOr } from '@/lib/goBack';
 import { Chip } from '@/scan/components/Chip';
 import { ConfidenceBar } from '@/scan/components/ConfidenceBar';
 import { DemoTag } from '@/scan/components/DemoTag';
@@ -89,7 +90,7 @@ export default function ResultScreen() {
         {...hiddenBehindSheet(sheet !== null)}>
         <View style={styles.top}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr('/scan')}
             accessibilityRole="button"
             accessibilityLabel="Back"
             style={styles.iconButton}>

@@ -12,11 +12,20 @@ const initSqlJs: InitSqlJs = require('sql.js/dist/sql-wasm-inline.js');
 
 let engine: Promise<SqlJsStatic> | undefined;
 
+// Compiling the WebAssembly takes real time. renderRouter turns on fake timers, and
+// RNTL's findBy* then counts its timeout in fake time (a few real milliseconds), so a
+// compile started mid-render can lose that race. jest.setup.ts calls this in beforeAll
+// so every database a test opens skips the compile. Cached per test file: jest gives each
+// file its own module registry.
+export function loadSqlJs(): Promise<SqlJsStatic> {
+  engine ??= initSqlJs();
+  return engine;
+}
+
 export type TestDb = Db & { close(): void };
 
 export async function createTestDb(): Promise<TestDb> {
-  engine ??= initSqlJs();
-  const SQL = await engine;
+  const SQL = await loadSqlJs();
   const db: Database = new SQL.Database();
 
   function all<T>(source: string, params: SqlValue[]): T[] {

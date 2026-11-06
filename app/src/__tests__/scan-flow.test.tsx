@@ -358,6 +358,10 @@ describe('Result', () => {
     const view = await reachResult();
     await fireEvent.press(screen.getByRole('button', { name: 'See treatment plan' }));
     await waitFor(() => expect(view).toHavePathname('/scan/treatment'));
+
+    // With history, Back returns to the result rather than the cold-link fallback.
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(view).toHavePathname('/scan/result'));
   });
 
   test('still unsure after the answers: says so and makes Retake the main action', async () => {
