@@ -3,6 +3,8 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "rebloom-landing",
+  // Not a secret: it only names the account. Deploys still need CLOUDFLARE_API_TOKEN.
+  "account_id": "43328a3d08c11642008ce9462580b94e",
   "compatibility_date": "2026-11-03",
   "assets": {
     "directory": "./dist/"
