@@ -20,6 +20,8 @@
 
 **Break-test, phase 1 (2026-11-07)**: 9 findings, reported before fixing. Sanket picked 1, 2, 3, 5. Fixed test-first: #1 a check that finished after Back left the user on the email screen signed in (every sign-in step now moves on, only the focused one); #3 the privacy page named Gmail before production sends through it (now names Supabase; task 25 adds Gmail); #5 a second "Send code" within 60 s hit the server's 429 (the wait is now kept per address, and the code screen reopens with the countdown carried over). Deferred by Sanket: #4, #6, #7, #8; #9 is in the device checklist.
 
+**Adversarial swarm, phase 1 (2026-11-07)**: 8 personas (hostile, first-time, flaky network, pentester, screen reader, lifecycle and races, neighbouring features, spec auditor), each proving findings with a run; 27 findings, 19 after merging duplicates, reported before fixing. Neighbouring features: nothing found. Earlier fixes hold, except R2 only partly (a code corrected during a check is dropped). Waiting on Sanket's pick.
+
 **Release blocker (break-test #2)**: the project-wide `email_sent` limit (30/hour) lets one script lock every user out of sign-in for an hour, and can get the Gmail account suspended. Not fixable in app code. Before accounts ship in a store build: a domain plus a sending service with a limit sized for launch (D2, D3), and a CAPTCHA decision (spec: out of scope until bots show up; Supabase supports one through `captchaToken`). Buying the domain needs Sanket's yes (CLAUDE.md: ask before any payment).
 
 ---
