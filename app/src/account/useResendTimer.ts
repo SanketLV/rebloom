@@ -1,29 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 
-export const RESEND_SECONDS = 60;
+import { noteCodeSent, RESEND_SECONDS, resendDeadline, secondsUntilResend } from './codeSends';
 
-const secondsUntil = (deadline: number) => Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+export { RESEND_SECONDS } from './codeSends';
 
 /**
- * "Send a new code" waits RESEND_SECONDS after each send. The deadline is a clock time, so time
- * spent in the background counts. Screen readers hear it at the start and when it's ready
- * (announced on iOS too: review rule), never every second.
+ * "Send a new code" waits RESEND_SECONDS after each send to `email`. The deadline is a clock time
+ * kept per address, so time in the background, or on another screen, counts. Screen readers hear
+ * it at the start and when it's ready (announced on iOS too: review rule), never every second.
  */
-export function useResendTimer() {
-  const [deadline, setDeadline] = useState(() => Date.now() + RESEND_SECONDS * 1000);
-  const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
+export function useResendTimer(email: string) {
+  const [deadline, setDeadline] = useState(() => resendDeadline(email));
+  const [secondsLeft, setSecondsLeft] = useState(() => secondsUntilResend(email));
   // After "Send a new code" one sentence says both things (two in a row get cut off on iOS).
   const sentAgain = useRef(false);
 
   useEffect(() => {
+    if (deadline <= Date.now()) return;
     AccessibilityInfo.announceForAccessibility(
       sentAgain.current
         ? `We sent a new code. You can send another in ${RESEND_SECONDS} seconds.`
-        : `You can send a new code in ${RESEND_SECONDS} seconds.`,
+        : `You can send a new code in ${secondsUntilResend(email)} seconds.`,
     );
     const timer = setInterval(() => {
-      const left = secondsUntil(deadline);
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       setSecondsLeft(left);
       if (left === 0) {
         clearInterval(timer);
@@ -31,13 +32,14 @@ export function useResendTimer() {
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [deadline]);
+  }, [deadline, email]);
 
   const restart = useCallback(() => {
     sentAgain.current = true;
-    setDeadline(Date.now() + RESEND_SECONDS * 1000);
+    noteCodeSent(email);
+    setDeadline(resendDeadline(email));
     setSecondsLeft(RESEND_SECONDS);
-  }, []);
+  }, [email]);
 
   return { secondsLeft, ready: secondsLeft === 0, restart };
 }

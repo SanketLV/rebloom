@@ -1,12 +1,11 @@
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View, type TextInput } from 'react-native';
 
 import { AccountScreen, Body, Small } from '@/account/AccountScreen';
 import { cleanCode, isEmailShape, normalizeEmail } from '@/account/input';
 import { errorMessage } from '@/account/messages';
-import { showAccount } from '@/account/navigation';
-import { useAccount } from '@/account/store';
+import { useShowAccountWhenSignedIn } from '@/account/navigation';
 import { useResendTimer } from '@/account/useResendTimer';
 import { sendEmailCode, verifyEmailCode } from '@/backend/auth';
 import { Button, TextButton } from '@/components/Button';
@@ -25,17 +24,11 @@ export default function CodeScreen() {
 }
 
 function CodeForm({ email }: { email: string }) {
-  const account = useAccount();
+  useShowAccountWhenSignedIn();
   const field = useRef<ComponentRef<typeof TextInput>>(null);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const resend = useResendTimer();
-
-  // A sign-in that went through, even one that answered after our time limit: show the account.
-  const signedIn = account.status === 'signed_in';
-  useEffect(() => {
-    if (signedIn) showAccount();
-  }, [signedIn]);
+  const resend = useResendTimer(email);
 
   // One flight for both auto-submit at 6 digits and the Continue button.
   const verify = useSingleFlight(async (digits: string) => {

@@ -18,6 +18,10 @@
 - **No hero illustration on the sign-in screen** (artboard 18's image isn't in the app's assets yet); no privacy link under "Send code" (the landing page's public URL isn't known yet).
 - **Device checklist** started at `.handoff/device-checklist.md` (the foundation's copy was never on this machine).
 
+**Break-test, phase 1 (2026-11-07)**: 9 findings, reported before fixing. Sanket picked 1, 2, 3, 5. Fixed test-first: #1 a check that finished after Back left the user on the email screen signed in (every sign-in step now moves on, only the focused one); #3 the privacy page named Gmail before production sends through it (now names Supabase; task 25 adds Gmail); #5 a second "Send code" within 60 s hit the server's 429 (the wait is now kept per address, and the code screen reopens with the countdown carried over). Deferred by Sanket: #4, #6, #7, #8; #9 is in the device checklist.
+
+**Release blocker (break-test #2)**: the project-wide `email_sent` limit (30/hour) lets one script lock every user out of sign-in for an hour, and can get the Gmail account suspended. Not fixable in app code. Before accounts ship in a store build: a domain plus a sending service with a limit sized for launch (D2, D3), and a CAPTCHA decision (spec: out of scope until bots show up; Supabase supports one through `captchaToken`). Buying the domain needs Sanket's yes (CLAUDE.md: ask before any payment).
+
 ---
 
 ## Decisions for Sanket
@@ -146,7 +150,7 @@ Each task is one commit. **Strict TDD**: write the test, watch it fail, then imp
 | 22 | Privacy page "App accounts" section (what's stored, processors, delete in app, delete by email without the app) | `landing/src/pages/PrivacyPage.tsx`, `landing/src/pages/PrivacyPage.test.tsx` | T22 |
 | 23 | Docs: `supabase/README.md` (function, `functions serve`, secrets, deploy, why `config push` is never used); `app/README.md` Accounts section; device checks added to `.handoff/device-checklist.md` | docs | None (docs). Full green run: app `typecheck`, `lint`, `test`; `node --test "supabase/tests/*.test.mjs"`; `supabase test db`; `node --test "supabase/tests/local/*.test.mjs"` |
 | 24 | **Break-test** report (no fixes until Sanket picks), the swarm offered, Sanket reads the diff | report in this plan | — |
-| 25 | **Production, after merge, with Sanket**: Supabase custom SMTP with Gmail (D2; the domain, DNS and Resend come before the store release); both templates pasted from `supabase/templates/sign_in_code.html`; `email_sent` limit (D3); "Confirm email" still on; `supabase functions deploy delete-account`; one real sign-in, sign-out and delete from a dev build against production with a `+test` address | dashboard, CLI | Each step ticked in the PR; device checks for email delivery |
+| 25 | **Production, after merge, with Sanket**: Supabase custom SMTP with Gmail (D2; the domain, DNS and Resend come before the store release); the same day, add Google (Gmail) to the privacy page's App accounts processors (break-test #3: the page names only Supabase until then); both templates pasted from `supabase/templates/sign_in_code.html`; `email_sent` limit (D3); "Confirm email" still on; `supabase functions deploy delete-account`; one real sign-in, sign-out and delete from a dev build against production with a `+test` address | dashboard, CLI | Each step ticked in the PR; device checks for email delivery |
 
 ### Phase 2 (PR 2): Google (needs a Google Cloud project and a development build)
 

@@ -29,7 +29,9 @@ describe('privacy page', () => {
     expect(text).toMatch(/how you signed in/);
     expect(text).toMatch(/when you created the account and when you last used it/);
     expect(text).toMatch(/Supabase/);
-    expect(text).toMatch(/Gmail/);
+    // Break-test #3: true until production sends through Gmail (task 25 adds it then).
+    expect(text).toMatch(/Supabase sends the sign-in codes/);
+    expect(text).not.toMatch(/Gmail/);
     expect(text).toMatch(/Settings › Account › Delete account/);
     expect(text).toMatch(/stay on your phone/);
   });

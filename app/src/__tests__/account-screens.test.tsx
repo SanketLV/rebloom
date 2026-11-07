@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
 import { AccessibilityInfo, BackHandler, Platform } from 'react-native';
 
+import { resetCodeSendsForTests } from '@/account/codeSends';
 import { resetAccountForTests } from '@/account/store';
 import AccountLayout from '@/app/account/_layout';
 import CodeScreen from '@/app/account/code';
@@ -80,6 +81,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetAccountForTests();
+  resetCodeSendsForTests();
   jest.useRealTimers();
   jest.restoreAllMocks();
 });
@@ -332,6 +334,63 @@ describe('code screen', () => {
     await renderRouter(ROUTES, { initialUrl: '/account/code?email=not-an-address' });
     expect(await screen.findByLabelText('Email')).toBeOnTheScreen();
     expect(screen).toHavePathname('/account/email');
+  });
+});
+
+// Break-test #1: Back during a slow check left the user on the email screen, signed in.
+describe('signed in while on a sign-in step', () => {
+  test('a check that finishes after Back still moves on to the account', async () => {
+    let finish: () => void = () => {};
+    auth.verifyEmailCode.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () => {
+            mockEmit({ type: 'signed_in', user: sam });
+            resolve(ok(sam));
+          };
+        }),
+    );
+    await goToCode();
+    await fireEvent.changeText(screen.getByLabelText('6-digit code'), '123456');
+    await androidBack.press();
+    expect(screen).toHavePathname('/account/email');
+    await act(async () => finish());
+    expect(screen).toHavePathname('/account');
+    expect(screen.getByText('Signed in with email')).toBeOnTheScreen();
+    await androidBack.press();
+    expect(screen).toHavePathname('/settings');
+  });
+});
+
+// Break-test #5: a second "Send code" within 60 seconds got "Too many tries" from the server.
+describe('sending again within 60 seconds', () => {
+  test('goes back to the code screen without a second send, countdown carried over', async () => {
+    jest.useFakeTimers();
+    await goToCode();
+    await act(async () => void jest.advanceTimersByTime(20_000));
+    await fireEvent.press(screen.getByRole('button', { name: 'Use a different email' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
+    expect(auth.sendEmailCode).toHaveBeenCalledTimes(1);
+    expect(screen).toHavePathname('/account/code');
+    expect(screen.getByRole('button', { name: 'Send a new code in 0:40' })).toBeDisabled();
+  });
+
+  test('after 60 seconds it sends again', async () => {
+    jest.useFakeTimers();
+    await goToCode();
+    await fireEvent.press(screen.getByRole('button', { name: 'Use a different email' }));
+    await act(async () => void jest.advanceTimersByTime(60_000));
+    await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
+    expect(auth.sendEmailCode).toHaveBeenCalledTimes(2);
+  });
+
+  test('another address is sent straight away', async () => {
+    await goToCode();
+    await fireEvent.press(screen.getByRole('button', { name: 'Use a different email' }));
+    await fireEvent.changeText(screen.getByLabelText('Email'), 'kim@example.com');
+    await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
+    expect(auth.sendEmailCode).toHaveBeenLastCalledWith('kim@example.com');
+    expect(auth.sendEmailCode).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -60,6 +60,8 @@ const ALLOWED_BACKEND_IMPORTERS: string[] = [
   'account/AccountView.tsx',
   'account/DeleteAccountSheet.tsx',
   'account/messages.ts',
+  'account/navigation.ts',
+  'account/SignInView.tsx',
   'account/store.ts',
   'app/account/code.tsx',
   'app/account/email.tsx',
