@@ -1,27 +1,31 @@
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { useRef, useState, type ComponentRef } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View, type TextInput } from 'react-native';
 
 import { AccountScreen, Body, Small } from '@/account/AccountScreen';
-import { cleanCode, isEmailShape, normalizeEmail } from '@/account/input';
+import { codeEmail } from '@/account/codeSends';
+import { cleanCode } from '@/account/input';
 import { errorMessage } from '@/account/messages';
 import { useShowAccountWhenSignedIn } from '@/account/navigation';
 import { useResendTimer } from '@/account/useResendTimer';
 import { sendEmailCode, verifyEmailCode } from '@/backend/auth';
 import { Button, TextButton } from '@/components/Button';
 import { TextField } from '@/components/TextField';
+import { goBackOr } from '@/lib/goBack';
 import { useSingleFlight } from '@/lib/useSingleFlight';
 import { colors, type } from '@/theme/tokens';
 
 const minutes = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
-// Artboard 18b. Any app can open rebloom://account/code, so the address is checked again here.
+// Artboard 18b. The address comes from the email screen (codeSends), never from the link, so
+// rebloom://account/code can't point it anywhere; with no send in this run it goes to the email step.
 export default function CodeScreen() {
-  const params = useLocalSearchParams<{ email?: string }>();
-  const email = normalizeEmail(typeof params.email === 'string' ? params.email : '');
-  if (!isEmailShape(email)) return <Redirect href="/account/email" />;
+  const [email] = useState(codeEmail);
+  if (!email) return <Redirect href="/account/email" />;
   return <CodeForm email={email} />;
 }
+
+const toEmailStep = () => goBackOr('/account/email');
 
 function CodeForm({ email }: { email: string }) {
   useShowAccountWhenSignedIn();
@@ -60,7 +64,7 @@ function CodeForm({ email }: { email: string }) {
 
   return (
     <AccountScreen
-      top={{ kind: 'back', onPress: () => router.back() }}
+      top={{ kind: 'back', onPress: toEmailStep }}
       title="Check your email"
       body={
         <Body>
@@ -97,7 +101,7 @@ function CodeForm({ email }: { email: string }) {
           disabled={!resend.ready || sendAgain.busy}
           onPress={() => void sendAgain.run()}
         />
-        <TextButton label="Use a different email" onPress={() => router.back()} />
+        <TextButton label="Use a different email" onPress={toEmailStep} />
       </View>
     </AccountScreen>
   );

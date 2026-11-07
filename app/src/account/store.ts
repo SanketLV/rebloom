@@ -37,11 +37,11 @@ function handle(event: SessionEvent) {
   if (event.type === 'signed_in' || event.type === 'refreshed') {
     deletedPending = false;
     set({ status: 'signed_in', user: event.user });
-  } else if (event.reason === 'session_expired') {
-    set({ status: 'expired' });
   } else if (deletedPending) {
     deletedPending = false;
     set({ status: 'guest', notice: 'deleted' });
+  } else if (event.reason === 'session_expired') {
+    set({ status: 'expired' });
   } else {
     set({ status: 'guest' });
   }
@@ -84,7 +84,8 @@ export function useAccount(): AccountState {
 
 /** After a delete, so the Settings card says the account is gone (before or after its sign-out). */
 export function noteAccountDeleted(): void {
-  if (state.status === 'guest') set({ status: 'guest', notice: 'deleted' });
+  // Already signed out (by the delete, or a session that expired meanwhile): say it's deleted.
+  if (state.status === 'guest' || state.status === 'expired') set({ status: 'guest', notice: 'deleted' });
   else deletedPending = true;
 }
 

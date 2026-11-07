@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
 import { AccessibilityInfo, BackHandler, Platform } from 'react-native';
 
-import { resetCodeSendsForTests } from '@/account/codeSends';
+import { noteCodeSent, resetCodeSendsForTests, setCodeEmail } from '@/account/codeSends';
 import { resetAccountForTests } from '@/account/store';
 import AccountLayout from '@/app/account/_layout';
 import CodeScreen from '@/app/account/code';
@@ -330,8 +330,8 @@ describe('code screen', () => {
     expect(screen).toHavePathname('/account');
   });
 
-  test('opened by a link without a usable address → the email screen', async () => {
-    await renderRouter(ROUTES, { initialUrl: '/account/code?email=not-an-address' });
+  test('opened by a link with no code sent in this run → the email screen', async () => {
+    await renderRouter(ROUTES, { initialUrl: '/account/code' });
     expect(await screen.findByLabelText('Email')).toBeOnTheScreen();
     expect(screen).toHavePathname('/account/email');
   });
@@ -391,6 +391,96 @@ describe('sending again within 60 seconds', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
     expect(auth.sendEmailCode).toHaveBeenLastCalledWith('kim@example.com');
     expect(auth.sendEmailCode).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Swarm Medium 1: a request that answered after the user left still navigated.
+describe('answers that arrive after the user left the screen', () => {
+  test('a slow send after Back does not open the code screen, but the send is remembered', async () => {
+    let finish: (r: Result<null>) => void = () => {};
+    auth.sendEmailCode.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    await openFromSettings();
+    await fireEvent.press(screen.getByRole('button', { name: 'Continue with email' }));
+    await fireEvent.changeText(screen.getByLabelText('Email'), 'sam@example.com');
+    await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
+    await androidBack.press();
+    expect(screen).toHavePathname('/account');
+    await act(async () => finish(ok(null)));
+    expect(screen).toHavePathname('/account');
+    // Back on the email screen, a second Send goes to the code screen without a new send.
+    await fireEvent.press(screen.getByRole('button', { name: 'Continue with email' }));
+    await fireEvent.changeText(screen.getByLabelText('Email'), 'sam@example.com');
+    await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
+    expect(auth.sendEmailCode).toHaveBeenCalledTimes(1);
+    expect(screen).toHavePathname('/account/code');
+  });
+
+  test('a delete that finishes after the user swiped back leaves Settings alone and shows the notice', async () => {
+    let finish: () => void = () => {};
+    auth.deleteAccount.mockImplementation(
+      (afterDelete?: () => void) =>
+        new Promise((resolve) => {
+          finish = () => {
+            afterDelete?.();
+            mockEmit({ type: 'signed_out', reason: 'user' });
+            resolve(ok(null));
+          };
+        }),
+    );
+    mockUser = { ...sam, provider: 'google' };
+    await renderRouter(ROUTES, { initialUrl: '/settings' });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Account' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Delete account' }));
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Delete account' }).at(-1)!);
+    await act(async () => router.back()); // the iOS swipe: the sheet can't stop it
+    expect(screen).toHavePathname('/settings');
+    await act(async () => finish());
+    expect(screen).toHavePathname('/settings');
+    expect(screen.getByText('Your account is deleted.')).toBeOnTheScreen();
+  });
+});
+
+// Swarm Medium 2: on iOS a cold-linked step had no way out.
+describe('sign-in steps opened cold from a link', () => {
+  test('Back on /account/email goes to the sign-in screen', async () => {
+    await renderRouter(ROUTES, { initialUrl: '/account/email' });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Back' }));
+    expect(screen).toHavePathname('/account');
+  });
+
+  test('Back on a cold /account/code goes to the email screen', async () => {
+    setCodeEmail('sam@example.com');
+    noteCodeSent('sam@example.com');
+    await renderRouter(ROUTES, { initialUrl: '/account/code' });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Back' }));
+    expect(screen).toHavePathname('/account/email');
+  });
+
+  test('"Use a different email" on a cold /account/code goes to the email screen', async () => {
+    setCodeEmail('sam@example.com');
+    await renderRouter(ROUTES, { initialUrl: '/account/code' });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Use a different email' }));
+    expect(screen).toHavePathname('/account/email');
+  });
+});
+
+// Swarm Medium 3: the address went through the URL and was decoded twice.
+describe('the address on the code screen', () => {
+  test.each(['a%41b@example.com', 'a%40b@example.com', 'o+plants@example.com', "o'neil@example.com"])(
+    '%s is verified exactly as it was sent',
+    async (email) => {
+      await goToCode(email);
+      expect(screen.getByText(email)).toBeOnTheScreen();
+      await fireEvent.changeText(screen.getByLabelText('6-digit code'), '123456');
+      expect(auth.verifyEmailCode).toHaveBeenCalledWith(email, '123456');
+    },
+  );
+
+  test('a link naming an address can no longer point the code screen at it', async () => {
+    await renderRouter(ROUTES, { initialUrl: '/account/code?email=victim@example.com' });
+    expect(await screen.findByLabelText('Email')).toBeOnTheScreen();
+    expect(screen).toHavePathname('/account/email');
+    expect(screen.queryByText('victim@example.com')).toBeNull();
   });
 });
 

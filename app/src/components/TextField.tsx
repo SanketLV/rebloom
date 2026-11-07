@@ -24,8 +24,8 @@ type Props = Omit<TextInputProps, 'style' | 'accessibilityLabel'> & {
 };
 
 // A labelled text input (artboards 18a, 18b).
-// Screen readers get the label and the error from the input itself, and hear each new error
-// (announced on iOS too: accessibilityLiveRegion is Android-only).
+// Screen readers get the label (and a hint) from the input itself; an error is its own text,
+// readable at any time, and each new one is announced (iOS too: no live regions there).
 const notRead = { accessibilityElementsHidden: true, importantForAccessibility: 'no' as const };
 
 export function TextField({ label, error, hint, big = false, ...input }: Props) {
@@ -40,13 +40,15 @@ export function TextField({ label, error, hint, big = false, ...input }: Props) 
       <TextInput
         {...input}
         accessibilityLabel={label}
-        accessibilityHint={error ?? hint ?? undefined}
+        accessibilityHint={error ? undefined : (hint ?? undefined)}
         placeholderTextColor={colors.textSecondary}
         style={[styles.input, big && styles.big, !!error && styles.error]}
       />
-      {error || hint ? (
-        <Text style={error ? styles.errorText : styles.hintText} {...notRead}>
-          {error ?? hint}
+      {error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : hint ? (
+        <Text style={styles.hintText} {...notRead}>
+          {hint}
         </Text>
       ) : null}
     </View>

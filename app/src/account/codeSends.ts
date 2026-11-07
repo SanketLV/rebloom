@@ -5,6 +5,17 @@
 export const RESEND_SECONDS = 60;
 
 const sentAt = new Map<string, number>();
+// The address the code screen is for. Kept here, not in the URL: a route param is decoded twice
+// on the way (an address with "%" became another address), and any app could set it by link.
+let current: string | null = null;
+
+export function setCodeEmail(email: string): void {
+  current = email;
+}
+
+export function codeEmail(): string | null {
+  return current;
+}
 
 export function noteCodeSent(email: string): void {
   sentAt.set(email, Date.now());
@@ -23,4 +34,5 @@ export function secondsUntilResend(email: string): number {
 /** Tests only. */
 export function resetCodeSendsForTests(): void {
   sentAt.clear();
+  current = null;
 }

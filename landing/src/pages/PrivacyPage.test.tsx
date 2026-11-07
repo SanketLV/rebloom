@@ -33,6 +33,9 @@ describe('privacy page', () => {
     expect(text).toMatch(/Supabase sends the sign-in codes/);
     expect(text).not.toMatch(/Gmail/);
     expect(text).toMatch(/Settings › Account › Delete account/);
+    // Swarm Medium 5: Supabase's auth audit log keeps the address after a delete; say so.
+    expect(text).not.toMatch(/everything stored with it, and/);
+    expect(text).toMatch(/security log/);
     expect(text).toMatch(/stay on your phone/);
   });
 

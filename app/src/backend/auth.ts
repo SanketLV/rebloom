@@ -34,9 +34,16 @@ export async function sendEmailCode(email: string): Promise<Result<null>> {
 export async function verifyEmailCode(email: string, code: string): Promise<Result<SessionUser>> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: 'not_configured' };
-  return setSessionFromAuth(
-    withTimeout(supabase.auth.verifyOtp({ email, token: code, type: 'email' }), SESSION_TIMEOUT_MS),
-  );
+  // The time limit is on our answer, not on the sign-in: a verify that answers late still goes
+  // through setSessionFromAuth (which re-blocks only if it fails), so listeners hear signed_in.
+  try {
+    return await withTimeout(
+      setSessionFromAuth(supabase.auth.verifyOtp({ email, token: code, type: 'email' })),
+      SESSION_TIMEOUT_MS,
+    );
+  } catch (error) {
+    return { ok: false, error: toBackendError(error) };
+  }
 }
 
 function functionError(error: unknown): BackendError {

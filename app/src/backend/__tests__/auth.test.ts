@@ -7,7 +7,7 @@ import { fakeLocalStorage } from '@/testing/fakeLocalStorage';
 import { fakeFs } from '@/testing/fileSystemFake';
 
 import { deleteAccount, sendEmailCode, verifyEmailCode } from '../auth';
-import { getCurrentUser, onSessionChange, resetSessionForTests, type SessionEvent } from '../session';
+import { getCurrentUser, onSessionChange, resetSessionForTests, signOut, type SessionEvent } from '../session';
 import { SESSION_STORAGE_KEY } from '../supabase';
 
 let server: FakeAuthServer;
@@ -102,6 +102,26 @@ describe('verifyEmailCode', () => {
     const pending = verifyEmailCode('sam@example.com', '123456');
     await jest.advanceTimersByTimeAsync(20_000);
     expect(await pending).toEqual({ ok: false, error: 'offline' });
+  });
+
+  // Swarm Medium 4: after a sign-out earlier in the run, a verify answering after the time limit
+  // was put back behind the sign-out block, so the good sign-in was thrown away.
+  test('after a sign-out, a verify that answers after the time limit still signs in', async () => {
+    fakeLocalStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(fakeSession({ userId: 'u-0' })));
+    await getCurrentUser();
+    await signOut();
+    jest.useFakeTimers();
+    const release = server.hold('verify');
+    server.sessionOptions = { userId: 'u-1', email: 'sam@example.com' };
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    const pending = verifyEmailCode('sam@example.com', '123456');
+    await jest.advanceTimersByTimeAsync(20_000);
+    expect(await pending).toEqual({ ok: false, error: 'offline' });
+    release();
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'signed_in' }));
+    expect(JSON.parse(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)!).user.id).toBe('u-1');
   });
 
   test('backend not configured → not_configured', async () => {

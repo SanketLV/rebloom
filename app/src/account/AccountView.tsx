@@ -1,3 +1,4 @@
+import { useNavigation } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -15,6 +16,7 @@ import { leaveAccount } from './navigation';
 
 // Artboard 18c, signed in. The Backup row comes with the backup spec.
 export function AccountView({ user }: { user: SessionUser }) {
+  const navigation = useNavigation();
   const [sheet, setSheet] = useState<'sign_out' | 'delete' | null>(null);
   // The phone is signed out at once, even offline; the server is told in the background.
   const signingOut = useSingleFlight(async () => {
@@ -48,7 +50,8 @@ export function AccountView({ user }: { user: SessionUser }) {
             onClose={() => setSheet(null)}
             onDeleted={() => {
               setSheet(null);
-              leaveAccount();
+              // Already gone (an iOS swipe while deleting): going Back again would leave Settings.
+              if (navigation.isFocused()) leaveAccount();
             }}
           />
         </>

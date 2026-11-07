@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { BackHandler, Text } from 'react-native';
+import { AccessibilityInfo, BackHandler, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '../BottomSheet';
@@ -81,4 +81,27 @@ test('clears the bottom safe area', async () => {
   const sheet = screen.getByLabelText('Photo tips');
   const style = [sheet.props.style].flat(Infinity).reduce((all, s) => ({ ...all, ...s }), {});
   expect(style.paddingBottom).toBeGreaterThanOrEqual(34);
+});
+
+// Swarm Medium 6: opening a sheet was silent for screen readers.
+test('an opening sheet moves screen-reader focus onto itself', async () => {
+  const focus = jest.spyOn(AccessibilityInfo, 'sendAccessibilityEvent').mockImplementation(() => {});
+  focus.mockClear();
+  const view = await render(
+    <SafeAreaProvider initialMetrics={metrics}>
+      <BottomSheet visible={false} label="Sign out" onClose={jest.fn()}>
+        <Text>Sign out?</Text>
+      </BottomSheet>
+    </SafeAreaProvider>,
+  );
+  expect(focus).not.toHaveBeenCalled();
+  await view.rerender(
+    <SafeAreaProvider initialMetrics={metrics}>
+      <BottomSheet visible label="Sign out" onClose={jest.fn()}>
+        <Text>Sign out?</Text>
+      </BottomSheet>
+    </SafeAreaProvider>,
+  );
+  expect(focus).toHaveBeenCalledWith(expect.anything(), 'focus');
+  focus.mockRestore();
 });

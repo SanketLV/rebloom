@@ -21,7 +21,6 @@ test('an error is shown, read with the field, and marks the border', async () =>
   );
   expect(screen.getByText("That code isn't right.", { includeHiddenElements: true })).toBeOnTheScreen();
   const field = screen.getByLabelText('6-digit code');
-  expect(field.props.accessibilityHint).toBe("That code isn't right.");
   expect(field).toHaveStyle({ borderColor: colors.severe });
 });
 
@@ -69,10 +68,11 @@ test('a hint is shown and read with the field, but not announced and not marked 
 });
 
 // Review round 1, #10: the label is in the input's own accessibility label; don't read it twice.
-test('the visible label and error are not separate screen-reader stops', async () => {
+// Swarm Medium 7: an error heard only through the hint is lost when hints are off.
+test('the label is read once (by the input); the error is its own readable text', async () => {
   await render(<TextField label="Email" value="" onChangeText={jest.fn()} error="Check the address." />);
-  expect(screen.queryByText('Email')).toBeNull(); // hidden from accessibility
+  expect(screen.queryByText('Email')).toBeNull(); // hidden: the input says it
   expect(screen.getByText('Email', { includeHiddenElements: true })).toBeOnTheScreen();
-  expect(screen.queryByText('Check the address.')).toBeNull();
-  expect(screen.getByLabelText('Email').props.accessibilityHint).toBe('Check the address.');
+  expect(screen.getByText('Check the address.')).toBeOnTheScreen();
+  expect(screen.getByLabelText('Email').props.accessibilityHint).toBeUndefined();
 });

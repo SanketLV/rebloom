@@ -151,6 +151,23 @@ test('a delete noted after its sign-out still shows the notice', async () => {
   expect(result.current).toEqual({ status: 'guest', notice: 'deleted' });
 });
 
+// Swarm Medium 8: a session that expires during a delete left "Signed out" on a deleted account.
+test.each([
+  ['the expiry lands before the delete is noted', ['expire', 'note']],
+  ['the expiry lands after the delete is noted', ['note', 'expire']],
+])('%s → guest with the deleted notice', async (_name, steps) => {
+  mockCurrentUser = async () => ({ ok: true, value: sam });
+  const { result } = await renderHook(() => useAccount());
+  await flush();
+  await act(async () => {
+    for (const step of steps) {
+      if (step === 'expire') mockEmit({ type: 'signed_out', reason: 'session_expired' });
+      else noteAccountDeleted();
+    }
+  });
+  expect(result.current).toEqual({ status: 'guest', notice: 'deleted' });
+});
+
 test('a second screen subscribing does not start a second listener', async () => {
   await renderHook(() => useAccount());
   await renderHook(() => useAccount());

@@ -1,20 +1,22 @@
-import { router } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
 import { useState } from 'react';
 
 import { AccountScreen, Body, Small } from '@/account/AccountScreen';
-import { noteCodeSent, secondsUntilResend } from '@/account/codeSends';
+import { noteCodeSent, secondsUntilResend, setCodeEmail } from '@/account/codeSends';
 import { isEmailShape, normalizeEmail } from '@/account/input';
 import { errorMessage } from '@/account/messages';
 import { useShowAccountWhenSignedIn } from '@/account/navigation';
 import { sendEmailCode } from '@/backend/auth';
 import { Button } from '@/components/Button';
 import { TextField } from '@/components/TextField';
+import { goBackOr } from '@/lib/goBack';
 import { useSingleFlight } from '@/lib/useSingleFlight';
 
 // Artboard 18a. The address is normalized before it's checked or sent (review rule); signing in
 // and creating an account are one step, so the screen never says whether an account exists.
 export default function EmailScreen() {
   useShowAccountWhenSignedIn();
+  const navigation = useNavigation();
   const [raw, setRaw] = useState('');
   const [error, setError] = useState<string | null>(null);
   const email = normalizeEmail(raw);
@@ -22,7 +24,11 @@ export default function EmailScreen() {
 
   const { run, busy } = useSingleFlight(async () => {
     setError(null);
-    const openCode = () => router.push({ pathname: '/account/code', params: { email } });
+    // Only if the user is still here: a send that answers after Back mustn't pull them back.
+    const openCode = () => {
+      setCodeEmail(email);
+      if (navigation.isFocused()) router.push('/account/code');
+    };
     // A code went to this address less than a minute ago: it still works, and the server would
     // refuse another one yet.
     if (secondsUntilResend(email) > 0) return openCode();
@@ -42,7 +48,7 @@ export default function EmailScreen() {
 
   return (
     <AccountScreen
-      top={{ kind: 'back', onPress: () => router.back() }}
+      top={{ kind: 'back', onPress: () => goBackOr('/account') }}
       title="Sign in with email"
       body={<Body>We&apos;ll email you a 6-digit code. No password needed.</Body>}
       footer={

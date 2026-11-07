@@ -1,5 +1,6 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ComponentRef, type ReactNode } from 'react';
 import {
+  AccessibilityInfo,
   BackHandler,
   KeyboardAvoidingView,
   Platform,
@@ -28,6 +29,12 @@ type Props = {
 // screen readers with `hiddenBehindSheet`.
 export function BottomSheet({ visible, label, onClose, dismissible = true, children }: Props) {
   const insets = useSafeAreaInsets();
+  const sheet = useRef<ComponentRef<typeof View>>(null);
+
+  // Move screen-reader focus into the sheet as it opens, so its label is read (it was silent).
+  useEffect(() => {
+    if (visible && sheet.current) AccessibilityInfo.sendAccessibilityEvent(sheet.current, 'focus');
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -55,6 +62,7 @@ export function BottomSheet({ visible, label, onClose, dismissible = true, child
         style={styles.anchor}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View
+          ref={sheet}
           accessibilityViewIsModal
           accessibilityLabel={label}
           style={[styles.sheet, { paddingBottom: spacing.xl + insets.bottom }]}>

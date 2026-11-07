@@ -33,7 +33,7 @@ export function PrivacyPage() {
         <h2>App accounts</h2>
         <p>The Rebloom app works without an account. Scans and plant photos stay on your phone; nothing about them is sent anywhere.</p>
         <p>If you create an account to keep your plants safe, we store your email address, how you signed in (for now, a code sent by email), and when you created the account and when you last used it. Supabase stores the account on servers in the United States, under the same agreement as the waitlist. Supabase sends the sign-in codes by email.</p>
-        <p>You can delete your account in the app at any time: Settings › Account › Delete account. This deletes the account and everything stored with it, and can&apos;t be undone; plants on your phone stay. To delete it without the app, email <Mail /> from the address of the account. We&apos;ll delete it within 30 days and confirm by email.</p>
+        <p>You can delete your account in the app at any time: Settings › Account › Delete account. This deletes the account and what&apos;s stored with it, and can&apos;t be undone; plants on your phone stay. Supabase also keeps a security log of sign-ins and account changes, which includes your email address; that log isn&apos;t removed when the account is. To delete it without the app, email <Mail /> from the address of the account. We&apos;ll delete it within 30 days and confirm by email.</p>
 
         <h2>Your rights</h2>
         <p>You can ask to see what we hold about you, to correct it, or to be removed from the list at any time, which also withdraws your consent. Email <Mail /> from the address you signed up with; to protect the list, we only reply to that address. We'll act within 30 days and confirm by email.</p>
