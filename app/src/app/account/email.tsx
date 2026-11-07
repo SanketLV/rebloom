@@ -50,7 +50,8 @@ export default function EmailScreen() {
           setRaw(text);
           setError(null);
         }}
-        error={error ?? hint}
+        error={error}
+        hint={hint}
         placeholder="name@example.com"
         keyboardType="email-address"
         autoComplete="email"

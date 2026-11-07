@@ -14,8 +14,10 @@ type Props = Omit<TextInputProps, 'style' | 'accessibilityLabel'> & {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
-  // Shown under the field, marks its border, and is read with it by screen readers.
+  // Shown under the field, marks its border, is read with it and is announced when it appears.
   error?: string | null;
+  // Guidance while typing (e.g. the address's shape): shown and read with the field, never announced.
+  hint?: string | null;
   // Large centred digits (the sign-in code).
   big?: boolean;
   ref?: Ref<ComponentRef<typeof TextInput>>;
@@ -26,7 +28,7 @@ type Props = Omit<TextInputProps, 'style' | 'accessibilityLabel'> & {
 // (announced on iOS too: accessibilityLiveRegion is Android-only).
 const notRead = { accessibilityElementsHidden: true, importantForAccessibility: 'no' as const };
 
-export function TextField({ label, error, big = false, ...input }: Props) {
+export function TextField({ label, error, hint, big = false, ...input }: Props) {
   useEffect(() => {
     if (error) AccessibilityInfo.announceForAccessibility(error);
   }, [error]);
@@ -38,13 +40,13 @@ export function TextField({ label, error, big = false, ...input }: Props) {
       <TextInput
         {...input}
         accessibilityLabel={label}
-        accessibilityHint={error ?? undefined}
+        accessibilityHint={error ?? hint ?? undefined}
         placeholderTextColor={colors.textSecondary}
         style={[styles.input, big && styles.big, !!error && styles.error]}
       />
-      {error ? (
-        <Text style={styles.errorText} {...notRead}>
-          {error}
+      {error || hint ? (
+        <Text style={error ? styles.errorText : styles.hintText} {...notRead}>
+          {error ?? hint}
         </Text>
       ) : null}
     </View>
@@ -74,5 +76,6 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   error: { borderColor: colors.severe },
+  hintText: { ...type.caption, color: colors.textSecondary },
   errorText: { ...type.caption, color: colors.severe, fontFamily: type.bodyStrong.fontFamily },
 });

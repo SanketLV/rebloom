@@ -55,6 +55,19 @@ test('a new error is announced to screen readers, once', async () => {
   announce.mockRestore();
 });
 
+// Review round 2, Low 2: a format hint shown while typing is not an error and is never announced.
+test('a hint is shown and read with the field, but not announced and not marked as an error', async () => {
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+  announce.mockClear();
+  await render(<TextField label="Email" value="sam@" onChangeText={jest.fn()} hint="Check the address." />);
+  expect(screen.getByText('Check the address.', { includeHiddenElements: true })).toBeOnTheScreen();
+  const field = screen.getByLabelText('Email');
+  expect(field.props.accessibilityHint).toBe('Check the address.');
+  expect(field).toHaveStyle({ borderColor: colors.line });
+  expect(announce).not.toHaveBeenCalled();
+  announce.mockRestore();
+});
+
 // Review round 1, #10: the label is in the input's own accessibility label; don't read it twice.
 test('the visible label and error are not separate screen-reader stops', async () => {
   await render(<TextField label="Email" value="" onChangeText={jest.fn()} error="Check the address." />);

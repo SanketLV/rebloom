@@ -10,7 +10,7 @@
 //
 // verify_jwt is off in config.toml: the platform check only understands the legacy JWT keys.
 
-import { createClient, isAuthRetryableFetchError } from 'npm:@supabase/supabase-js@2.118.0';
+import { createClient, isAuthApiError, isAuthSessionMissingError } from 'npm:@supabase/supabase-js@2.118.0';
 
 function secretKey(): string {
   const keys = Deno.env.get('SUPABASE_SECRET_KEYS');
@@ -51,9 +51,12 @@ Deno.serve(async (request) => {
   // refuses keys and tokens without a user (publishable, secret, anon and service_role JWTs).
   const { data, error } = await admin.auth.getUser(token);
   if (isUserGone(error)) return reply(204);
-  // Auth down, unreachable or failing (network error or 5xx): not the caller's fault, and the app
-  // must not say it is. Every other error (bad JWT, revoked session: AuthSessionMissingError) → 401.
-  if (error && (isAuthRetryableFetchError(error) || (error.status ?? 0) >= 500)) {
+  // 401 only when Auth itself refused the token (an API error below 500, or a revoked session,
+  // which supabase-js reports as AuthSessionMissingError). Anything else (network error, 5xx, an
+  // unreadable answer) means Auth couldn't be asked: not the caller's fault, and never "signed out".
+  const refused =
+    isAuthSessionMissingError(error) || (isAuthApiError(error) && (error.status ?? 500) < 500);
+  if (error && !refused) {
     console.error('[delete-account] auth check failed', error.status, error.code);
     return reply(503);
   }
