@@ -10,6 +10,14 @@
 
 **Branch**: `feature/accounts`, from `develop` at `cb5d37e`. The foundation is merged (PR 12, 2026-11-06) and its migrations are live on production. Each phase is its own PR into `develop`.
 
+**Build notes, phase 1 (2026-11-07)**: tasks 1–23 done in `.worktrees/accounts`. Changes from the plan, each covered by tests:
+- **One `/account` route instead of `/account/sign-in` + `/account`.** It shows the sign-in screen when signed out and the account when signed in. After a code sign-in the email and code steps are dismissed back to it, so Back from the account goes to Settings with nothing stale behind it.
+- **`SessionUser.provider` now means the method used this time** (latest identity), instead of a new `method` field. Nothing read it before.
+- **Two extra states**: `offline` (the session couldn't be checked: "Try again") and `loading`. The `expired` state is kept in memory only (a restart shows a guest).
+- **Settings now reads the session when it opens.** `root-layout.test.tsx` still proves the app start and the tabs send nothing, and now expects the refresh once Settings opens.
+- **No hero illustration on the sign-in screen** (artboard 18's image isn't in the app's assets yet); no privacy link under "Send code" (the landing page's public URL isn't known yet).
+- **Device checklist** started at `.handoff/device-checklist.md` (the foundation's copy was never on this machine).
+
 ---
 
 ## Decisions for Sanket

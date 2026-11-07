@@ -25,6 +25,8 @@ In CLI v3, `migration list`, `db diff`, `db push` and `db reset` act on the **lo
 | Connect the CLI to production (once per machine) | `npx -y supabase@3 login`, then `npx -y supabase@3 link --project-ref vhxcgmupopeochwvmwcv` |
 | Compare production with the migrations | `npx -y supabase@3 migration list --remote`, `npx -y supabase@3 db diff --remote` |
 | Ship reviewed migrations | `npx -y supabase@3 db push --remote --dry-run`, then without `--dry-run` |
+| Serve Edge Functions locally (hot reload) | `npx -y supabase@3 functions serve` (the local API tests for `delete-account` need it) |
+| Ship a reviewed, merged function | `npx -y supabase@3 functions deploy delete-account` (reads `verify_jwt` from `config.toml`) |
 
 Local services: API `http://127.0.0.1:54321`, database `127.0.0.1:54322`, Mailpit (catches every auth email) `http://127.0.0.1:54324`. A phone running the app reaches the stack through this computer's LAN address, not `localhost` (see `app/README.md`).
 
@@ -39,6 +41,7 @@ Local services: API `http://127.0.0.1:54321`, database `127.0.0.1:54322`, Mailpi
 | `tests/local/*.test.mjs` | Through the local API. A guard refuses any non-local address before the first request |
 | `tests/*.test.mjs` | Static checks: migration names and order, config, keep-alive schedule, pgTAP files |
 | `tests/production/*.test.mjs` | The waitlist tests, against **production**, only with `REBLOOM_PROD_TESTS=1` and their own `PROD_SUPABASE_URL` / `PROD_SUPABASE_PUBLISHABLE_KEY`. They use reserved `example.com` addresses that are never stored |
+| `functions/delete-account/` | Deletes the caller's account. The user comes only from their own token; the body is never read. 204 also when the user is already gone |
 | `scripts/` | SQL-editor checks for the waitlist (run by hand; not part of `test db`) |
 
 `supabase test db` runs every `.sql` file under `tests/` as a pgTAP test, so only pgTAP files go there.
@@ -92,6 +95,12 @@ grant execute on function public.my_function(text) to authenticated;  -- only wh
 `tests/database/grants.test.sql` fails if any function in `public` is callable by `anon` other than `ping()` and `join_waitlist(text,text)`, or by `authenticated` other than `join_waitlist(text,text)`. The lists use full signatures, so a new overload doesn't slip through under a known name. Add a new function to them in the same change, on purpose.
 
 Security definer functions: `set search_path = ''` and fully qualified names, as the waitlist functions do.
+
+## Edge Functions
+
+- A function reads its keys from the environment Supabase gives it: `SUPABASE_URL` and `SUPABASE_SECRET_KEYS` (JSON, key `default`; the legacy `SUPABASE_SERVICE_ROLE_KEY` as fallback). Nothing to set by hand, locally or in production. Never put a secret key in the app or the repo.
+- `verify_jwt = false` in `config.toml`: the platform's own check only understands the legacy JWT keys. Each function checks the caller itself (`delete-account` asks the Auth server with `auth.getUser(token)`, which refuses API keys and tokens with no user).
+- **Auth settings in production are changed in the dashboard, never with `supabase config push`**: it would copy this file's local values (`site_url = "http://127.0.0.1:3000"`, the local redirect list) over production's. Each dashboard change is listed and ticked in its PR.
 
 ## Windows
 
