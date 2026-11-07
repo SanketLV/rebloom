@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
-import { KEY, MAILPIT, RUN, URL_ } from './guard.mjs';
+import { KEY, RUN, URL_, readCode } from './guard.mjs';
 
 const json = { 'Content-Type': 'application/json' };
 const anonHeaders = { apikey: KEY, ...json };
@@ -16,24 +16,6 @@ const EMAIL = `rebloom-local-${RUN}@example.com`;
 
 async function post(path, body, headers = anonHeaders) {
   return fetch(`${URL_}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
-}
-
-// Waits for the sign-in email in Mailpit and returns { code, html }.
-async function readCode(email) {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const r = await fetch(`${MAILPIT}/api/v1/messages?limit=50`);
-    assert.equal(r.status, 200, `Mailpit at ${MAILPIT}: ${r.status}`);
-    const { messages = [] } = await r.json();
-    const mail = messages.find((m) => (m.To ?? []).some((to) => to.Address?.toLowerCase() === email));
-    if (mail) {
-      const code = mail.Subject.match(/Your Rebloom code: (\d{6})/)?.[1];
-      assert.ok(code, `unexpected subject: ${mail.Subject}`);
-      const full = await (await fetch(`${MAILPIT}/api/v1/message/${mail.ID}`)).json();
-      return { code, html: full.HTML ?? '' };
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  assert.fail(`no email for ${email} reached Mailpit within 10 s`);
 }
 
 test('the guard stops the run, before any request, when pointed at a non-local address', () => {
