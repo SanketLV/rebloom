@@ -76,6 +76,44 @@ test('an email code signs in, and the email holds only the code', async () => {
   assert.ok(!again.ok, `a used code must not work twice, got ${again.status}`);
 });
 
+// The app's messages depend on these answers (accounts plan, D1 and task 1): a wrong code and a
+// used one can't be told apart, and the identities say which method signed in this time.
+test('a wrong code and a used code get the same answer; identities carry last_sign_in_at', async () => {
+  const email = `codes-${RUN}@example.com`;
+  const sent = await post('/auth/v1/otp', { email, create_user: true });
+  assert.equal(sent.status, 200, await sent.text());
+  const { code } = await readCode(email);
+
+  const verifyWith = (token) => post('/auth/v1/verify', { type: 'email', email, token });
+  const expectInvalid = async (r, what) => {
+    const body = await r.json();
+    assert.equal(r.status, 403, `${what}: ${JSON.stringify(body)}`);
+    assert.equal(body.error_code, 'otp_expired', `${what}: ${JSON.stringify(body)}`);
+  };
+
+  await expectInvalid(await verifyWith(code === '000000' ? '111111' : '000000'), 'wrong code');
+
+  const verified = await verifyWith(code);
+  const session = await verified.json();
+  assert.equal(verified.status, 200, JSON.stringify(session));
+  const identities = session.user?.identities ?? [];
+  assert.equal(identities.length, 1, JSON.stringify(identities));
+  assert.equal(identities[0].provider, 'email');
+  assert.ok(!Number.isNaN(Date.parse(identities[0].last_sign_in_at)), 'no last_sign_in_at');
+
+  await expectInvalid(await verifyWith(code), 'used code');
+});
+
+test('a second code requested too soon is rate limited', async () => {
+  const email = `resend-${RUN}@example.com`;
+  const first = await post('/auth/v1/otp', { email, create_user: true });
+  assert.equal(first.status, 200, await first.text());
+  const again = await post('/auth/v1/otp', { email, create_user: true });
+  const body = await again.json();
+  assert.equal(again.status, 429, JSON.stringify(body));
+  assert.equal(body.error_code, 'over_email_send_rate_limit');
+});
+
 test('a password set by someone else before the owner signs up never signs in', async () => {
   const victim = `takeover-${RUN}@example.com`;
   const password = 'Sup3r-secret-pw!';

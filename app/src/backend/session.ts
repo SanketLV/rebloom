@@ -25,6 +25,7 @@ import {
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: BackendError };
 
+/** `provider`: how this sign-in was made ('email', 'google', 'apple'), not the first method used. */
 export type SessionUser = { id: string; email: string | null; provider: string | null };
 
 export type SessionEvent =
@@ -59,13 +60,22 @@ function setBlocked(blocked: boolean) {
   blockSessionWrites(blocked);
 }
 
-function toUser(session: Session): SessionUser {
+// app_metadata.provider is the first method this account ever used; the identity signed in with
+// most recently is the one used this time. Falls back when identities are missing or undated.
+function signInMethod(session: Session): string | null {
+  let latest: { provider: string; at: number } | null = null;
+  for (const identity of session.user.identities ?? []) {
+    const at = Date.parse(identity.last_sign_in_at ?? '');
+    if (typeof identity.provider !== 'string' || Number.isNaN(at)) continue;
+    if (!latest || at > latest.at) latest = { provider: identity.provider, at };
+  }
+  if (latest) return latest.provider;
   const provider = session.user.app_metadata?.provider;
-  return {
-    id: session.user.id,
-    email: session.user.email ?? null,
-    provider: typeof provider === 'string' ? provider : null,
-  };
+  return typeof provider === 'string' ? provider : null;
+}
+
+function toUser(session: Session): SessionUser {
+  return { id: session.user.id, email: session.user.email ?? null, provider: signInMethod(session) };
 }
 
 // Listeners run inside supabase-js's event handling and inside sign-in calls: one that throws must
