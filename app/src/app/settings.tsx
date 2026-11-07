@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { Platform } from 'react-native';
 
+import { AccountCard } from '@/account/AccountCard';
 import { ChevronLeftIcon } from '@/components/icons';
 import { IconButton } from '@/components/IconButton';
 import { Placeholder } from '@/components/Placeholder';
@@ -26,7 +27,10 @@ export default function SettingsScreen() {
   return (
     <>
       <Stack.Screen options={{ headerLeft }} />
-      <Placeholder title="Settings" artboard="16 Settings" insetTop={false} />
+      {/* Still a placeholder, except for the account card (accounts spec). */}
+      <Placeholder title="Settings" artboard="16 Settings" insetTop={false}>
+        <AccountCard />
+      </Placeholder>
     </>
   );
 }

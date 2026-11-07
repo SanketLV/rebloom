@@ -1,0 +1,48 @@
+import * as fc from 'fast-check';
+
+import { BACKEND_ERRORS } from '@/backend/errors';
+
+import { errorMessage, type AccountStep } from '../messages';
+
+const STEPS: AccountStep[] = ['send', 'verify', 'delete'];
+
+test('every step has words for every backend error', () => {
+  for (const step of STEPS) {
+    for (const error of BACKEND_ERRORS) {
+      expect(errorMessage(step, error).length).toBeGreaterThan(10);
+    }
+  }
+});
+
+test.each([
+  ['verify', 'invalid_code', "That code isn't right or has expired. Check the email or send a new one."],
+  ['send', 'rate_limited', 'Too many tries. Wait a minute and try again.'],
+  ['verify', 'offline', "You're offline. Connect and try again."],
+  
+] as const)('%s + %s → the spec sentence', (step, error, text) => {
+  expect(errorMessage(step, error)).toBe(text);
+});
+
+test('property: anything else, even server text, gets a fixed generic sentence', () => {
+  const known = new Set(STEPS.flatMap((s) => BACKEND_ERRORS.map((e) => errorMessage(s, e))));
+  fc.assert(
+    fc.property(fc.constantFrom(...STEPS), fc.string(), (step, raw) => {
+      const text = errorMessage(step, raw as never);
+      expect(known.has(text)).toBe(true);
+    }),
+  );
+});
+
+// Review round 1, #1: a delete whose answer didn't arrive may have worked. Never claim it didn't.
+test.each(['unknown', 'offline'] as const)('a %s delete never says nothing was deleted, and says retrying is safe', (error) => {
+  const text = errorMessage('delete', error);
+  expect(text).not.toMatch(/nothing was deleted/i);
+  expect(text).toMatch(/safe/i);
+});
+
+// Review round 1, #4: a 401 doesn't sign the phone out, so the words mustn't say it did.
+test('a delete refused for the sign-in says what to do, not that the phone is signed out', () => {
+  expect(errorMessage('delete', 'session_expired')).toBe(
+    'Your sign-in has expired. Sign out, sign in again, then delete your account.',
+  );
+});

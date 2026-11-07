@@ -20,6 +20,8 @@ export type FakeSessionOptions = {
   /** Seconds from now; negative = already expired. */
   expiresIn?: number;
   refreshToken?: string;
+  /** Default: one identity of `provider`, signed in now. */
+  identities?: { provider: string; last_sign_in_at: string | null }[];
 };
 
 function base64url(value: object): string {
@@ -50,7 +52,9 @@ export function fakeSession(options: FakeSessionOptions = {}) {
       email,
       app_metadata: { provider, providers: [provider] },
       user_metadata: {},
-      identities: [],
+      identities: (
+        options.identities ?? [{ provider, last_sign_in_at: new Date().toISOString() }]
+      ).map((identity, i) => ({ id: `${userId}-${i}`, user_id: userId, ...identity })),
       created_at: '2026-11-03T10:00:00.000Z',
       updated_at: '2026-11-03T10:00:00.000Z',
     },
@@ -99,14 +103,21 @@ function failure(
 }
 
 export class FakeAuthServer {
-  next: { verify: Mode; refresh: Mode; logout: Mode } = {
+  next: { verify: Mode; refresh: Mode; logout: Mode; otp: Mode; deleteAccount: Mode | 'unauthorized' } = {
     verify: 'ok',
     refresh: 'ok',
     logout: 'ok',
+    otp: 'ok',
+    deleteAccount: 'ok',
   };
   /** What a successful verify or refresh returns. */
   sessionOptions: FakeSessionOptions = {};
-  readonly calls: { method: string; path: string }[] = [];
+  readonly calls: {
+    method: string;
+    path: string;
+    body: unknown;
+    authorization: string | null;
+  }[] = [];
 
   callsTo(path: string): number {
     return this.calls.filter((c) => c.path === path).length;
@@ -134,7 +145,14 @@ export class FakeAuthServer {
       (url.searchParams.get('grant_type')
         ? `?grant_type=${url.searchParams.get('grant_type')}`
         : '');
-    this.calls.push({ method, path });
+    const headers = new Headers(init?.headers);
+    let body: unknown = null;
+    try {
+      body = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
+    } catch {
+      body = init?.body;
+    }
+    this.calls.push({ method, path, body, authorization: headers.get('Authorization') });
 
     const endpoint =
       path === '/auth/v1/verify'
@@ -153,6 +171,24 @@ export class FakeAuthServer {
     if (path === '/auth/v1/token?grant_type=refresh_token') {
       if (this.next.refresh !== 'ok') return failure(this.next.refresh, 'refresh_token_not_found');
       return json(200, fakeSession(this.sessionOptions));
+    }
+    if (path === '/auth/v1/otp') {
+      if (this.next.otp === 'rate_limited') {
+        return json(429, { code: 'over_email_send_rate_limit', message: 'Too many emails' });
+      }
+      if (this.next.otp === 'rejected') {
+        return json(400, { code: 'email_address_invalid', message: 'Email address is invalid' });
+      }
+      if (this.next.otp !== 'ok') return failure(this.next.otp, 'otp_expired');
+      return json(200, {});
+    }
+    if (path === '/functions/v1/delete-account') {
+      const mode = this.next.deleteAccount;
+      if (mode === 'unauthorized') return json(401, { error: 'unauthorized' });
+      if (mode === 'offline') return Promise.reject(new TypeError('Network request failed'));
+      if (mode === 'rate_limited') return json(429, { error: 'rate_limited' });
+      if (mode !== 'ok') return json(500, { error: 'failed' });
+      return new Response(null, { status: 204 });
     }
     if (path === '/auth/v1/logout') {
       if (this.next.logout !== 'ok') return failure(this.next.logout, 'session_not_found');

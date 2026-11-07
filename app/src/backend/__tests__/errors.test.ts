@@ -6,6 +6,8 @@ import {
 } from '@supabase/supabase-js';
 import * as fc from 'fast-check';
 
+import { TimeoutError } from '@/lib/async';
+
 import { BACKEND_ERRORS, toBackendError } from '../errors';
 
 // What real Supabase Auth answers (API version 2024-01-01: `code` + `message`, with the version
@@ -46,9 +48,19 @@ describe('toBackendError with errors as supabase-js really builds them', () => {
     expect(toBackendError(error)).toBe('rate_limited');
   });
 
-  test('otp_expired (403) → unknown, never the raw message', async () => {
+  // A wrong code and a used code get this same answer (pinned in supabase/tests/local/auth.test.mjs).
+  test('otp_expired (403) → invalid_code', async () => {
     const error = await realAuthError(403, { code: 'otp_expired', message: 'Token has expired' });
-    expect(toBackendError(error)).toBe('unknown');
+    expect(toBackendError(error)).toBe('invalid_code');
+  });
+
+  test('otp_expired in the local stack body shape (error_code + msg) → invalid_code', async () => {
+    const error = await realAuthError(403, {
+      code: 403,
+      error_code: 'otp_expired',
+      msg: 'Token has expired or is invalid',
+    });
+    expect(toBackendError(error)).toBe('invalid_code');
   });
 });
 
@@ -57,6 +69,10 @@ describe('toBackendError', () => {
     expect(toBackendError(new AuthRetryableFetchError('Network request failed', 0))).toBe('offline');
     expect(toBackendError(new TypeError('Network request failed'))).toBe('offline');
     expect(toBackendError(new TypeError('Failed to fetch'))).toBe('offline');
+  });
+
+  test('our own time limit ran out (TimeoutError) → offline', () => {
+    expect(toBackendError(new TimeoutError(10_000))).toBe('offline');
   });
 
   test('the server is down (5xx) → unknown, not offline', () => {

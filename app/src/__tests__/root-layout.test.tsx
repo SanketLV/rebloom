@@ -85,6 +85,7 @@ test('start-up deletes stored photos left by a save that never finished', async 
   expect(fakeFs.under(`${DOCUMENT}/photos`)).toEqual([]);
 });
 
+// Settings shows the account card, which reads the session: from there a request is expected.
 test('opening the app and its tabs makes no network request, even with the backend configured', async () => {
   mockFontState = [true, null];
   // An expired stored session: any use of the backend would have to refresh it over the network.
@@ -120,8 +121,6 @@ test('opening the app and its tabs makes no network request, even with the backe
     await screen.findByRole('tab', { name: 'Today' }, { timeout: 5000 });
     await fireEvent.press(screen.getByRole('tab', { name: 'My Plants' }));
     await fireEvent.press(screen.getByRole('tab', { name: 'Today' }));
-    await fireEvent.press(screen.getByRole('button', { name: 'Profile and settings' }));
-    expect(screen).toHavePathname('/settings');
     // renderRouter runs on fake timers: let anything started from a timer (a debounce, the
     // supabase-js refresh ticker) run before checking.
     await act(async () => {
@@ -129,6 +128,14 @@ test('opening the app and its tabs makes no network request, even with the backe
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(opened).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Profile and settings' }));
+    expect(screen).toHavePathname('/settings');
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchMock).toHaveBeenCalled();
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('/auth/v1/token');
   } finally {
     globalThis.fetch = real.fetch;
     globalThis.XMLHttpRequest = real.xhr;

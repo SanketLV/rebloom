@@ -82,6 +82,29 @@ describe('reading the session', () => {
     expect(server.fetch).not.toHaveBeenCalled();
   });
 
+  // app_metadata.provider is the first method ever used; the account screen shows this sign-in's.
+  test('provider is the identity signed in with most recently', async () => {
+    storeSession({
+      provider: 'email',
+      identities: [
+        { provider: 'email', last_sign_in_at: '2026-11-01T10:00:00Z' },
+        { provider: 'google', last_sign_in_at: '2026-11-05T10:00:00Z' },
+        { provider: 'apple', last_sign_in_at: null },
+      ],
+    });
+    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'google' } });
+  });
+
+  test('without identities, provider falls back to app_metadata.provider', async () => {
+    storeSession({ provider: 'google', identities: [] });
+    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'google' } });
+  });
+
+  test('identities with unreadable dates fall back to app_metadata.provider', async () => {
+    storeSession({ provider: 'email', identities: [{ provider: 'google', last_sign_in_at: 'soon' }] });
+    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'email' } });
+  });
+
   test('backend not configured → not_configured everywhere', async () => {
     delete process.env.EXPO_PUBLIC_SUPABASE_URL;
     expect(await getSession()).toEqual({ ok: false, error: 'not_configured' });
