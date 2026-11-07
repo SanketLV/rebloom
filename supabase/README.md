@@ -100,6 +100,7 @@ Security definer functions: `set search_path = ''` and fully qualified names, as
 
 - A function reads its keys from the environment Supabase gives it: `SUPABASE_URL` and `SUPABASE_SECRET_KEYS` (JSON, key `default`; the legacy `SUPABASE_SERVICE_ROLE_KEY` as fallback). Nothing to set by hand, locally or in production. Never put a secret key in the app or the repo.
 - `verify_jwt = false` in `config.toml`: the platform's own check only understands the legacy JWT keys. Each function checks the caller itself (`delete-account` asks the Auth server with `auth.getUser(token)`, which refuses API keys and tokens with no user).
+- `delete-account` answers: 204 deleted or already gone; 401 only when Auth refuses the token (bad, forged, revoked, or an API key); 503 when Auth can't be asked (network error or 5xx), so an outage never reads as "signed out"; 500 when the delete itself fails; 405 for anything but POST.
 - **Auth settings in production are changed in the dashboard, never with `supabase config push`**: it would copy this file's local values (`site_url = "http://127.0.0.1:3000"`, the local redirect list) over production's. Each dashboard change is listed and ticked in its PR.
 
 ## Windows

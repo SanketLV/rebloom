@@ -6,8 +6,9 @@ const MAX_EMAIL = 254;
 // A shape check only (x@y.z, no spaces, one @); the auth server has the final say.
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
+// NFKC first: fullwidth letters and digits (some keyboards, copied text) become plain ones.
 export function normalizeEmail(text: string): string {
-  return text.replace(INVISIBLE, '').trim().toLowerCase();
+  return text.normalize('NFKC').replace(INVISIBLE, '').trim().toLowerCase();
 }
 
 export function isEmailShape(email: string): boolean {
@@ -16,5 +17,5 @@ export function isEmailShape(email: string): boolean {
 
 /** Digits only, at most 6: "123 456" and "123-456" become "123456". */
 export function cleanCode(text: string): string {
-  return text.replace(/[^0-9]/g, '').slice(0, 6);
+  return text.normalize('NFKC').replace(/[^0-9]/g, '').slice(0, 6);
 }

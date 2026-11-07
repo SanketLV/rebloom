@@ -18,13 +18,17 @@ export function DeleteAccountSheet({ visible, onClose, onDeleted }: Props) {
   const { run, busy } = useSingleFlight(async () => {
     setError(null);
     AccessibilityInfo.announceForAccessibility('Deleting your account');
-    const result = await deleteAccount();
+    // Leave before the sign-out that follows the delete swaps this screen for the sign-in one.
+    const result = await deleteAccount(() => {
+      noteAccountDeleted();
+      AccessibilityInfo.announceForAccessibility('Your account is deleted.');
+      onDeleted();
+    });
     if (!result.ok) {
-      setError(errorMessage('delete', result.error));
-      return;
+      const message = errorMessage('delete', result.error);
+      setError(message);
+      AccessibilityInfo.announceForAccessibility(message);
     }
-    noteAccountDeleted();
-    onDeleted();
   });
 
   const close = () => {

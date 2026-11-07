@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 
 export const RESEND_SECONDS = 60;
@@ -13,10 +13,14 @@ const secondsUntil = (deadline: number) => Math.max(0, Math.ceil((deadline - Dat
 export function useResendTimer() {
   const [deadline, setDeadline] = useState(() => Date.now() + RESEND_SECONDS * 1000);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
+  // After "Send a new code" one sentence says both things (two in a row get cut off on iOS).
+  const sentAgain = useRef(false);
 
   useEffect(() => {
     AccessibilityInfo.announceForAccessibility(
-      `You can send a new code in ${RESEND_SECONDS} seconds.`,
+      sentAgain.current
+        ? `We sent a new code. You can send another in ${RESEND_SECONDS} seconds.`
+        : `You can send a new code in ${RESEND_SECONDS} seconds.`,
     );
     const timer = setInterval(() => {
       const left = secondsUntil(deadline);
@@ -30,6 +34,7 @@ export function useResendTimer() {
   }, [deadline]);
 
   const restart = useCallback(() => {
+    sentAgain.current = true;
     setDeadline(Date.now() + RESEND_SECONDS * 1000);
     setSecondsLeft(RESEND_SECONDS);
   }, []);

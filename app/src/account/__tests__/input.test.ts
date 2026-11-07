@@ -31,6 +31,10 @@ describe('normalizeEmail', () => {
     expect(normalizeEmail('  Sam\u200B@Example.COM\uFEFF ')).toBe('sam@example.com');
   });
 
+  test('fullwidth letters and signs become plain ones', () => {
+    expect(normalizeEmail('\uFF53\uFF41\uFF4D\uFF20example.com')).toBe('sam@example.com');
+  });
+
   test('property: idempotent, no \\p{Cf}, no outer space, no capitals', () => {
     fc.assert(
       fc.property(messy, (input) => {
@@ -98,6 +102,11 @@ describe('cleanCode', () => {
     ['', ''],
   ])('%j → %j', (input, out) => {
     expect(cleanCode(input)).toBe(out);
+  });
+
+  // Review round 1, #7: a fullwidth code (some keyboards and copied text) became empty.
+  test('fullwidth digits count as digits', () => {
+    expect(cleanCode('\uFF11\uFF12\uFF13 \uFF14\uFF15\uFF16')).toBe('123456');
   });
 
   test('property: digits only, at most 6', () => {

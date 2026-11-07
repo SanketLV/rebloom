@@ -134,6 +134,34 @@ describe('deleteAccount', () => {
     expect(events).toContainEqual({ type: 'signed_out', reason: 'user' });
   });
 
+  // Review round 1, #5: the caller must leave the account screen before the sign-out switches it.
+  test('runs the caller step after the delete and before the phone is signed out', async () => {
+    signedIn();
+    await getCurrentUser();
+    const order: string[] = [];
+    onSessionChange((event) => order.push(event.type));
+    const result = await deleteAccount(() => order.push('deleted'));
+    expect(result).toEqual({ ok: true, value: null });
+    expect(order).toEqual(['deleted', 'signed_out']);
+  });
+
+  test('a failed delete never runs the caller step', async () => {
+    signedIn();
+    server.next.deleteAccount = 'server_error';
+    const step = jest.fn();
+    await deleteAccount(step);
+    expect(step).not.toHaveBeenCalled();
+  });
+
+  test('returns without waiting for the server to end the session', async () => {
+    signedIn();
+    const release = server.hold('logout');
+    const result = await deleteAccount();
+    expect(result).toEqual({ ok: true, value: null });
+    expect(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
+    release();
+  });
+
   test('never touches plants or photos on the phone', async () => {
     signedIn();
     const photo = 'file:///document/photos/scan-1.jpg';

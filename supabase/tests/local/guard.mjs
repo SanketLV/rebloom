@@ -62,6 +62,14 @@ if (!KEY) stop('no publishable key found. Set SUPABASE_PUBLISHABLE_KEY (see `npx
 
 export const RUN = Date.now().toString(36);
 
+// Server-side keys of the LOCAL stack, for tests that check they're refused where a user token is
+// expected. Only read from `supabase status` (null when the values came from the environment).
+export const LOCAL_KEYS = {
+  secret: status?.SECRET_KEY ?? null,
+  serviceRoleJwt: status?.SERVICE_ROLE_KEY ?? null,
+  anonJwt: status?.ANON_KEY ?? null,
+};
+
 // Waits for the sign-in email in Mailpit and returns { code, html }.
 export async function readCode(email) {
   for (let attempt = 0; attempt < 40; attempt += 1) {

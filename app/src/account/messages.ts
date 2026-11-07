@@ -12,7 +12,8 @@ const NOT_CONFIGURED = "Accounts aren't available in this version of the app.";
 const GENERIC: Record<AccountStep, string> = {
   send: "Couldn't send the code. Check the address and try again.",
   verify: "Couldn't sign in. Try again, or send a new code.",
-  delete: "Couldn't delete your account. Nothing was deleted. Try again.",
+  // The answer may have been lost after the delete worked, so never claim nothing happened.
+  delete: "Couldn't delete your account, or couldn't confirm it. Trying again is safe.",
 };
 
 const SPECIFIC: Record<AccountStep, Partial<Record<BackendError, string>>> = {
@@ -24,10 +25,10 @@ const SPECIFIC: Record<AccountStep, Partial<Record<BackendError, string>>> = {
     invalid_code: "That code isn't right or has expired. Check the email or send a new one.",
   },
   delete: {
-    offline: OFFLINE,
+    offline: "You're offline, so we couldn't confirm the deletion. Connect and try again; trying again is safe.",
     rate_limited: RATE_LIMITED,
     not_configured: NOT_CONFIGURED,
-    session_expired: "You've been signed out. Sign in again, then delete your account.",
+    session_expired: 'Your sign-in has expired. Sign out, sign in again, then delete your account.',
   },
 };
 

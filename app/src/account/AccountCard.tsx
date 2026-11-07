@@ -74,9 +74,7 @@ export function AccountCard() {
         ) : null}
       </View>
       {account.status === 'guest' && account.notice === 'deleted' ? (
-        <Text style={styles.notice} accessibilityLiveRegion="polite">
-          Your account is deleted.
-        </Text>
+        <Text style={styles.notice}>Your account is deleted.</Text>
       ) : null}
     </View>
   );

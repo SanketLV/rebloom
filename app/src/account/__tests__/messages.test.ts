@@ -18,7 +18,7 @@ test.each([
   ['verify', 'invalid_code', "That code isn't right or has expired. Check the email or send a new one."],
   ['send', 'rate_limited', 'Too many tries. Wait a minute and try again.'],
   ['verify', 'offline', "You're offline. Connect and try again."],
-  ['delete', 'offline', "You're offline. Connect and try again."],
+  
 ] as const)('%s + %s → the spec sentence', (step, error, text) => {
   expect(errorMessage(step, error)).toBe(text);
 });
@@ -30,5 +30,19 @@ test('property: anything else, even server text, gets a fixed generic sentence',
       const text = errorMessage(step, raw as never);
       expect(known.has(text)).toBe(true);
     }),
+  );
+});
+
+// Review round 1, #1: a delete whose answer didn't arrive may have worked. Never claim it didn't.
+test.each(['unknown', 'offline'] as const)('a %s delete never says nothing was deleted, and says retrying is safe', (error) => {
+  const text = errorMessage('delete', error);
+  expect(text).not.toMatch(/nothing was deleted/i);
+  expect(text).toMatch(/safe/i);
+});
+
+// Review round 1, #4: a 401 doesn't sign the phone out, so the words mustn't say it did.
+test('a delete refused for the sign-in says what to do, not that the phone is signed out', () => {
+  expect(errorMessage('delete', 'session_expired')).toBe(
+    'Your sign-in has expired. Sign out, sign in again, then delete your account.',
   );
 });

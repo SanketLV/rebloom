@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { KEY, RUN, URL_, signInByCode } from './guard.mjs';
+import { KEY, LOCAL_KEYS, RUN, URL_, signInByCode } from './guard.mjs';
 
 const FUNCTION = `${URL_}/functions/v1/delete-account`;
 
@@ -43,6 +43,26 @@ test('no token → 401', async () => {
 
 test('the publishable key as the token → 401', async () => {
   const r = await callDelete({ token: KEY });
+  assert.equal(r.status, 401, await r.text());
+});
+
+for (const [name, key] of Object.entries(LOCAL_KEYS)) {
+  test(`the ${name} key as the token → 401 (no user in it)`, async (t) => {
+    if (!key) return t.skip('key not available from `supabase status`');
+    const r = await callDelete({ token: key });
+    assert.equal(r.status, 401, await r.text());
+  });
+}
+
+test('a signed-out (revoked) session token → 401', async () => {
+  const e = await signInByCode(`del-e-${RUN}@example.com`);
+  const out = await fetch(`${URL_}/auth/v1/logout?scope=global`, {
+    method: 'POST',
+    headers: { apikey: KEY, Authorization: `Bearer ${e.access_token}` },
+  });
+  assert.equal(out.status, 204, await out.text());
+  // The token's signature is still good, but Auth checks its session too: signed out means refused.
+  const r = await callDelete({ token: e.access_token });
   assert.equal(r.status, 401, await r.text());
 });
 

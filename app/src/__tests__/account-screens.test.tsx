@@ -61,7 +61,9 @@ beforeEach(() => {
     mockEmit({ type: 'signed_in', user: sam });
     return ok(sam);
   });
-  auth.deleteAccount.mockReset().mockImplementation(async () => {
+  // As the real one: the caller's step after the server delete, then the phone signs out.
+  auth.deleteAccount.mockReset().mockImplementation(async (afterDelete?: () => void) => {
+    afterDelete?.();
     mockEmit({ type: 'signed_out', reason: 'user' });
     return ok(null);
   });
@@ -179,7 +181,8 @@ describe('email screen', () => {
     await fireEvent.changeText(screen.getByLabelText('Email'), 'sam@example.com');
     await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
     expect(screen).toHavePathname('/account/email');
-    expect(screen.getByText(text)).toBeOnTheScreen();
+    expect(screen.getByText(text, { includeHiddenElements: true })).toBeOnTheScreen();
+    expect(announce).toHaveBeenCalledWith(text);
   });
 
   test('Android Back goes to the sign-in screen', async () => {
@@ -253,10 +256,25 @@ describe('code screen', () => {
     await goToCode();
     await fireEvent.changeText(screen.getByLabelText('6-digit code'), '000000');
     expect(
-      screen.getByText("That code isn't right or has expired. Check the email or send a new one."),
+      screen.getByText("That code isn't right or has expired. Check the email or send a new one.", {
+        includeHiddenElements: true,
+      }),
     ).toBeOnTheScreen();
     expect(screen.getByLabelText('6-digit code').props.value).toBe('');
     expect(screen).toHavePathname('/account/code');
+    expect(announce).toHaveBeenCalledWith(
+      "That code isn't right or has expired. Check the email or send a new one.",
+    );
+  });
+
+  // Review round 1, #2: a non-editable field can't take focus, so the keyboard dropped.
+  test('the code field stays editable while checking, so it keeps focus', async () => {
+    let finish: (r: Result<SessionUser>) => void = () => {};
+    auth.verifyEmailCode.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    await goToCode();
+    await fireEvent.changeText(screen.getByLabelText('6-digit code'), '123456');
+    expect(screen.getByLabelText('6-digit code').props.editable).not.toBe(false);
+    await act(async () => finish({ ok: false, error: 'invalid_code' }));
   });
 
   test('then the right code signs in', async () => {
@@ -274,7 +292,8 @@ describe('code screen', () => {
     auth.verifyEmailCode.mockResolvedValue({ ok: false, error });
     await goToCode();
     await fireEvent.changeText(screen.getByLabelText('6-digit code'), '123456');
-    expect(screen.getByText(text)).toBeOnTheScreen();
+    expect(screen.getByText(text, { includeHiddenElements: true })).toBeOnTheScreen();
+    expect(announce).toHaveBeenCalledWith(text);
     expect(screen).toHavePathname('/account/code');
   });
 
@@ -358,13 +377,14 @@ describe('account screen', () => {
   });
 
   test('delete: confirm → deleting (announced, one call) → Settings says the account is deleted', async () => {
-    let finish: (r: Result<null>) => void = () => {};
+    let finish: () => void = () => {};
     auth.deleteAccount.mockImplementation(
-      () =>
+      (afterDelete?: () => void) =>
         new Promise((resolve) => {
-          finish = (r) => {
+          finish = () => {
+            afterDelete?.();
             mockEmit({ type: 'signed_out', reason: 'user' });
-            resolve(r);
+            resolve(ok(null));
           };
         }),
     );
@@ -380,9 +400,22 @@ describe('account screen', () => {
     await androidBack.press(); // can't close the sheet while deleting
     expect(screen.getByText('Delete your account?')).toBeOnTheScreen();
 
-    await act(async () => finish(ok(null)));
+    await act(async () => finish());
     expect(screen).toHavePathname('/settings');
     expect(screen.getByText('Your account is deleted.')).toBeOnTheScreen();
+    expect(announce).toHaveBeenCalledWith('Your account is deleted.');
+  });
+
+  // Review round 1, #5: the sign-out after a delete swapped the screen first, and a later step
+  // went Back a second time (past Settings).
+  test('after a delete the app goes back once, to Settings, and stays there', async () => {
+    await openSignedIn();
+    await fireEvent.press(screen.getByRole('button', { name: 'Delete account' }));
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Delete account' }).at(-1)!);
+    await act(async () => {});
+    expect(screen).toHavePathname('/settings');
+    expect(screen.queryByText('Keep your plants safe')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save plants' })).toBeOnTheScreen();
   });
 
   test('a failed delete: the message on the sheet, still signed in, can try again', async () => {
@@ -390,7 +423,9 @@ describe('account screen', () => {
     await openSignedIn();
     await fireEvent.press(screen.getByRole('button', { name: 'Delete account' }));
     await fireEvent.press(screen.getAllByRole('button', { name: 'Delete account' }).at(-1)!);
-    expect(screen.getByText("You're offline. Connect and try again.")).toBeOnTheScreen();
+    const message = "You're offline, so we couldn't confirm the deletion. Connect and try again; trying again is safe.";
+    expect(screen.getByText(message)).toBeOnTheScreen();
+    expect(announce).toHaveBeenCalledWith(message);
     expect(screen).toHavePathname('/account');
     // Behind the open sheet, so hidden from screen readers.
     expect(screen.getByText('Signed in with Google', { includeHiddenElements: true })).toBeOnTheScreen();
@@ -411,6 +446,22 @@ describe('opened cold from a link', () => {
     await screen.findByText('Keep your plants safe');
     await androidBack.press();
     expect(screen).toHavePathname('/settings');
+  });
+
+  test('while the account is being checked, Back is there and works', async () => {
+    let finish: (r: Result<SessionUser | null>) => void = () => {};
+    const sessionMock = jest.requireMock('@/backend/session') as { getCurrentUser: () => unknown };
+    const real = sessionMock.getCurrentUser;
+    sessionMock.getCurrentUser = () => new Promise((resolve) => (finish = resolve));
+    try {
+      await renderRouter(ROUTES, { initialUrl: '/account' });
+      expect(await screen.findByLabelText('Checking your account')).toBeOnTheScreen();
+      await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+      expect(screen).toHavePathname('/settings');
+    } finally {
+      await act(async () => finish({ ok: true, value: null }));
+      sessionMock.getCurrentUser = real;
+    }
   });
 
   test('Close on /account goes to Settings', async () => {

@@ -54,8 +54,12 @@ function functionError(error: unknown): BackendError {
  * Deletes the signed-in user's account on the server (the `delete-account` function, which reads
  * the user from the token sent with the call), then signs this phone out. On any failure the
  * phone stays signed in and nothing is deleted here.
+ *
+ * `afterDelete` runs once the server has deleted the account and before the phone is signed out,
+ * so a screen can leave before the sign-out changes it. The sign-out's local part is immediate;
+ * telling the server isn't waited for (the account is already gone).
  */
-export async function deleteAccount(): Promise<Result<null>> {
+export async function deleteAccount(afterDelete?: () => void): Promise<Result<null>> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: 'not_configured' };
   try {
@@ -67,8 +71,11 @@ export async function deleteAccount(): Promise<Result<null>> {
   } catch (error) {
     return { ok: false, error: functionError(error) };
   }
-  // The account is gone; sign-out never fails to clear the phone except on a storage error, and
-  // then the next refresh is refused (session_expired). Either way the delete succeeded.
-  await signOut();
+  try {
+    afterDelete?.();
+  } catch (error) {
+    console.error('[auth] afterDelete threw', error);
+  }
+  void signOut();
   return { ok: true, value: null };
 }

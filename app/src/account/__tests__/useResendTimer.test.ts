@@ -74,3 +74,13 @@ test('stops its timer when the screen closes', async () => {
   await tick(120_000);
   expect(announce).not.toHaveBeenCalled();
 });
+
+// Review round 1, #9: two announcements back to back, and iOS cuts off the first.
+test('restart says once that a new code was sent', async () => {
+  const { result } = await renderHook(() => useResendTimer());
+  await tick(60_000);
+  announce.mockClear();
+  await act(async () => result.current.restart());
+  expect(announce).toHaveBeenCalledTimes(1);
+  expect(announce).toHaveBeenCalledWith('We sent a new code. You can send another in 60 seconds.');
+});

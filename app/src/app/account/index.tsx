@@ -20,9 +20,11 @@ export default function AccountRoute() {
       return <SignInView />;
     case 'loading':
       return (
-        <View style={styles.loading} accessible accessibilityLabel="Checking your account">
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <AccountScreen top={{ kind: 'back', onPress: leaveAccount }}>
+          <View style={styles.loading} accessible accessibilityLabel="Checking your account">
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        </AccountScreen>
       );
     case 'offline':
       return (
@@ -45,5 +47,5 @@ export default function AccountRoute() {
 }
 
 const styles = StyleSheet.create({
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
+  loading: { minHeight: 160, alignItems: 'center', justifyContent: 'center' },
 });

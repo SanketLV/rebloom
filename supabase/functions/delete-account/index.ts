@@ -4,12 +4,13 @@
 // Auth server. The request body is never read, so no one can name another user. The user's rows go
 // with them through `on delete cascade` (supabase/README.md, table template).
 //
-// 204: deleted, or already gone (a retry after a lost reply must succeed). 401: no valid user
-// token. 405: not POST. 500: the delete failed; nothing about the error is sent back.
+// 204: deleted, or already gone (a retry after a lost reply must succeed). 401: Auth refused the
+// token (only that: never an outage). 405: not POST. 503: Auth couldn't be asked. 500: the delete
+// failed. Nothing about an error is sent back.
 //
 // verify_jwt is off in config.toml: the platform check only understands the legacy JWT keys.
 
-import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
+import { createClient, isAuthRetryableFetchError } from 'npm:@supabase/supabase-js@2.118.0';
 
 function secretKey(): string {
   const keys = Deno.env.get('SUPABASE_SECRET_KEYS');
@@ -50,6 +51,12 @@ Deno.serve(async (request) => {
   // refuses keys and tokens without a user (publishable, secret, anon and service_role JWTs).
   const { data, error } = await admin.auth.getUser(token);
   if (isUserGone(error)) return reply(204);
+  // Auth down, unreachable or failing (network error or 5xx): not the caller's fault, and the app
+  // must not say it is. Every other error (bad JWT, revoked session: AuthSessionMissingError) → 401.
+  if (error && (isAuthRetryableFetchError(error) || (error.status ?? 0) >= 500)) {
+    console.error('[delete-account] auth check failed', error.status, error.code);
+    return reply(503);
+  }
   if (error || !data.user || data.user.role !== 'authenticated') return reply(401);
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(data.user.id);

@@ -40,6 +40,7 @@ function CodeForm({ email }: { email: string }) {
   // One flight for both auto-submit at 6 digits and the Continue button.
   const verify = useSingleFlight(async (digits: string) => {
     setError(null);
+    AccessibilityInfo.announceForAccessibility('Checking the code');
     const result = await verifyEmailCode(email, digits);
     if (result.ok) return;
     setError(errorMessage('verify', result.error));
@@ -55,7 +56,6 @@ function CodeForm({ email }: { email: string }) {
       return;
     }
     resend.restart();
-    AccessibilityInfo.announceForAccessibility('We sent a new code.');
   });
 
   const onChange = (text: string) => {
@@ -97,7 +97,6 @@ function CodeForm({ email }: { email: string }) {
         autoComplete="one-time-code"
         textContentType="oneTimeCode"
         autoFocus
-        editable={!verify.busy}
       />
       <View style={styles.links}>
         <TextButton

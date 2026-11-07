@@ -1,5 +1,12 @@
-import type { ComponentRef, Ref } from 'react';
-import { StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { useEffect, type ComponentRef, type Ref } from 'react';
+import {
+  AccessibilityInfo,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputProps,
+} from 'react-native';
 
 import { colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
 
@@ -15,10 +22,19 @@ type Props = Omit<TextInputProps, 'style' | 'accessibilityLabel'> & {
 };
 
 // A labelled text input (artboards 18a, 18b).
+// Screen readers get the label and the error from the input itself, and hear each new error
+// (announced on iOS too: accessibilityLiveRegion is Android-only).
+const notRead = { accessibilityElementsHidden: true, importantForAccessibility: 'no' as const };
+
 export function TextField({ label, error, big = false, ...input }: Props) {
+  useEffect(() => {
+    if (error) AccessibilityInfo.announceForAccessibility(error);
+  }, [error]);
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label} {...notRead}>
+        {label}
+      </Text>
       <TextInput
         {...input}
         accessibilityLabel={label}
@@ -27,7 +43,7 @@ export function TextField({ label, error, big = false, ...input }: Props) {
         style={[styles.input, big && styles.big, !!error && styles.error]}
       />
       {error ? (
-        <Text style={styles.errorText} accessibilityLiveRegion="polite">
+        <Text style={styles.errorText} {...notRead}>
           {error}
         </Text>
       ) : null}
