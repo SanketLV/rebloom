@@ -24,6 +24,10 @@ test('colors match the brand palette exactly', () => {
     disabled: '#C9CDBD',
     controlBorder: '#8C9482',
     photoBg: '#CFC8B6',
+    field: '#FFFFFF',
+    primaryRaised: '#3F5236',
+    onPrimarySoft: '#F3F4EC',
+    onPrimaryMuted: '#CBD4C2',
   });
 });
 

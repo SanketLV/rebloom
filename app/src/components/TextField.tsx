@@ -1,3 +1,4 @@
+import type { ComponentRef, Ref } from 'react';
 import { StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 
 import { colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
@@ -10,6 +11,7 @@ type Props = Omit<TextInputProps, 'style' | 'accessibilityLabel'> & {
   error?: string | null;
   // Large centred digits (the sign-in code).
   big?: boolean;
+  ref?: Ref<ComponentRef<typeof TextInput>>;
 };
 
 // A labelled text input (artboards 18a, 18b).

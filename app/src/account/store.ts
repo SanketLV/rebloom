@@ -82,9 +82,10 @@ export function useAccount(): AccountState {
   return useSyncExternalStore(subscribeAccount, getAccountState);
 }
 
-/** Call just before signing out after a delete, so the Settings card says the account is gone. */
+/** After a delete, so the Settings card says the account is gone (before or after its sign-out). */
 export function noteAccountDeleted(): void {
-  deletedPending = true;
+  if (state.status === 'guest') set({ status: 'guest', notice: 'deleted' });
+  else deletedPending = true;
 }
 
 /** Tests only. */

@@ -140,6 +140,17 @@ test('refreshAccount reads again (Try again after offline)', async () => {
   expect(result.current).toEqual({ status: 'signed_in', user: sam });
 });
 
+test('a delete noted after its sign-out still shows the notice', async () => {
+  mockCurrentUser = async () => ({ ok: true, value: sam });
+  const { result } = await renderHook(() => useAccount());
+  await flush();
+  await act(async () => {
+    mockEmit({ type: 'signed_out', reason: 'user' });
+    noteAccountDeleted();
+  });
+  expect(result.current).toEqual({ status: 'guest', notice: 'deleted' });
+});
+
 test('a second screen subscribing does not start a second listener', async () => {
   await renderHook(() => useAccount());
   await renderHook(() => useAccount());

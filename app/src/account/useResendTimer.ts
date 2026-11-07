@@ -18,7 +18,6 @@ export function useResendTimer() {
     AccessibilityInfo.announceForAccessibility(
       `You can send a new code in ${RESEND_SECONDS} seconds.`,
     );
-    setSecondsLeft(secondsUntil(deadline));
     const timer = setInterval(() => {
       const left = secondsUntil(deadline);
       setSecondsLeft(left);
@@ -30,7 +29,10 @@ export function useResendTimer() {
     return () => clearInterval(timer);
   }, [deadline]);
 
-  const restart = useCallback(() => setDeadline(Date.now() + RESEND_SECONDS * 1000), []);
+  const restart = useCallback(() => {
+    setDeadline(Date.now() + RESEND_SECONDS * 1000);
+    setSecondsLeft(RESEND_SECONDS);
+  }, []);
 
   return { secondsLeft, ready: secondsLeft === 0, restart };
 }

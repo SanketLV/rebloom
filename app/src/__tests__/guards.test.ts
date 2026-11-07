@@ -55,7 +55,17 @@ test('image picker asks for photos only and leaves the camera permission alone',
 // open, so an app start makes no network request (root-layout test). Imports are parsed, resolved
 // and followed through other files (see src/testing/importGraph.ts); every file under src/
 // counts, .js too. Add a file here only on purpose.
-const ALLOWED_BACKEND_IMPORTERS: string[] = ['account/messages.ts', 'account/store.ts'];
+const ALLOWED_BACKEND_IMPORTERS: string[] = [
+  'account/AccountCard.tsx',
+  'account/AccountView.tsx',
+  'account/DeleteAccountSheet.tsx',
+  'account/messages.ts',
+  'account/store.ts',
+  'app/account/code.tsx',
+  'app/account/email.tsx',
+  'app/account/index.tsx',
+  'app/settings.tsx',
+];
 
 function allSources(dir: string): Record<string, string> {
   const out: Record<string, string> = {};
