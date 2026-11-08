@@ -376,6 +376,30 @@ describe('swiping', () => {
     expect(screen.getByText(title(3))).toBeOnTheScreen();
   });
 
+  test('a scroll from Next cut short by screen reader paging ends on the page that shows', async () => {
+    await renderFirstLaunch();
+    await fireEvent.press(button('Next'));
+    await scrollEvent(width() * 0.5);
+    // Paging with no touch drag lands past the target, so the target never arrives.
+    await scrollEvent(width() * 2);
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(screen.getByText(title(2))).toBeOnTheScreen();
+    // And paging with no drag keeps working afterwards.
+    await scrollEvent(width() * 3);
+    expect(screen.getByText(title(3))).toBeOnTheScreen();
+  });
+
+  test('a scroll from Next that sends no positions keeps the page Next chose', async () => {
+    await renderFirstLaunch();
+    await fireEvent.press(button('Next'));
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(screen.getByText(title(1))).toBeOnTheScreen();
+  });
+
   test('a narrower screen clamping the offset does not change the screen', async () => {
     await renderFirstLaunch();
     await pressNext(2);
