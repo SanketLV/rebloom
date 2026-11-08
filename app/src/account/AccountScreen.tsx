@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { Href } from 'expo-router';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,6 +12,9 @@ import { colors, spacing, type } from '@/theme/tokens';
 type Props = {
   // The button top left: Close (×) on the sign-in screen, Back (‹) elsewhere.
   top: { kind: 'close' | 'back'; onPress: () => void };
+  // Where Android hardware Back lands on a cold-linked screen (no history under it):
+  // the spot this screen's own Back button would go to. Settings by default.
+  backFallback?: Href;
   title?: string;
   body?: ReactNode;
   children?: ReactNode;
@@ -24,10 +28,19 @@ type Props = {
 
 // The frame of every account screen (artboards 18–18c): scrolls at large text sizes, and keeps
 // the main button reachable above the keyboard.
-export function AccountScreen({ top, title, body, children, footer, overlay, sheetOpen = false }: Props) {
+export function AccountScreen({
+  top,
+  backFallback = '/settings',
+  title,
+  body,
+  children,
+  footer,
+  overlay,
+  sheetOpen = false,
+}: Props) {
   const insets = useSafeAreaInsets();
   // Opened cold from a link, Android Back would close the app. Off while a sheet handles Back.
-  useAndroidBackOr('/settings', !sheetOpen);
+  useAndroidBackOr(backFallback, !sheetOpen);
   return (
     <View style={styles.screen}>
       <KeyboardAvoidingView

@@ -64,6 +64,7 @@ function CodeForm({ email }: { email: string }) {
 
   return (
     <AccountScreen
+      backFallback="/account/email"
       top={{ kind: 'back', onPress: toEmailStep }}
       title="Check your email"
       body={
@@ -98,7 +99,8 @@ function CodeForm({ email }: { email: string }) {
       <View style={styles.links}>
         <TextButton
           label={resend.ready ? 'Send a new code' : `Send a new code in ${minutes(resend.secondsLeft)}`}
-          disabled={!resend.ready || sendAgain.busy}
+          // A resend mustn't overlap the check: its answer would mix with this one's.
+          disabled={!resend.ready || sendAgain.busy || verify.busy}
           onPress={() => void sendAgain.run()}
         />
         <TextButton label="Use a different email" onPress={toEmailStep} />

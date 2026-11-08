@@ -1,5 +1,6 @@
 import { router, useNavigation } from 'expo-router';
 import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { AccountScreen, Body, Small } from '@/account/AccountScreen';
 import { noteCodeSent, secondsUntilResend, setCodeEmail } from '@/account/codeSends';
@@ -7,7 +8,7 @@ import { isEmailShape, normalizeEmail } from '@/account/input';
 import { errorMessage } from '@/account/messages';
 import { useShowAccountWhenSignedIn } from '@/account/navigation';
 import { sendEmailCode } from '@/backend/auth';
-import { Button } from '@/components/Button';
+import { Button, TextButton } from '@/components/Button';
 import { TextField } from '@/components/TextField';
 import { goBackOr } from '@/lib/goBack';
 import { useSingleFlight } from '@/lib/useSingleFlight';
@@ -22,13 +23,14 @@ export default function EmailScreen() {
   const email = normalizeEmail(raw);
   const valid = isEmailShape(email);
 
+  const openCode = () => {
+    setCodeEmail(email);
+    // Only if the user is still here: a send that answers after Back mustn't pull them back.
+    if (navigation.isFocused()) router.push('/account/code');
+  };
+
   const { run, busy } = useSingleFlight(async () => {
     setError(null);
-    // Only if the user is still here: a send that answers after Back mustn't pull them back.
-    const openCode = () => {
-      setCodeEmail(email);
-      if (navigation.isFocused()) router.push('/account/code');
-    };
     // A code went to this address less than a minute ago: it still works, and the server would
     // refuse another one yet.
     if (secondsUntilResend(email) > 0) return openCode();
@@ -48,6 +50,7 @@ export default function EmailScreen() {
 
   return (
     <AccountScreen
+      backFallback="/account"
       top={{ kind: 'back', onPress: () => goBackOr('/account') }}
       title="Sign in with email"
       body={<Body>We&apos;ll email you a 6-digit code. No password needed.</Body>}
@@ -78,6 +81,17 @@ export default function EmailScreen() {
         maxLength={320}
         editable={!busy}
       />
+      {/* The send may have timed out yet the email is out there (a slow request, or a send from
+          before a restart): a way in that asks nothing from the server. */}
+      {error !== null ? (
+        <View style={styles.links}>
+          <TextButton label="Enter a code I already received" onPress={openCode} />
+        </View>
+      ) : null}
     </AccountScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  links: { alignItems: 'flex-start' },
+});

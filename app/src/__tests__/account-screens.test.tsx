@@ -187,9 +187,29 @@ describe('email screen', () => {
     expect(announce).toHaveBeenCalledWith(text);
   });
 
+  // CodeRabbit: the send may have timed out yet the email is out there; the code screen must stay reachable.
+  test('after a failed send there is still a way to enter a code that arrived anyway', async () => {
+    auth.sendEmailCode.mockResolvedValue({ ok: false, error: 'offline' });
+    await openFromSettings();
+    await fireEvent.press(screen.getByRole('button', { name: 'Continue with email' }));
+    await fireEvent.changeText(screen.getByLabelText('Email'), 'sam@example.com');
+    await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Enter a code I already received' }));
+    expect(screen).toHavePathname('/account/code');
+    expect(screen.getByText('sam@example.com')).toBeOnTheScreen();
+    expect(auth.sendEmailCode).toHaveBeenCalledTimes(1);
+  });
+
   test('Android Back goes to the sign-in screen', async () => {
     await openFromSettings();
     await fireEvent.press(screen.getByRole('button', { name: 'Continue with email' }));
+    await androidBack.press();
+    expect(screen).toHavePathname('/account');
+  });
+
+  // PR Lens: opened cold from a link, hardware Back must match the screen's own Back button.
+  test('opened cold, Android Back goes to the sign-in screen, not Settings', async () => {
+    await renderRouter(ROUTES, { initialUrl: '/account/email' });
     await androidBack.press();
     expect(screen).toHavePathname('/account');
   });
@@ -313,11 +333,31 @@ describe('code screen', () => {
     expect(screen.getByRole('button', { name: /Send a new code in/ })).toBeDisabled();
   });
 
+  // CodeRabbit: a resend succeeding while verification is pending mixed the two answers.
+  test('"Send a new code" waits while the check is still running', async () => {
+    jest.useFakeTimers();
+    let finish: (r: Result<SessionUser>) => void = () => {};
+    auth.verifyEmailCode.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    await goToCode();
+    await fireEvent.changeText(screen.getByLabelText('6-digit code'), '123456');
+    await act(async () => void jest.advanceTimersByTime(60_000));
+    expect(screen.getByRole('button', { name: 'Send a new code' })).toBeDisabled();
+    await act(async () => finish({ ok: false, error: 'invalid_code' }));
+    expect(screen.getByRole('button', { name: 'Send a new code' })).toBeEnabled();
+  });
+
   test('"Use a different email" and Android Back go to the email screen', async () => {
     await goToCode();
     await fireEvent.press(screen.getByRole('button', { name: 'Use a different email' }));
     expect(screen).toHavePathname('/account/email');
     await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
+    await androidBack.press();
+    expect(screen).toHavePathname('/account/email');
+  });
+
+  test('opened cold, Android Back goes to the email step, not Settings', async () => {
+    setCodeEmail('sam@example.com');
+    await renderRouter(ROUTES, { initialUrl: '/account/code' });
     await androidBack.press();
     expect(screen).toHavePathname('/account/email');
   });
