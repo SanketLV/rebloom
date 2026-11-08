@@ -36,3 +36,21 @@ test('a setting it can not read keeps the animation', async () => {
   await act(async () => {});
   expect(result.current).toBe(false);
 });
+
+test('a change that arrives before the first read wins over that read', async () => {
+  let resolveRead!: (value: boolean) => void;
+  enabled().mockReturnValueOnce(new Promise((resolve) => (resolveRead = resolve)));
+  let changed!: (value: boolean) => void;
+  jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementationOnce(((
+    _event: string,
+    handler: (value: boolean) => void,
+  ) => {
+    changed = handler;
+    return { remove: jest.fn() };
+  }) as never);
+  const { result } = await renderHook(() => useReduceMotion());
+  await act(async () => changed(true));
+  // The read started before the change, so its answer is older.
+  await act(async () => resolveRead(false));
+  expect(result.current).toBe(true);
+});
