@@ -37,6 +37,8 @@ export const colors = {
   onPrimaryMuted: '#CBD4C2',
 } as const;
 
+export const overlayOpacity = 0.6;
+
 // The dark viewfinder screens (Camera, Analyzing).
 export const cameraColors = {
   ground: '#0F140F',
@@ -47,11 +49,15 @@ export const cameraColors = {
   button: '#1E2A1C',
   buttonIcon: '#D3D9C8',
   // Chips and round buttons over the live preview.
-  overlay: 'rgba(15,20,15,0.6)',
+  overlay: `rgba(15,20,15,${overlayOpacity})`,
 } as const;
 
 // Dims the screen behind a bottom sheet.
 export const scrim = 'rgba(15,20,15,0.55)';
+
+// Behind text on onboarding photos. 5.4:1 for cameraColors.text, even over pure white.
+export const photoScrimOpacity = 0.66;
+export const photoScrim = `rgba(15,20,15,${photoScrimOpacity})`;
 
 export const radius = { sm: 14, md: 20, lg: 24, pill: 999 } as const;
 
@@ -77,3 +83,5 @@ export const type = {
 
 // Minimum touch target (Apple HIG / Material).
 export const touchTarget = 44;
+
+export const buttonHeight = 56;
