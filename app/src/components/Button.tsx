@@ -10,10 +10,19 @@ type Props = {
   disabled?: boolean;
   // What a disabled button says instead, e.g. "Pick an answer".
   disabledLabel?: string;
+  // secondary: outlined, for other choices next to the main one; severe: destructive actions.
+  variant?: 'primary' | 'secondary' | 'severe';
 };
 
 // The one primary action on a screen (56pt, `primary` fill).
-export function Button({ label, onPress, busy = false, disabled = false, disabledLabel }: Props) {
+export function Button({
+  label,
+  onPress,
+  busy = false,
+  disabled = false,
+  disabledLabel,
+  variant = 'primary',
+}: Props) {
   const off = disabled || busy;
   const text = disabled && disabledLabel ? disabledLabel : label;
   return (
@@ -25,13 +34,21 @@ export function Button({ label, onPress, busy = false, disabled = false, disable
       accessibilityState={{ disabled: off, busy }}
       style={({ pressed }) => [
         styles.button,
+        variant === 'secondary' && styles.secondary,
+        variant === 'severe' && styles.severe,
         disabled && styles.disabled,
         pressed && styles.pressed,
       ]}>
       {busy ? (
-        <ActivityIndicator color={colors.onPrimary} />
+        <ActivityIndicator color={variant === 'secondary' ? colors.text : colors.onPrimary} />
       ) : (
-        <Text style={[type.button, disabled ? styles.disabledText : styles.text]}>{text}</Text>
+        <Text
+          style={[
+            type.button,
+            disabled ? styles.disabledText : variant === 'secondary' ? styles.secondaryText : styles.text,
+          ]}>
+          {text}
+        </Text>
       )}
     </Pressable>
   );
@@ -66,9 +83,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
-  disabled: { backgroundColor: colors.disabled },
+  secondary: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.line },
+  severe: { backgroundColor: colors.severe },
+  disabled: { backgroundColor: colors.disabled, borderWidth: 0 },
   pressed: { opacity: 0.85 },
   text: { color: colors.onPrimary },
+  secondaryText: { color: colors.text },
   disabledText: { color: colors.textSecondary },
   textButton: {
     minHeight: touchTarget,

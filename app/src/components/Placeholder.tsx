@@ -11,9 +11,11 @@ type Props = {
   action?: ReactNode;
   // Off for screens with a native header, which already clears the notch.
   insetTop?: boolean;
+  // The parts of the screen that are already built, above the note.
+  children?: ReactNode;
 };
 
-export function Placeholder({ title, artboard, action, insetTop = true }: Props) {
+export function Placeholder({ title, artboard, action, insetTop = true, children }: Props) {
   const insets = useSafeAreaInsets();
   return (
     <ScrollView
@@ -25,6 +27,7 @@ export function Placeholder({ title, artboard, action, insetTop = true }: Props)
         </Text>
         {action}
       </View>
+      {children}
       <Text style={[type.caption, styles.note]}>Becomes artboard {artboard}</Text>
     </ScrollView>
   );

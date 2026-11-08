@@ -70,3 +70,10 @@ for (const name of ['magic_link', 'confirmation']) {
     assert.doesNotMatch(html, /ConfirmationURL|TokenHash|<a\s|<img\s/i);
   });
 }
+
+// The platform's verify_jwt check only understands the legacy JWT keys; delete-account checks the
+// caller's token itself (supabase/functions/delete-account/index.ts).
+test('delete-account checks its own token: verify_jwt off, and the function exists', () => {
+  assert.equal(config?.['functions.delete-account']?.verify_jwt, false);
+  assert.ok(existsSync(new URL('supabase/functions/delete-account/index.ts', ROOT)));
+});
