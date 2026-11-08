@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
-import { KEY, MAILPIT, RUN, URL_ } from './guard.mjs';
+import { KEY, RUN, URL_, readCode } from './guard.mjs';
 
 const json = { 'Content-Type': 'application/json' };
 const anonHeaders = { apikey: KEY, ...json };
@@ -16,24 +16,6 @@ const EMAIL = `rebloom-local-${RUN}@example.com`;
 
 async function post(path, body, headers = anonHeaders) {
   return fetch(`${URL_}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
-}
-
-// Waits for the sign-in email in Mailpit and returns { code, html }.
-async function readCode(email) {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const r = await fetch(`${MAILPIT}/api/v1/messages?limit=50`);
-    assert.equal(r.status, 200, `Mailpit at ${MAILPIT}: ${r.status}`);
-    const { messages = [] } = await r.json();
-    const mail = messages.find((m) => (m.To ?? []).some((to) => to.Address?.toLowerCase() === email));
-    if (mail) {
-      const code = mail.Subject.match(/Your Rebloom code: (\d{6})/)?.[1];
-      assert.ok(code, `unexpected subject: ${mail.Subject}`);
-      const full = await (await fetch(`${MAILPIT}/api/v1/message/${mail.ID}`)).json();
-      return { code, html: full.HTML ?? '' };
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  assert.fail(`no email for ${email} reached Mailpit within 10 s`);
 }
 
 test('the guard stops the run, before any request, when pointed at a non-local address', () => {
@@ -74,6 +56,44 @@ test('an email code signs in, and the email holds only the code', async () => {
 
   const again = await post('/auth/v1/verify', { type: 'email', email: EMAIL, token: code });
   assert.ok(!again.ok, `a used code must not work twice, got ${again.status}`);
+});
+
+// The app's messages depend on these answers (accounts plan, D1 and task 1): a wrong code and a
+// used one can't be told apart, and the identities say which method signed in this time.
+test('a wrong code and a used code get the same answer; identities carry last_sign_in_at', async () => {
+  const email = `codes-${RUN}@example.com`;
+  const sent = await post('/auth/v1/otp', { email, create_user: true });
+  assert.equal(sent.status, 200, await sent.text());
+  const { code } = await readCode(email);
+
+  const verifyWith = (token) => post('/auth/v1/verify', { type: 'email', email, token });
+  const expectInvalid = async (r, what) => {
+    const body = await r.json();
+    assert.equal(r.status, 403, `${what}: ${JSON.stringify(body)}`);
+    assert.equal(body.error_code, 'otp_expired', `${what}: ${JSON.stringify(body)}`);
+  };
+
+  await expectInvalid(await verifyWith(code === '000000' ? '111111' : '000000'), 'wrong code');
+
+  const verified = await verifyWith(code);
+  const session = await verified.json();
+  assert.equal(verified.status, 200, JSON.stringify(session));
+  const identities = session.user?.identities ?? [];
+  assert.equal(identities.length, 1, JSON.stringify(identities));
+  assert.equal(identities[0].provider, 'email');
+  assert.ok(!Number.isNaN(Date.parse(identities[0].last_sign_in_at)), 'no last_sign_in_at');
+
+  await expectInvalid(await verifyWith(code), 'used code');
+});
+
+test('a second code requested too soon is rate limited', async () => {
+  const email = `resend-${RUN}@example.com`;
+  const first = await post('/auth/v1/otp', { email, create_user: true });
+  assert.equal(first.status, 200, await first.text());
+  const again = await post('/auth/v1/otp', { email, create_user: true });
+  const body = await again.json();
+  assert.equal(again.status, 429, JSON.stringify(body));
+  assert.equal(body.error_code, 'over_email_send_rate_limit');
 });
 
 test('a password set by someone else before the owner signs up never signs in', async () => {

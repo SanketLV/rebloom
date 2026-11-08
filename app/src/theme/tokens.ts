@@ -29,6 +29,12 @@ export const colors = {
   controlBorder: '#8C9482',
   // Behind a plant photo while it loads, or when it's missing.
   photoBg: '#CFC8B6',
+  // Text fields (artboards 18a, 18b).
+  field: '#FFFFFF',
+  // On a `primary` card (Settings account card, artboard 16).
+  primaryRaised: '#3F5236',
+  onPrimarySoft: '#F3F4EC',
+  onPrimaryMuted: '#CBD4C2',
 } as const;
 
 // The dark viewfinder screens (Camera, Analyzing).

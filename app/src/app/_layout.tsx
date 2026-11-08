@@ -78,6 +78,7 @@ export default function RootLayout() {
             name="scan"
             options={{ presentation: 'fullScreenModal', headerShown: false }}
           />
+          <Stack.Screen name="account" options={{ headerShown: false }} />
           <Stack.Screen
             name="settings"
             options={{

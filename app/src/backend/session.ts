@@ -25,6 +25,7 @@ import {
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: BackendError };
 
+/** `provider`: how this sign-in was made ('email', 'google', 'apple'), not the first method used. */
 export type SessionUser = { id: string; email: string | null; provider: string | null };
 
 export type SessionEvent =
@@ -48,6 +49,9 @@ let currentUserId: string | null | undefined;
 let announcedUserId: string | null = null;
 // Set only while signOut() runs, to tell a sign-out the user asked for from one the server forced.
 let signingOut = false;
+
+// How many sign-ins have begun. A sign-in that answers late only counts if none did in between.
+let signInSequence = 0;
 // After signOut(), the phone stays signed out until a sign-in goes through setSessionFromAuth.
 // signOut clears storage itself, so supabase-js's own guards don't see it, and supabase-js can still
 // bring the old session back (a refresh that was in flight, an event queued while it started):
@@ -59,13 +63,22 @@ function setBlocked(blocked: boolean) {
   blockSessionWrites(blocked);
 }
 
-function toUser(session: Session): SessionUser {
+// app_metadata.provider is the first method this account ever used; the identity signed in with
+// most recently is the one used this time. Falls back when identities are missing or undated.
+function signInMethod(session: Session): string | null {
+  let latest: { provider: string; at: number } | null = null;
+  for (const identity of session.user.identities ?? []) {
+    const at = Date.parse(identity.last_sign_in_at ?? '');
+    if (typeof identity.provider !== 'string' || Number.isNaN(at)) continue;
+    if (!latest || at > latest.at) latest = { provider: identity.provider, at };
+  }
+  if (latest) return latest.provider;
   const provider = session.user.app_metadata?.provider;
-  return {
-    id: session.user.id,
-    email: session.user.email ?? null,
-    provider: typeof provider === 'string' ? provider : null,
-  };
+  return typeof provider === 'string' ? provider : null;
+}
+
+function toUser(session: Session): SessionUser {
+  return { id: session.user.id, email: session.user.email ?? null, provider: signInMethod(session) };
 }
 
 // Listeners run inside supabase-js's event handling and inside sign-in calls: one that throws must
@@ -186,6 +199,9 @@ export function onSessionChange(listener: SessionListener): () => void {
  * The one place every sign-in method's result goes, so all of them behave the same. Pass the call
  * itself (`setSessionFromAuth(supabase.auth.verifyOtp(...))`): supabase-js throws, rather than
  * returning an error, when the session can't be stored, and that becomes `unknown` here.
+ *
+ * A sign-in that answers late only lands if no newer sign-in has begun meanwhile (a sign-out in
+ * between doesn't count — that late verify still signing in is deliberate).
  */
 export async function setSessionFromAuth(
   pending: AuthResult | Promise<AuthResult>,
@@ -196,6 +212,7 @@ export async function setSessionFromAuth(
   }
   // A sign-in is starting: let its session through (set before awaiting, so the SIGNED_IN that
   // supabase-js sends during the call isn't taken for the old session coming back).
+  const generation = ++signInSequence;
   const wasBlocked = blockedUntilSignIn;
   setBlocked(false);
   const fail = (error: BackendError): Result<SessionUser> => {
@@ -211,10 +228,28 @@ export async function setSessionFromAuth(
   if (result.error) return fail(toBackendError(result.error));
   const session = result.data?.session;
   if (!session) return fail('unknown');
+  // Superseded: a newer sign-in began while this one was answering late.
+  if (generation !== signInSequence) return { ok: false, error: 'unknown' };
   // supabase-js has already stored it; tell listeners now (its own SIGNED_IN is then a no-op).
   const user = toUser(session);
   noteSignedIn(user);
   return { ok: true, value: user };
+}
+
+/**
+ * Who this phone is signed in as, taken from the stored session alone (no network): the id, or
+ * null when nothing is stored or the stored blob has no user in it.
+ */
+export function signedInUserId(): string | null {
+  try {
+    const raw = globalThis.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    const id = (parsed as { user?: { id?: unknown } } | null)?.user?.id;
+    return typeof id === 'string' ? id : null;
+  } catch {
+    return null;
+  }
 }
 
 function hasStoredSession(): boolean {
@@ -375,6 +410,7 @@ export function resetSessionForTests(): void {
   currentUserId = undefined;
   announcedUserId = null;
   signingOut = false;
+  signInSequence = 0;
   setBlocked(false);
   resetSupabaseForTests();
 }

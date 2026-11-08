@@ -7,6 +7,7 @@
 // Values come from SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY / MAILPIT_URL when set, otherwise from
 // `npx -y supabase@3 status -o json` (run from the repo root).
 
+import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
@@ -60,3 +61,49 @@ if (!isLocal(MAILPIT)) stop(`refusing to read mail from ${MAILPIT}: local stack 
 if (!KEY) stop('no publishable key found. Set SUPABASE_PUBLISHABLE_KEY (see `npx supabase@3 status`).');
 
 export const RUN = Date.now().toString(36);
+
+// Server-side keys of the LOCAL stack, for tests that check they're refused where a user token is
+// expected. Only read from `supabase status` (null when the values came from the environment).
+export const LOCAL_KEYS = {
+  secret: status?.SECRET_KEY ?? null,
+  serviceRoleJwt: status?.SERVICE_ROLE_KEY ?? null,
+  anonJwt: status?.ANON_KEY ?? null,
+};
+
+// Waits for the sign-in email in Mailpit and returns { code, html }.
+export async function readCode(email) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const r = await fetch(`${MAILPIT}/api/v1/messages?limit=50`);
+    assert.equal(r.status, 200, `Mailpit at ${MAILPIT}: ${r.status}`);
+    const { messages = [] } = await r.json();
+    const mail = messages.find((m) => (m.To ?? []).some((to) => to.Address?.toLowerCase() === email));
+    if (mail) {
+      const code = mail.Subject.match(/Your Rebloom code: (\d{6})/)?.[1];
+      assert.ok(code, `unexpected subject: ${mail.Subject}`);
+      const full = await (await fetch(`${MAILPIT}/api/v1/message/${mail.ID}`)).json();
+      return { code, html: full.HTML ?? '' };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  assert.fail(`no email for ${email} reached Mailpit within 10 s`);
+}
+
+// Signs in by email code; returns the session (access_token, user, …).
+export async function signInByCode(email) {
+  const headers = { apikey: KEY, 'Content-Type': 'application/json' };
+  const sent = await fetch(`${URL_}/auth/v1/otp`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ email, create_user: true }),
+  });
+  assert.equal(sent.status, 200, await sent.text());
+  const { code } = await readCode(email);
+  const verified = await fetch(`${URL_}/auth/v1/verify`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ type: 'email', email, token: code }),
+  });
+  const session = await verified.json();
+  assert.equal(verified.status, 200, JSON.stringify(session));
+  return session;
+}

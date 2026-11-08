@@ -51,11 +51,23 @@ test('image picker asks for photos only and leaves the camera permission alone',
   expect(picker).not.toHaveProperty('cameraPermission');
 });
 
-// Supabase foundation: nothing a user can reach imports the backend yet, so an app start makes
-// no network request. Imports are parsed, resolved and followed through other files (see
-// src/testing/importGraph.ts); every file under src/ counts, .js too. The accounts spec adds its
-// screens to ALLOWED_BACKEND_IMPORTERS on purpose.
-const ALLOWED_BACKEND_IMPORTERS: string[] = [];
+// Only the account feature reaches the backend, and only once Settings or an account screen is
+// open, so an app start makes no network request (root-layout test). Imports are parsed, resolved
+// and followed through other files (see src/testing/importGraph.ts); every file under src/
+// counts, .js too. Add a file here only on purpose.
+const ALLOWED_BACKEND_IMPORTERS: string[] = [
+  'account/AccountCard.tsx',
+  'account/AccountView.tsx',
+  'account/DeleteAccountSheet.tsx',
+  'account/messages.ts',
+  'account/navigation.ts',
+  'account/SignInView.tsx',
+  'account/store.ts',
+  'app/account/code.tsx',
+  'app/account/email.tsx',
+  'app/account/index.tsx',
+  'app/settings.tsx',
+];
 
 function allSources(dir: string): Record<string, string> {
   const out: Record<string, string> = {};

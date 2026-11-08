@@ -45,6 +45,36 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+describe('overlapping sign-ins', () => {
+  // CodeRabbit: A's sign-in answering late (beyond our timeout) mustn't flip the account back
+  // after B signed in. A sign-out in between still lets the late verify land (deliberate).
+  test('a newer sign-in supersedes an older one that answers late', async () => {
+    let releaseOld: (result: unknown) => void = () => {};
+    const oldAuth = new Promise((resolve) => (releaseOld = resolve));
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    const stale = setSessionFromAuth(oldAuth as Parameters<typeof setSessionFromAuth>[0]);
+    const fresh = await setSessionFromAuth(
+      Promise.resolve({
+        data: { session: fakeSession({ userId: 'u-2', email: 'kim@example.com' }) },
+        error: null,
+      }) as Parameters<typeof setSessionFromAuth>[0],
+    );
+    expect(fresh).toMatchObject({ ok: true, value: { id: 'u-2' } });
+
+    releaseOld({
+      data: { session: fakeSession({ userId: 'u-1', email: 'sam@example.com' }) },
+      error: null,
+    });
+    expect(await stale).toEqual({ ok: false, error: 'unknown' });
+    const ins = events.filter((event) => event.type === 'signed_in');
+    expect(ins).toHaveLength(1);
+    expect(ins[0]).toMatchObject({ user: { id: 'u-2' } });
+    expect(events).not.toContainEqual(expect.objectContaining({ type: 'signed_out', reason: 'switched_account' }));
+  });
+});
+
 describe('reading the session', () => {
   test('opening the app with a stored session announces nothing (it is not a new sign-in)', async () => {
     storeSession({ userId: 'u-7' });
@@ -80,6 +110,29 @@ describe('reading the session', () => {
 
     expect(user).toEqual({ ok: true, value: { id: 'u-1', email: 'sam@example.com', provider: 'google' } });
     expect(server.fetch).not.toHaveBeenCalled();
+  });
+
+  // app_metadata.provider is the first method ever used; the account screen shows this sign-in's.
+  test('provider is the identity signed in with most recently', async () => {
+    storeSession({
+      provider: 'email',
+      identities: [
+        { provider: 'email', last_sign_in_at: '2026-11-01T10:00:00Z' },
+        { provider: 'google', last_sign_in_at: '2026-11-05T10:00:00Z' },
+        { provider: 'apple', last_sign_in_at: null },
+      ],
+    });
+    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'google' } });
+  });
+
+  test('without identities, provider falls back to app_metadata.provider', async () => {
+    storeSession({ provider: 'google', identities: [] });
+    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'google' } });
+  });
+
+  test('identities with unreadable dates fall back to app_metadata.provider', async () => {
+    storeSession({ provider: 'email', identities: [{ provider: 'google', last_sign_in_at: 'soon' }] });
+    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'email' } });
   });
 
   test('backend not configured → not_configured everywhere', async () => {
