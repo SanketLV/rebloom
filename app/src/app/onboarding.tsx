@@ -24,6 +24,8 @@ import { buttonHeight, cameraColors, colors, radius, spacing, touchTarget } from
 const LAST = SCREENS.length - 1;
 // "Scan a plant" takes Next's place, so the second tap of a double tap on Next would land on it.
 const DOUBLE_TAP_MS = 300;
+// Longer than any paging animation, so it only ends a scroll that was cut short.
+const AIM_TIMEOUT_MS = 1000;
 const DOT_SIZE = 8;
 
 export default function OnboardingScreen() {
@@ -41,6 +43,9 @@ export default function OnboardingScreen() {
   // positions must not overwrite the index, which is already right.
   const scrollTarget = useRef<number | null>(null);
   const lastX = useRef(0);
+  // Whether a position came in since the target was set, and the timer that gives up on it.
+  const movedSinceAim = useRef(false);
+  const aimTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const shownAt = useRef(0);
   const announced = useRef(index);
 
@@ -59,13 +64,34 @@ export default function OnboardingScreen() {
     );
   }, [index]);
 
+  // A scroll can be cut short with no drag (screen reader paging), so the target never
+  // arrives. After AIM_TIMEOUT_MS, stop waiting and follow the last position.
+  // ponytail: fixed timeout, a scroll-end event per platform if it ever proves too short.
+  const aimAt = useCallback(
+    (target: number | null) => {
+      clearTimeout(aimTimer.current);
+      scrollTarget.current = target;
+      movedSinceAim.current = false;
+      if (target === null) return;
+      aimTimer.current = setTimeout(() => {
+        if (scrollTarget.current !== target) return;
+        scrollTarget.current = null;
+        if (movedSinceAim.current && width > 0) {
+          setIndex(Math.min(LAST, Math.max(0, Math.round(lastX.current / width))));
+        }
+      }, AIM_TIMEOUT_MS);
+    },
+    [width],
+  );
+  useEffect(() => () => clearTimeout(aimTimer.current), []);
+
   const goTo = useCallback(
     (next: number) => {
-      scrollTarget.current = reduceMotion ? null : next;
+      aimAt(reduceMotion ? null : next);
       setIndex(next);
       pager.current?.scrollTo({ x: next * width, animated: !reduceMotion });
     },
-    [width, reduceMotion],
+    [width, reduceMotion, aimAt],
   );
 
   // Keeps the current screen aligned when the width changes (split screen, foldables).
@@ -76,9 +102,9 @@ export default function OnboardingScreen() {
     // The offset moves to fit the new width, and those positions aren't a page change.
     // If it's already in place no event comes, so nothing is waited for.
     const x = index * width;
-    scrollTarget.current = Math.abs(lastX.current - x) > 1 ? index : null;
+    aimAt(Math.abs(lastX.current - x) > 1 ? index : null);
     pager.current?.scrollTo({ x, animated: false });
-  }, [width, index]);
+  }, [width, index, aimAt]);
 
   useFocusEffect(
     useCallback(() => {
@@ -97,6 +123,7 @@ export default function OnboardingScreen() {
     if (width === 0) return;
     const { x } = event.nativeEvent.contentOffset;
     lastX.current = x;
+    movedSinceAim.current = true;
     if (scrollTarget.current !== null) {
       if (Math.abs(x - scrollTarget.current * width) > 1) return;
       scrollTarget.current = null;
@@ -124,9 +151,7 @@ export default function OnboardingScreen() {
         overScrollMode="never"
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
-        onScrollBeginDrag={() => {
-          scrollTarget.current = null;
-        }}
+        onScrollBeginDrag={() => aimAt(null)}
         onScroll={onScroll}>
         {SCREENS.map((screen, i) => (
           <OnboardingPage

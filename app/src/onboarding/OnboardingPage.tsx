@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
@@ -22,10 +23,12 @@ const LOGO_WIDTH = 104;
 
 // A vertical gradient of cameraColors.ground. Stops are [offset, opacity].
 function GroundFade({ height, stops }: { height: number; stops: [number, number][] }) {
+  // Unique per fade: on web, gradient ids are shared by the whole document.
+  const id = useId();
   return (
     <Svg width="100%" height={height} accessible={false}>
       <Defs>
-        <LinearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+        <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
           {stops.map(([offset, opacity], i) => (
             <Stop
               key={i}
@@ -36,7 +39,7 @@ function GroundFade({ height, stops }: { height: number; stops: [number, number]
           ))}
         </LinearGradient>
       </Defs>
-      <Rect width="100%" height="100%" fill="url(#fade)" />
+      <Rect width="100%" height="100%" fill={`url(#${id})`} />
     </Svg>
   );
 }
