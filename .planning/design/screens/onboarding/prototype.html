@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rebloom Onboarding Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Figtree:wght@400;600;700&display=swap">
+<style>
+/* Values mirror app/src/theme/tokens.ts. --photo-scrim is the one new token this design asks for. */
+:root {
+  --ground: #0F140F;      /* cameraColors.ground */
+  --on-photo: #F3F4EC;    /* cameraColors.text */
+  --caption: #AEB8A4;     /* cameraColors.caption */
+  --text: #1E2619;        /* colors.text */
+  --line: #D4D7C6;        /* colors.line */
+  --bg: #E8E9DF;          /* colors.bg */
+  --surface: #FAFAF5;     /* colors.surface */
+  --primary: #2E3D28;     /* colors.primary */
+  --photo-scrim: 0.66;    /* NEW: min alpha for 4.5:1, see measurements in onboarding.md */
+  --text-scale: 1;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Figtree', system-ui, sans-serif; }
+button { font: inherit; }
+
+/* Review chrome. Not part of the design. */
+.review { display: flex; flex-wrap: wrap; gap: 32px; padding: 24px; align-items: flex-start; justify-content: center; }
+.controls { width: 280px; display: flex; flex-direction: column; gap: 16px; }
+.controls h1 { margin: 0; font: 700 22px/26px 'Bricolage Grotesque', sans-serif; }
+.controls fieldset { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); margin: 0; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.controls legend { font-size: 13px; font-weight: 700; padding: 0 4px; }
+.controls label { display: flex; gap: 8px; align-items: center; min-height: 32px; font-size: 14px; }
+.exit { font-size: 14px; line-height: 19px; min-height: 19px; }
+
+/* The phone screen. Sized in CSS px, so 1px here is 1pt on a device. */
+.phone { position: relative; width: var(--w); height: var(--h); overflow: hidden; background: var(--ground); border-radius: 28px; flex-shrink: 0; }
+
+/* Pager: a horizontal paging ScrollView in the app. */
+.pager { position: absolute; inset: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.pager::-webkit-scrollbar { display: none; }
+.page { position: relative; flex: 0 0 100%; height: 100%; overflow: hidden; scroll-snap-align: start; scroll-snap-stop: always; background: var(--ground); }
+
+/* Photo: cover, then moved up by --focus of its own height so the subject clears the text. */
+.photo { position: absolute; left: 50%; top: 50%; aspect-ratio: 832 / 1792; height: max(100%, calc(var(--w) * 1792 / 832)); transform: translate(-50%, calc(-50% - var(--focus) * 100%)); }
+/* Melts the photo's lower edge into the ground, so the upward shift leaves no seam. */
+.photo-wrap { position: absolute; inset: 0; transform: translateY(calc(-1 * var(--focus) * var(--photo-h))); }
+.photo-wrap .photo { transform: translate(-50%, -50%); }
+.photo-wrap::after { content: ''; position: absolute; left: 0; right: 0; top: calc(50% + var(--photo-h) / 2 - 200px); height: 200px; background: linear-gradient(to bottom, rgba(15,20,15,0), var(--ground)); }
+.photo-failed .photo-wrap { display: none; }
+
+/* Top scrim: keeps the light status bar icons readable over bright windows. */
+.scrim-top { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--inset-top) + 48px); background: linear-gradient(to bottom, rgba(15,20,15,.6) 0, rgba(15,20,15,.6) var(--inset-top), rgba(15,20,15,0) 100%); }
+
+/* Text panel: anchored to its content, so large text always stays on the scrim. */
+.panel { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
+.fade { height: 96px; background: linear-gradient(to bottom, rgba(15,20,15,0), rgba(15,20,15,var(--photo-scrim))); flex-shrink: 0; }
+.copy { background: rgba(15,20,15,var(--photo-scrim)); padding: 0 24px calc(var(--footer) + var(--dots-block)); color: var(--on-photo); }
+/* Title caps at 1.5x (maxFontSizeMultiplier in the app); body follows the system up to 2x. */
+.copy h2 { margin: 0 0 8px; font: 700 calc(28px * min(var(--text-scale), 1.5))/calc(32px * min(var(--text-scale), 1.5)) 'Bricolage Grotesque', sans-serif; }
+.copy p { margin: 0; font-size: calc(16px * var(--text-scale)); line-height: calc(22px * var(--text-scale)); }
+
+.logo { position: absolute; left: 24px; top: calc(var(--inset-top) + 8px); width: 104px; height: auto; }
+
+/* Fixed chrome: stays still while the photos and text slide. */
+.chrome { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 24px var(--inset-bottom); pointer-events: none; }
+.chrome > * { pointer-events: auto; }
+.dots { display: flex; gap: 6px; height: 8px; margin-bottom: 16px; pointer-events: none; }
+.dot { width: 8px; height: 8px; border-radius: 999px; background: var(--caption); opacity: .55; transition: width 200ms ease-out, opacity 200ms ease-out; }
+.dot.on { width: 24px; background: var(--on-photo); opacity: 1; }
+.cta { width: 100%; height: 56px; border: 0; border-radius: 14px; background: var(--on-photo); color: var(--text); font: 700 calc(17px * min(var(--text-scale), 1.3))/22px 'Figtree', sans-serif; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.cta svg { display: none; }
+.last .cta svg { display: block; }
+.link { width: 100%; min-height: 44px; margin-top: 8px; border: 0; background: transparent; color: var(--on-photo); font: 600 calc(16px * min(var(--text-scale), 1.3))/22px 'Figtree', sans-serif; cursor: pointer; }
+.cta:active, .link:active { opacity: .85; }
+.cta:focus-visible, .link:focus-visible { outline: 2px solid var(--on-photo); outline-offset: 2px; }
+
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+@media (prefers-reduced-motion: reduce) { .dot { transition: none; } }
+.reduce .dot { transition: none; }
+@media (max-width: 480px) {
+  .review { padding: 0; }
+  .controls { display: none; }
+  .phone { --w: 100vw !important; --h: 100dvh !important; border-radius: 0; }
+}
+</style>
+</head>
+<body>
+<div class="review">
+  <section class="controls" aria-label="Review controls">
+    <h1>Onboarding prototype</h1>
+    <fieldset id="sizes"><legend>Phone</legend></fieldset>
+    <fieldset>
+      <legend>Conditions</legend>
+      <label><input type="checkbox" id="big"> 200% text</label>
+      <label><input type="checkbox" id="reduce"> Reduce motion</label>
+      <label><input type="checkbox" id="failed"> Photos fail to load</label>
+    </fieldset>
+    <div class="exit" id="exit" role="status"></div>
+    <div class="exit" id="said"></div>
+  </section>
+
+  <main class="phone" id="phone" aria-label="Onboarding">
+    <div class="pager" id="pager"></div>
+    <div class="chrome" id="chrome">
+      <div class="dots" id="dots" aria-hidden="true"></div>
+      <button class="cta" id="cta" type="button">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        <span id="cta-label">Next</span>
+      </button>
+      <button class="link" id="link" type="button">Skip</button>
+    </div>
+    <div class="sr" id="live" aria-live="polite"></div>
+  </main>
+</div>
+
+<script>
+const ASSETS = '../../../../app/assets/onboarding/';
+const LOGO = '../../../../brand/kit/logo/rebloom-logo-bloom.svg';
+const SCREENS = [
+  { photo: 'welcome', focus: 0.24, title: "Find out what's wrong with your plant", body: 'Snap a photo for a free diagnosis. No account, no card.' },
+  { photo: 'scan', focus: 0.21, title: 'One leaf, one photo', body: 'Photograph the leaf that worries you, close up, in good light. A few quick questions narrow it down.' },
+  { photo: 'reminders', focus: 0.2, title: 'A check-in on day 7', body: "Start a treatment and we'll remind you to take a new photo, so you can see if it's working." },
+  { photo: 'ready', focus: 0.1, title: "Let's look at your plant", body: 'Start with the one that worries you most.' },
+];
+// name, width, height, top inset, bottom inset (minimum 16 of padding under the link).
+const PHONES = [
+  ['iPhone SE', 375, 667, 20, 0],
+  ['Android', 360, 800, 24, 16],
+  ['iPhone 14', 390, 844, 47, 34],
+  ['Pro Max', 430, 932, 59, 34],
+];
+
+const $ = (id) => document.getElementById(id);
+const phone = $('phone');
+const pager = $('pager');
+const params = new URLSearchParams(location.search);
+let index = 0;
+
+pager.innerHTML = SCREENS.map((s, i) => `
+  <article class="page" aria-hidden="${i !== 0}">
+    <div class="photo-wrap" style="--focus:${s.focus}"><img class="photo" src="${ASSETS}${s.photo}.webp" alt=""></div>
+    <div class="scrim-top"></div>
+    ${i === 0 ? `<img class="logo" src="${LOGO}" alt="Rebloom">` : ''}
+    <div class="panel">
+      <div class="fade"></div>
+      <div class="copy">
+        <h2>${s.title}</h2>
+        <p>${s.body}</p>
+      </div>
+    </div>
+  </article>`).join('');
+$('dots').innerHTML = SCREENS.map(() => '<span class="dot"></span>').join('');
+
+function setPhone(i) {
+  const [, w, h, top, bottom] = PHONES[i];
+  const padBottom = Math.max(bottom, 16);
+  phone.style.setProperty('--w', w + 'px');
+  phone.style.setProperty('--h', h + 'px');
+  phone.style.setProperty('--photo-h', Math.max(h, w * 1792 / 832) + 'px');
+  phone.style.setProperty('--inset-top', top + 'px');
+  phone.style.setProperty('--inset-bottom', padBottom + 'px');
+  // Space the fixed chrome takes: CTA 56 + gap 8 + link 44 + bottom padding.
+  phone.style.setProperty('--footer', 108 + padBottom + 'px');
+  phone.style.setProperty('--dots-block', '40px');
+  pager.scrollLeft = index * w;
+}
+
+function render() {
+  const last = index === SCREENS.length - 1;
+  phone.classList.toggle('last', last);
+  $('cta-label').textContent = last ? 'Scan a plant' : 'Next';
+  $('link').textContent = last ? 'Look around first' : 'Skip';
+  [...$('dots').children].forEach((d, i) => d.classList.toggle('on', i === index));
+  [...pager.children].forEach((p, i) => p.setAttribute('aria-hidden', String(i !== index)));
+  const said = `Step ${index + 1} of ${SCREENS.length}. ${SCREENS[index].title}`;
+  $('live').textContent = said;
+  $('said').textContent = 'Announces: ' + said;
+}
+
+function go(i) {
+  const next = Math.max(0, Math.min(SCREENS.length - 1, i));
+  index = next;
+  pager.scrollTo({ left: next * pager.clientWidth, behavior: phone.classList.contains('reduce') ? 'auto' : 'smooth' });
+  render();
+}
+
+function leave(where) {
+  $('exit').textContent = `Would save onboarding_seen and open ${where}.`;
+}
+
+$('cta').addEventListener('click', () => (index === SCREENS.length - 1 ? leave('/scan') : go(index + 1)));
+$('link').addEventListener('click', () => leave('Today'));
+pager.addEventListener('scroll', () => {
+  const i = Math.round(pager.scrollLeft / pager.clientWidth);
+  if (i !== index) { index = i; render(); }
+}, { passive: true });
+// Stands in for Android Back: previous screen, or the default exit on screen 1.
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { index === 0 ? ($('exit').textContent = 'Back on screen 1: app exits.') : go(index - 1); }
+});
+
+PHONES.forEach(([name, w, h], i) => {
+  const label = document.createElement('label');
+  label.innerHTML = `<input type="radio" name="size" value="${i}"> ${name} (${w}×${h})`;
+  label.querySelector('input').addEventListener('change', () => setPhone(i));
+  $('sizes').append(label);
+});
+$('big').addEventListener('change', (e) => document.documentElement.style.setProperty('--text-scale', e.target.checked ? 2 : 1));
+$('reduce').addEventListener('change', (e) => phone.classList.toggle('reduce', e.target.checked));
+$('failed').addEventListener('change', (e) => phone.classList.toggle('photo-failed', e.target.checked));
+
+// ?size=0..3&page=0..3&big=1&failed=1 opens a state directly, for review screenshots.
+const size = Number(params.get('size') ?? 2);
+document.querySelectorAll('[name=size]')[size].checked = true;
+setPhone(size);
+if (params.get('big')) { $('big').checked = true; document.documentElement.style.setProperty('--text-scale', 2); }
+if (params.get('failed')) { $('failed').checked = true; phone.classList.add('photo-failed'); }
+phone.classList.add('reduce');
+go(Number(params.get('page') ?? 0));
+phone.classList.remove('reduce');
+</script>
+</body>
+</html>

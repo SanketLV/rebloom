@@ -1,6 +1,18 @@
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 
-import { colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
+import {
+  buttonHeight,
+  cameraColors,
+  colors,
+  radius,
+  spacing,
+  touchTarget,
+  type,
+} from '@/theme/tokens';
+
+// Keeps labels on a dark photo inside their fixed-height buttons at large text sizes.
+const ON_DARK_FONT_SCALE = 1.3;
 
 type Props = {
   label: string;
@@ -12,6 +24,10 @@ type Props = {
   disabledLabel?: string;
   // secondary: outlined, for other choices next to the main one; severe: destructive actions.
   variant?: 'primary' | 'secondary' | 'severe';
+  // `onDark`: over a dark photo, where the `primary` fill would disappear.
+  tone?: 'default' | 'onDark';
+  // Decorative, beside the label.
+  icon?: ReactNode;
 };
 
 // The one primary action on a screen (56pt, `primary` fill).
@@ -22,9 +38,12 @@ export function Button({
   disabled = false,
   disabledLabel,
   variant = 'primary',
+  tone = 'default',
+  icon,
 }: Props) {
   const off = disabled || busy;
   const text = disabled && disabledLabel ? disabledLabel : label;
+  const onDark = tone === 'onDark';
   return (
     <Pressable
       onPress={onPress}
@@ -36,19 +55,34 @@ export function Button({
         styles.button,
         variant === 'secondary' && styles.secondary,
         variant === 'severe' && styles.severe,
+        onDark && styles.onDark,
+        icon ? styles.withIcon : null,
         disabled && styles.disabled,
         pressed && styles.pressed,
       ]}>
       {busy ? (
-        <ActivityIndicator color={variant === 'secondary' ? colors.text : colors.onPrimary} />
+        <ActivityIndicator
+          color={onDark || variant === 'secondary' ? colors.text : colors.onPrimary}
+        />
       ) : (
-        <Text
-          style={[
-            type.button,
-            disabled ? styles.disabledText : variant === 'secondary' ? styles.secondaryText : styles.text,
-          ]}>
-          {text}
-        </Text>
+        <>
+          {icon}
+          <Text
+            maxFontSizeMultiplier={onDark ? ON_DARK_FONT_SCALE : undefined}
+            style={[
+              type.button,
+              icon ? styles.labelWithIcon : null,
+              disabled
+                ? styles.disabledText
+                : onDark
+                  ? styles.onDarkText
+                  : variant === 'secondary'
+                    ? styles.secondaryText
+                    : styles.text,
+            ]}>
+            {text}
+          </Text>
+        </>
       )}
     </Pressable>
   );
@@ -59,7 +93,9 @@ export function TextButton({
   label,
   onPress,
   disabled = false,
-}: Pick<Props, 'label' | 'onPress' | 'disabled'>) {
+  tone = 'default',
+}: Pick<Props, 'label' | 'onPress' | 'disabled' | 'tone'>) {
+  const onDark = tone === 'onDark';
   return (
     <Pressable
       onPress={onPress}
@@ -69,14 +105,18 @@ export function TextButton({
       accessibilityState={{ disabled }}
       hitSlop={spacing.xs}
       style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}>
-      <Text style={[type.bodyStrong, styles.link]}>{label}</Text>
+      <Text
+        maxFontSizeMultiplier={onDark ? ON_DARK_FONT_SCALE : undefined}
+        style={[type.bodyStrong, styles.link, onDark && styles.onDarkLink]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    height: 56,
+    height: buttonHeight,
     borderRadius: radius.sm,
     backgroundColor: colors.primary,
     alignItems: 'center',
@@ -85,6 +125,12 @@ const styles = StyleSheet.create({
   },
   secondary: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.line },
   severe: { backgroundColor: colors.severe },
+  // Only with an icon: in a row, a label doesn't wrap unless it can shrink.
+  withIcon: { flexDirection: 'row', gap: spacing.sm },
+  labelWithIcon: { flexShrink: 1 },
+  onDark: { backgroundColor: cameraColors.text },
+  onDarkText: { color: colors.text },
+  onDarkLink: { color: cameraColors.text },
   disabled: { backgroundColor: colors.disabled, borderWidth: 0 },
   pressed: { opacity: 0.85 },
   text: { color: colors.onPrimary },
