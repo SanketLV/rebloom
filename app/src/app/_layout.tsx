@@ -10,7 +10,7 @@ import { OnboardingContext, useOnboardingGate } from '@/onboarding/context';
 import { sweepOrphanPhotos } from '@/photos/photos';
 import type { Db } from '@/storage/db';
 import { migrate } from '@/storage/migrations';
-import { fontAssets, fonts } from '@/theme/fonts';
+import { fontAssets } from '@/theme/fonts';
 import { colors } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -89,10 +89,10 @@ export default function RootLayout() {
               <Stack.Screen
                 name="settings"
                 options={{
-                  title: 'Settings',
+                  // The screen shows its own large heading, so the bar shows only Back.
+                  title: '',
                   // Without this, iOS labels the back button with the hidden "(tabs)" group name.
                   headerBackTitle: 'Back',
-                  headerTitleStyle: { fontFamily: fonts.body700 },
                   headerTintColor: colors.text,
                 }}
               />
