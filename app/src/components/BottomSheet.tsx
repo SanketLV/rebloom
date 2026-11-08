@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,11 +30,13 @@ type Props = {
 // screen readers with `hiddenBehindSheet`.
 export function BottomSheet({ visible, label, onClose, dismissible = true, children }: Props) {
   const insets = useSafeAreaInsets();
-  const sheet = useRef<ComponentRef<typeof View>>(null);
+  const focusTarget = useRef<ComponentRef<typeof Text>>(null);
 
-  // Move screen-reader focus into the sheet as it opens, so its label is read (it was silent).
+  // Move screen-reader focus into the sheet as it opens, so its label is read. The event only
+  // takes on an accessibility element (RN requires accessible on the receiver, and the sheet's
+  // plain container View isn't one): it goes to the invisible label Text holding the title.
   useEffect(() => {
-    if (visible && sheet.current) AccessibilityInfo.sendAccessibilityEvent(sheet.current, 'focus');
+    if (visible && focusTarget.current) AccessibilityInfo.sendAccessibilityEvent(focusTarget.current, 'focus');
   }, [visible]);
 
   useEffect(() => {
@@ -61,12 +64,11 @@ export function BottomSheet({ visible, label, onClose, dismissible = true, child
       <KeyboardAvoidingView
         style={styles.anchor}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View
-          ref={sheet}
-          accessibilityViewIsModal
-          accessibilityLabel={label}
-          style={[styles.sheet, { paddingBottom: spacing.xl + insets.bottom }]}>
+        <View accessibilityViewIsModal style={[styles.sheet, { paddingBottom: spacing.xl + insets.bottom }]}>
           <View style={styles.handle} />
+          {/* The invisible node the focus event targets. No text children: the label would then
+              appear twice in the tree for text queries; `accessibilityLabel` alone is read out. */}
+          <Text ref={focusTarget} accessible accessibilityLabel={label} style={styles.focusLabel} />
           {children}
         </View>
       </KeyboardAvoidingView>
@@ -99,5 +101,13 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 3,
     backgroundColor: colors.disabled,
+  },
+  // Off-screen to the eye, present to screen readers: the node the sheet's focus event targets.
+  focusLabel: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    overflow: 'hidden',
   },
 });
