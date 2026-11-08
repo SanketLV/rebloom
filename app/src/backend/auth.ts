@@ -6,7 +6,7 @@ import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from '@s
 import { withTimeout } from '@/lib/async';
 
 import { toBackendError, type BackendError } from './errors';
-import { SESSION_TIMEOUT_MS, setSessionFromAuth, signOut, type Result, type SessionUser } from './session';
+import { SESSION_TIMEOUT_MS, setSessionFromAuth, signedInUserId, signOut, type Result, type SessionUser } from './session';
 import { getSupabase } from './supabase';
 
 // Deleting can take longer than a sign-in call (the server removes the user's rows).
@@ -69,6 +69,8 @@ function functionError(error: unknown): BackendError {
 export async function deleteAccount(afterDelete?: () => void): Promise<Result<null>> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: 'not_configured' };
+  // Whose account this call is for, from the session it will travel with.
+  const initiator = signedInUserId();
   try {
     const { error } = await withTimeout(
       supabase.functions.invoke('delete-account', { method: 'POST' }),
@@ -77,6 +79,13 @@ export async function deleteAccount(afterDelete?: () => void): Promise<Result<nu
     if (error) return { ok: false, error: functionError(error) };
   } catch (error) {
     return { ok: false, error: functionError(error) };
+  }
+  // If the phone has signed in as someone else meanwhile (this session expired mid-delete and
+  // another account signed in), don't end that session or move to the deleted notice: the
+  // server has the deleted account's answer, but this device now belongs to someone else.
+  const present = signedInUserId();
+  if (initiator !== null && present !== null && present !== initiator) {
+    return { ok: true, value: null };
   }
   try {
     afterDelete?.();

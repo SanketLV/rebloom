@@ -217,6 +217,28 @@ describe('deleteAccount', () => {
     expect(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)).not.toBeNull();
   });
 
+  // CodeRabbit: the delete can land after the phone has signed in as someone else (the session
+  // expired mid-delete and B signed in). Its completion must leave B's session alone.
+  test('a delete landing after another account signed in leaves the new session alone', async () => {
+    signedIn();
+    await getCurrentUser();
+    const release = server.hold('delete');
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    const pending = deleteAccount(jest.fn());
+
+    server.sessionOptions = { userId: 'u-2', email: 'kim@example.com' };
+    expect(await verifyEmailCode('kim@example.com', '654321')).toMatchObject({
+      ok: true,
+      value: { id: 'u-2' },
+    });
+
+    release();
+    expect(await pending).toEqual({ ok: true, value: null });
+    expect(JSON.parse(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)!).user.id).toBe('u-2');
+    expect(events).not.toContainEqual(expect.objectContaining({ type: 'signed_out', reason: 'user' }));
+  });
+
   test('backend not configured → not_configured, no request', async () => {
     delete process.env.EXPO_PUBLIC_SUPABASE_URL;
     expect(await deleteAccount()).toEqual({ ok: false, error: 'not_configured' });

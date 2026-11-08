@@ -123,10 +123,10 @@ export class FakeAuthServer {
     return this.calls.filter((c) => c.path === path).length;
   }
 
-  private holds: Partial<Record<'verify' | 'refresh' | 'logout', Promise<void>>> = {};
+  private holds: Partial<Record<'verify' | 'refresh' | 'logout' | 'delete', Promise<void>>> = {};
 
   /** Delays the next answers from an endpoint until the returned function is called. */
-  hold(endpoint: 'verify' | 'refresh' | 'logout'): () => void {
+  hold(endpoint: 'verify' | 'refresh' | 'logout' | 'delete'): () => void {
     let release = () => {};
     this.holds[endpoint] = new Promise<void>((resolve) => (release = resolve));
     return () => {
@@ -161,7 +161,9 @@ export class FakeAuthServer {
           ? 'refresh'
           : path === '/auth/v1/logout'
             ? 'logout'
-            : null;
+            : path === '/functions/v1/delete-account'
+              ? 'delete'
+              : null;
     if (endpoint && this.holds[endpoint]) await this.holds[endpoint];
 
     if (path === '/auth/v1/verify') {
