@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { BackHandler, Text } from 'react-native';
+import { AccessibilityInfo, BackHandler, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '../BottomSheet';
@@ -31,8 +31,9 @@ function renderSheet(props: Partial<React.ComponentProps<typeof BottomSheet>> = 
 test('shows its content as a modal dialog when visible', async () => {
   const { view } = renderSheet();
   await view;
-  const sheet = screen.getByLabelText('Photo tips');
-  expect(sheet.props.accessibilityViewIsModal).toBe(true);
+  const label = screen.getByLabelText('Photo tips');
+  expect(label.props.accessible).toBe(true);
+  expect(label.parent).not.toBeNull();
   expect(screen.getByText('Hold steady')).toBeOnTheScreen();
 });
 
@@ -78,7 +79,42 @@ test('a sheet that cannot be dismissed ignores Back and the dimmed area', async 
 test('clears the bottom safe area', async () => {
   const { view } = renderSheet();
   await view;
-  const sheet = screen.getByLabelText('Photo tips');
+  const sheet = screen.getByLabelText('Photo tips').parent!;
   const style = [sheet.props.style].flat(Infinity).reduce((all, s) => ({ ...all, ...s }), {});
   expect(style.paddingBottom).toBeGreaterThanOrEqual(34);
+});
+
+// Swarm Medium 6: opening a sheet was silent for screen readers.
+// CodeRabbit: the focus event only works on an accessibility element (RN needs accessible={true}
+// on the receiving node) — the sheet's plain View isn't one, so iOS silently kept the old focus.
+test('an opening sheet moves screen-reader focus onto its labelled element', async () => {
+  const focus = jest.spyOn(AccessibilityInfo, 'sendAccessibilityEvent').mockImplementation(() => {});
+  focus.mockClear();
+  const view = await render(
+    <SafeAreaProvider initialMetrics={metrics}>
+      <BottomSheet visible={false} label="Sign out" onClose={jest.fn()}>
+        <Text>Sign out?</Text>
+      </BottomSheet>
+    </SafeAreaProvider>,
+  );
+  expect(focus).not.toHaveBeenCalled();
+  await view.rerender(
+    <SafeAreaProvider initialMetrics={metrics}>
+      <BottomSheet visible label="Sign out" onClose={jest.fn()}>
+        <Text>Sign out?</Text>
+      </BottomSheet>
+    </SafeAreaProvider>,
+  );
+  expect(focus).toHaveBeenCalledTimes(1);
+  const target = screen.getByLabelText('Sign out');
+  expect(target.props.accessible).toBe(true);
+  // Which node the focus went to, checked by props rather than instance equality: comparing two
+  // ReactTestInstances structurally walks the fiber tree (cyclically) and never finishes.
+  const [received, eventType] = focus.mock.calls[0] as unknown as [
+    { props: { accessible?: boolean; accessibilityLabel?: string } },
+    string,
+  ];
+  expect(eventType).toBe('focus');
+  expect(received.props).toMatchObject({ accessible: true, accessibilityLabel: 'Sign out' });
+  focus.mockRestore();
 });

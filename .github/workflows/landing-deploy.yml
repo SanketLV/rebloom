@@ -1,0 +1,48 @@
+# Deploys landing/ to the Cloudflare Worker "rebloom-landing" when a push to main changes it.
+# `npm run deploy` builds, runs the dist checks (scripts/check-dist.mjs) and only uploads if they pass.
+# Needs the repo secret CLOUDFLARE_API_TOKEN (Cloudflare "Edit Cloudflare Workers" token); the account
+# is set in landing/wrangler.jsonc. Run it by hand from the Actions tab to redeploy main.
+name: Deploy landing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'landing/**'
+      - '.github/workflows/landing-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer push waits for the running one instead of cancelling it mid-upload.
+concurrency:
+  group: landing-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: landing
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: landing/package-lock.json
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Build, check and deploy
+        run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

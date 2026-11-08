@@ -4,6 +4,9 @@ import { renderRouter } from 'expo-router/testing-library';
 import { Text } from 'react-native';
 
 import RootLayout from '@/app/_layout';
+import { SESSION_STORAGE_KEY } from '@/backend/supabase';
+import { fakeSession } from '@/testing/fakeAuthServer';
+import { fakeLocalStorage } from '@/testing/fakeLocalStorage';
 import { DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
 import { mockSqlite } from '@/testing/nativeMocks';
 
@@ -80,4 +83,64 @@ test('start-up deletes stored photos left by a save that never finished', async 
   await renderRouter({ _layout: RootLayout, index: Child });
   await screen.findByText('child screen');
   expect(fakeFs.under(`${DOCUMENT}/photos`)).toEqual([]);
+});
+
+// Settings shows the account card, which reads the session: from there a request is expected.
+test('opening the app and its tabs makes no network request, even with the backend configured', async () => {
+  mockFontState = [true, null];
+  // An expired stored session: any use of the backend would have to refresh it over the network.
+  fakeLocalStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(fakeSession({ expiresIn: -60 })));
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc.supabase.co';
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
+  const fetchMock = jest.fn(() => Promise.reject(new TypeError('Network request failed')));
+  const opened = jest.fn();
+  // XHR and WebSocket too: a request doesn't have to go through fetch (Realtime uses a socket).
+  class RecordingXhr {
+    open(...args: unknown[]) {
+      opened('XMLHttpRequest', ...args);
+    }
+    send() {}
+    setRequestHeader() {}
+    abort() {}
+    addEventListener() {}
+  }
+  class RecordingSocket {
+    constructor(url: string) {
+      opened('WebSocket', url);
+    }
+    close() {}
+    send() {}
+    addEventListener() {}
+  }
+  const real = { fetch: globalThis.fetch, xhr: globalThis.XMLHttpRequest, ws: globalThis.WebSocket };
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  globalThis.XMLHttpRequest = RecordingXhr as unknown as typeof XMLHttpRequest;
+  globalThis.WebSocket = RecordingSocket as unknown as typeof WebSocket;
+  try {
+    await renderRouter('./src/app', { initialUrl: '/' });
+    await screen.findByRole('tab', { name: 'Today' }, { timeout: 5000 });
+    await fireEvent.press(screen.getByRole('tab', { name: 'My Plants' }));
+    await fireEvent.press(screen.getByRole('tab', { name: 'Today' }));
+    // renderRouter runs on fake timers: let anything started from a timer (a debounce, the
+    // supabase-js refresh ticker) run before checking.
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(opened).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Profile and settings' }));
+    expect(screen).toHavePathname('/settings');
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchMock).toHaveBeenCalled();
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('/auth/v1/token');
+  } finally {
+    globalThis.fetch = real.fetch;
+    globalThis.XMLHttpRequest = real.xhr;
+    globalThis.WebSocket = real.ws;
+    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
+    delete process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  }
 });

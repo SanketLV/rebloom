@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { RECOVERY_WIDTHS, srcSetFor } from '../lib/photos';
+
+const SIZES = '(min-width: 1280px) 480px, (min-width: 760px) 36vw, (min-width: 560px) 480px, calc(100vw - 80px)';
 
 const valueText = (d: number) => `Day ${d} of 7${d === 7 ? ', recovered' : d === 1 ? ', drooping' : ''}`;
 
@@ -45,9 +48,11 @@ export function RecoveryPanel() {
     <li className="step grid items-center gap-8 rounded-[6px] bg-olive p-[clamp(24px,4vw,56px)] text-surface [grid-column:1/-1] mt-4 min-[760px]:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <figure ref={photo} className="relative mb-5 aspect-square w-full max-w-[480px] overflow-hidden rounded bg-photo">
         <img src="/assets/day1.webp" width={880} height={880} loading="lazy"
+          srcSet={srcSetFor('/assets/day1.webp', RECOVERY_WIDTHS)} sizes={SIZES}
           alt="The same houseplant on day 1, wilting with yellow, brown-edged leaves, and by day 7 upright and green"
           className="absolute inset-0 h-full w-full rounded bg-photo object-cover" />
         <img data-testid="day7" src="/assets/day7.webp" width={880} height={880} loading="lazy" alt=""
+          srcSet={srcSetFor('/assets/day7.webp', RECOVERY_WIDTHS)} sizes={SIZES}
           style={{ opacity: (day - 1) / 6 }} className="absolute inset-0 h-full w-full rounded bg-photo object-cover" />
       </figure>
       <div className="step-7-text">

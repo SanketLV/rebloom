@@ -28,6 +28,8 @@ npx expo-doctor
 | `src/diagnosis/` | The `Diagnoser` interface, the condition catalogue, the follow-up questions and the answer re-ranking rules. `engine.ts` is the one place to swap in the on-device model. |
 | `src/scan/` | The scan session (one scan's photo, diagnosis and answers; deletes its temp files), the diagnosis runner and the save services. |
 | `src/storage/` | SQLite schema (`migrations.ts`) and repositories. Every value is a bound parameter. |
+| `src/backend/` | Supabase: config from env, the lazy client, the session module, sign-in and delete (`auth.ts`), error codes. Only the account feature imports it (a test enforces it); see Backend below. |
+| `src/account/` | Accounts: the Settings card, the sign-in and account views, the account state store, input cleaning and the plain-words messages. Routes in `src/app/account/`. |
 | `src/photos/` | Resizing, the temp folder (`cache/scans/`) and permanent photos (`document/photos/`). |
 | `src/components/TabBar.tsx` | Custom tab bar with the raised Scan button |
 | `src/theme/tokens.ts` | Colors, radius, spacing, type styles. **The only file allowed to contain hex colors** (a test enforces this). |
@@ -47,6 +49,19 @@ Native modules don't run in jest, so `jest.setup.ts` swaps in the fakes from `sr
 - **SQLite**: a real SQLite engine (sql.js, WebAssembly) behind the same methods the app uses, so migrations and queries run for real. It has one connection, so "database is locked" can only show up on a device.
 - **File system**: an in-memory `File` / `Directory` / `Paths` that can fail on demand (`fakeFs.failNext('copy')`).
 - **Camera, image picker, image manipulator, crypto**: controllable through `mockCamera`, `mockPicker`, `mockManipulator`, `mockSqlite` in `src/testing/nativeMocks.ts`.
+- **Supabase session storage**: `expo-sqlite/localStorage/install` is replaced by an in-memory `localStorage` (`src/testing/fakeLocalStorage.ts`), cleared before each test.
+- **Supabase Auth**: the session tests run the real `supabase-js` against `src/testing/fakeAuthServer.ts`, a `fetch` stand-in for the verify, refresh and logout endpoints that can fail on demand (`server.next.refresh = 'offline'`).
+
+## Backend
+
+The app talks to Supabase through `src/backend/` only. Server-side rules, migrations and tests live in `../supabase/` (see `supabase/README.md`).
+
+- **Config**: copy `.env.example` to `.env.local` and fill in `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Without them the backend counts as not configured and every call returns `not_configured`; the app works as before. Release builds need an `https://` URL.
+- **Local stack**: from the repo root, `npx -y supabase@3 start`, then `npx -y supabase@3 status` for the values. On the iOS simulator use `http://127.0.0.1:54321`; on the Android emulator `http://10.0.2.2:54321` (its `127.0.0.1` is the emulator itself), or `adb reverse tcp:54321 tcp:54321` first. On a phone running Expo Go use this computer's LAN address (`http://192.168.x.x:54321`): `localhost` on the phone is the phone.
+- **Session** (`src/backend/session.ts`): the only module that reads or changes the session. It is stored in `expo-sqlite` localStorage, refreshed only while the app is in the foreground, and `getSession()` answers within 10 s even offline. Signing out never touches plants, scans or photos.
+- **Who reaches `src/backend/`**: only the files listed in `ALLOWED_BACKEND_IMPORTERS` (`src/__tests__/guards.test.ts`): the account feature and Settings. Opening the app and its tabs sends nothing (`root-layout.test.tsx`); the Settings account card reads the session when Settings opens.
+- **Accounts** (`.planning/specs/accounts.md`): sign-in by a 6-digit email code from Settings → account card. `/account` shows the sign-in screen when signed out and the account (sign out, delete) when signed in; the email and code steps are dismissed back to it after a sign-in. On the local stack every code lands in Mailpit (`http://127.0.0.1:54324`); the delete needs `npx -y supabase@3 functions serve`.
+- **Device checks** for this part are in `../.handoff/device-checklist.md`.
 
 ## Notes
 

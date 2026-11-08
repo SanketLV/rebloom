@@ -22,6 +22,8 @@ type Props = {
   disabled?: boolean;
   // What a disabled button says instead, e.g. "Pick an answer".
   disabledLabel?: string;
+  // secondary: outlined, for other choices next to the main one; severe: destructive actions.
+  variant?: 'primary' | 'secondary' | 'severe';
   // `onDark`: over a dark photo, where the `primary` fill would disappear.
   tone?: 'default' | 'onDark';
   // Decorative, beside the label.
@@ -35,6 +37,7 @@ export function Button({
   busy = false,
   disabled = false,
   disabledLabel,
+  variant = 'primary',
   tone = 'default',
   icon,
 }: Props) {
@@ -50,13 +53,17 @@ export function Button({
       accessibilityState={{ disabled: off, busy }}
       style={({ pressed }) => [
         styles.button,
+        variant === 'secondary' && styles.secondary,
+        variant === 'severe' && styles.severe,
         onDark && styles.onDark,
         icon ? styles.withIcon : null,
         disabled && styles.disabled,
         pressed && styles.pressed,
       ]}>
       {busy ? (
-        <ActivityIndicator color={onDark ? colors.text : colors.onPrimary} />
+        <ActivityIndicator
+          color={onDark || variant === 'secondary' ? colors.text : colors.onPrimary}
+        />
       ) : (
         <>
           {icon}
@@ -65,7 +72,13 @@ export function Button({
             style={[
               type.button,
               icon ? styles.labelWithIcon : null,
-              disabled ? styles.disabledText : onDark ? styles.onDarkText : styles.text,
+              disabled
+                ? styles.disabledText
+                : onDark
+                  ? styles.onDarkText
+                  : variant === 'secondary'
+                    ? styles.secondaryText
+                    : styles.text,
             ]}>
             {text}
           </Text>
@@ -110,15 +123,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
+  secondary: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.line },
+  severe: { backgroundColor: colors.severe },
   // Only with an icon: in a row, a label doesn't wrap unless it can shrink.
   withIcon: { flexDirection: 'row', gap: spacing.sm },
   labelWithIcon: { flexShrink: 1 },
   onDark: { backgroundColor: cameraColors.text },
   onDarkText: { color: colors.text },
   onDarkLink: { color: cameraColors.text },
-  disabled: { backgroundColor: colors.disabled },
+  disabled: { backgroundColor: colors.disabled, borderWidth: 0 },
   pressed: { opacity: 0.85 },
   text: { color: colors.onPrimary },
+  secondaryText: { color: colors.text },
   disabledText: { color: colors.textSecondary },
   textButton: {
     minHeight: touchTarget,

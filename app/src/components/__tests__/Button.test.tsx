@@ -99,3 +99,28 @@ test('a text button fires onPress and is at least 44pt tall', async () => {
   const style = [button.props.style].flat(Infinity).reduce((all, s) => ({ ...all, ...s }), {});
   expect(style.minHeight).toBeGreaterThanOrEqual(44);
 });
+
+describe('variants', () => {
+  test('secondary is an outlined button on the surface color', async () => {
+    await render(<Button label="Continue with email" variant="secondary" onPress={jest.fn()} />);
+    expect(screen.getByRole('button', { name: 'Continue with email' })).toHaveStyle({
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      height: 56,
+    });
+  });
+
+  test('severe uses the severe color for destructive actions', async () => {
+    await render(<Button label="Delete account" variant="severe" onPress={jest.fn()} />);
+    expect(screen.getByRole('button', { name: 'Delete account' })).toHaveStyle({
+      backgroundColor: colors.severe,
+    });
+  });
+
+  test('a disabled button looks disabled whatever its variant', async () => {
+    await render(<Button label="Delete account" variant="severe" disabled onPress={jest.fn()} />);
+    expect(screen.getByRole('button', { name: 'Delete account' })).toHaveStyle({
+      backgroundColor: colors.disabled,
+    });
+  });
+});

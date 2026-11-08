@@ -1,0 +1,247 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { AppState } from 'react-native';
+
+import { FakeAuthServer, fakeSession } from '@/testing/fakeAuthServer';
+import { fakeLocalStorage } from '@/testing/fakeLocalStorage';
+import { fakeFs } from '@/testing/fileSystemFake';
+
+import { deleteAccount, sendEmailCode, verifyEmailCode } from '../auth';
+import { getCurrentUser, onSessionChange, resetSessionForTests, signOut, type SessionEvent } from '../session';
+import { SESSION_STORAGE_KEY } from '../supabase';
+
+let server: FakeAuthServer;
+
+beforeEach(() => {
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc.supabase.co';
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
+  Object.defineProperty(AppState, 'currentState', { value: 'background', configurable: true });
+  server = new FakeAuthServer();
+  globalThis.fetch = server.fetch as unknown as typeof fetch;
+});
+
+afterEach(() => {
+  resetSessionForTests();
+  jest.useRealTimers();
+  jest.restoreAllMocks();
+});
+
+const otpCalls = () => server.calls.filter((c) => c.path === '/auth/v1/otp');
+const deleteCalls = () => server.calls.filter((c) => c.path === '/functions/v1/delete-account');
+
+describe('sendEmailCode', () => {
+  test('asks for a code once, creating the account if needed', async () => {
+    expect(await sendEmailCode('sam@example.com')).toEqual({ ok: true, value: null });
+    expect(otpCalls()).toHaveLength(1);
+    expect(otpCalls()[0].body).toMatchObject({ email: 'sam@example.com', create_user: true });
+  });
+
+  test('too many sends → rate_limited', async () => {
+    server.next.otp = 'rate_limited';
+    expect(await sendEmailCode('sam@example.com')).toEqual({ ok: false, error: 'rate_limited' });
+  });
+
+  test('no network → offline', async () => {
+    server.next.otp = 'offline';
+    expect(await sendEmailCode('sam@example.com')).toEqual({ ok: false, error: 'offline' });
+  });
+
+  test('an address the server refuses → unknown, never the server text', async () => {
+    server.next.otp = 'rejected';
+    expect(await sendEmailCode('sam@example.com')).toEqual({ ok: false, error: 'unknown' });
+  });
+
+  test('a send that never answers → offline after the timeout, not an endless spinner', async () => {
+    jest.useFakeTimers();
+    server.fetch.mockImplementationOnce(() => new Promise<Response>(() => {}));
+    const pending = sendEmailCode('sam@example.com');
+    await jest.advanceTimersByTimeAsync(20_000);
+    expect(await pending).toEqual({ ok: false, error: 'offline' });
+  });
+
+  test('backend not configured → not_configured, no request', async () => {
+    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
+    expect(await sendEmailCode('sam@example.com')).toEqual({ ok: false, error: 'not_configured' });
+    expect(server.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('verifyEmailCode', () => {
+  test('a right code signs in with type email, and listeners hear it', async () => {
+    server.sessionOptions = { userId: 'u-1', email: 'sam@example.com' };
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+
+    const result = await verifyEmailCode('sam@example.com', '123456');
+
+    expect(result).toEqual({ ok: true, value: { id: 'u-1', email: 'sam@example.com', provider: 'email' } });
+    const verify = server.calls.find((c) => c.path === '/auth/v1/verify');
+    expect(verify?.body).toMatchObject({ email: 'sam@example.com', token: '123456', type: 'email' });
+    expect(events.filter((e) => e.type === 'signed_in')).toHaveLength(1);
+  });
+
+  test('a wrong or used code → invalid_code, still signed out', async () => {
+    server.next.verify = 'rejected';
+    expect(await verifyEmailCode('sam@example.com', '000000')).toEqual({
+      ok: false,
+      error: 'invalid_code',
+    });
+    expect(await getCurrentUser()).toEqual({ ok: true, value: null });
+  });
+
+  test('too many tries → rate_limited; offline → offline', async () => {
+    server.next.verify = 'rate_limited';
+    expect(await verifyEmailCode('sam@example.com', '123456')).toEqual({ ok: false, error: 'rate_limited' });
+    server.next.verify = 'offline';
+    expect(await verifyEmailCode('sam@example.com', '123456')).toEqual({ ok: false, error: 'offline' });
+  });
+
+  test('a verify that never answers → offline after the timeout', async () => {
+    jest.useFakeTimers();
+    server.fetch.mockImplementationOnce(() => new Promise<Response>(() => {}));
+    const pending = verifyEmailCode('sam@example.com', '123456');
+    await jest.advanceTimersByTimeAsync(20_000);
+    expect(await pending).toEqual({ ok: false, error: 'offline' });
+  });
+
+  // Swarm Medium 4: after a sign-out earlier in the run, a verify answering after the time limit
+  // was put back behind the sign-out block, so the good sign-in was thrown away.
+  test('after a sign-out, a verify that answers after the time limit still signs in', async () => {
+    fakeLocalStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(fakeSession({ userId: 'u-0' })));
+    await getCurrentUser();
+    await signOut();
+    jest.useFakeTimers();
+    const release = server.hold('verify');
+    server.sessionOptions = { userId: 'u-1', email: 'sam@example.com' };
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    const pending = verifyEmailCode('sam@example.com', '123456');
+    await jest.advanceTimersByTimeAsync(20_000);
+    expect(await pending).toEqual({ ok: false, error: 'offline' });
+    release();
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'signed_in' }));
+    expect(JSON.parse(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)!).user.id).toBe('u-1');
+  });
+
+  test('backend not configured → not_configured', async () => {
+    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
+    expect(await verifyEmailCode('sam@example.com', '123456')).toEqual({
+      ok: false,
+      error: 'not_configured',
+    });
+  });
+});
+
+describe('deleteAccount', () => {
+  function signedIn() {
+    fakeLocalStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(fakeSession({ userId: 'u-1' })));
+  }
+
+  test('calls the function with the user token, then signs this phone out', async () => {
+    signedIn();
+    const token = JSON.parse(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)!).access_token;
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    await getCurrentUser();
+
+    expect(await deleteAccount()).toEqual({ ok: true, value: null });
+
+    expect(deleteCalls()).toHaveLength(1);
+    expect(deleteCalls()[0].method).toBe('POST');
+    expect(deleteCalls()[0].authorization).toBe(`Bearer ${token}`);
+    expect(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
+    expect(events).toContainEqual({ type: 'signed_out', reason: 'user' });
+  });
+
+  // Review round 1, #5: the caller must leave the account screen before the sign-out switches it.
+  test('runs the caller step after the delete and before the phone is signed out', async () => {
+    signedIn();
+    await getCurrentUser();
+    const order: string[] = [];
+    onSessionChange((event) => order.push(event.type));
+    const result = await deleteAccount(() => order.push('deleted'));
+    expect(result).toEqual({ ok: true, value: null });
+    expect(order).toEqual(['deleted', 'signed_out']);
+  });
+
+  test('a failed delete never runs the caller step', async () => {
+    signedIn();
+    server.next.deleteAccount = 'server_error';
+    const step = jest.fn();
+    await deleteAccount(step);
+    expect(step).not.toHaveBeenCalled();
+  });
+
+  test('returns without waiting for the server to end the session', async () => {
+    signedIn();
+    const release = server.hold('logout');
+    const result = await deleteAccount();
+    expect(result).toEqual({ ok: true, value: null });
+    expect(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
+    release();
+  });
+
+  test('never touches plants or photos on the phone', async () => {
+    signedIn();
+    const photo = 'file:///document/photos/scan-1.jpg';
+    fakeFs.put(photo);
+    await deleteAccount();
+    expect(fakeFs.uris()).toEqual([photo]);
+    const source = readFileSync(join(__dirname, '..', 'auth.ts'), 'utf8');
+    expect(source).not.toMatch(/from '@\/(storage|photos|scan|plants)/);
+    expect(source).not.toMatch(/['"]expo-file-system['"]|['"]expo-sqlite['"]/);
+  });
+
+  test.each([
+    ['server_error', 'unknown'],
+    ['offline', 'offline'],
+    ['rate_limited', 'rate_limited'],
+    ['unauthorized', 'session_expired'],
+  ] as const)('the function answers %s → %s, still signed in', async (mode, error) => {
+    signedIn();
+    server.next.deleteAccount = mode;
+    expect(await deleteAccount()).toEqual({ ok: false, error });
+    expect(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)).not.toBeNull();
+  });
+
+  test('a delete that never answers → offline after the timeout, still signed in', async () => {
+    signedIn();
+    jest.useFakeTimers();
+    server.fetch.mockImplementation(async (input) =>
+      String(input).includes('/functions/v1/') ? new Promise<Response>(() => {}) : new Response('{}'),
+    );
+    const pending = deleteAccount();
+    await jest.advanceTimersByTimeAsync(30_000);
+    expect(await pending).toEqual({ ok: false, error: 'offline' });
+    expect(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)).not.toBeNull();
+  });
+
+  // CodeRabbit: the delete can land after the phone has signed in as someone else (the session
+  // expired mid-delete and B signed in). Its completion must leave B's session alone.
+  test('a delete landing after another account signed in leaves the new session alone', async () => {
+    signedIn();
+    await getCurrentUser();
+    const release = server.hold('delete');
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    const pending = deleteAccount(jest.fn());
+
+    server.sessionOptions = { userId: 'u-2', email: 'kim@example.com' };
+    expect(await verifyEmailCode('kim@example.com', '654321')).toMatchObject({
+      ok: true,
+      value: { id: 'u-2' },
+    });
+
+    release();
+    expect(await pending).toEqual({ ok: true, value: null });
+    expect(JSON.parse(fakeLocalStorage.getItem(SESSION_STORAGE_KEY)!).user.id).toBe('u-2');
+    expect(events).not.toContainEqual(expect.objectContaining({ type: 'signed_out', reason: 'user' }));
+  });
+
+  test('backend not configured → not_configured, no request', async () => {
+    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
+    expect(await deleteAccount()).toEqual({ ok: false, error: 'not_configured' });
+    expect(server.fetch).not.toHaveBeenCalled();
+  });
+});

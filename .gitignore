@@ -13,3 +13,10 @@ Thumbs.db
 # Remotion render scratch
 brand/motion/out/
 /rebloom-brand-kit-*
+
+# Supabase CLI state (linked project ref, pooler URL, CLI versions); local to each machine
+supabase/.temp/
+supabase/.branches/
+
+# Kling drafts (watermarked, trial plan); clean files replace these
+brand/kling-drafts/

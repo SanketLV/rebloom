@@ -1,17 +1,23 @@
-// Integration tests for the landing-page waitlist, run against the real project with the public key only
-// (the same access a visitor's browser has). No dependencies: Node 18+ built-in test runner.
+// Integration tests for the landing-page waitlist, run against the PRODUCTION project with the public
+// key only (the same access a visitor's browser has). No dependencies: Node 18+ built-in test runner.
+// They run only when asked for explicitly, so an everyday test run never reaches production:
 //
-//   node --test "supabase/tests/*.test.mjs"
+//   REBLOOM_PROD_TESTS=1 node --test "supabase/tests/production/*.test.mjs"      (bash)
+//   $env:REBLOOM_PROD_TESTS=1; node --test "supabase/tests/production/*.test.mjs"  (PowerShell)
 //
 // Test emails use example.com, a reserved domain: join_waitlist() validates them but never stores them,
 // so running these tests leaves the live table untouched.
 
-import { test } from 'node:test';
+import { test as nodeTest } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Public by design: the publishable key is what the landing page ships with.
-const URL = process.env.SUPABASE_URL ?? 'https://vhxcgmupopeochwvmwcv.supabase.co';
-const KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? 'sb_publishable_FsACOB5IUTE3GTxtxbwXsA_DgNlcwzg';
+const ENABLED = process.env.REBLOOM_PROD_TESTS === '1';
+const test = (name, fn) => nodeTest(name, { skip: ENABLED ? false : 'production tests: set REBLOOM_PROD_TESTS=1' }, fn);
+
+// Public by design: the publishable key is what the landing page ships with. Own variable names, so
+// the local tests' SUPABASE_URL can never point these at the local stack (or the reverse).
+const URL = process.env.PROD_SUPABASE_URL ?? 'https://vhxcgmupopeochwvmwcv.supabase.co';
+const KEY = process.env.PROD_SUPABASE_PUBLISHABLE_KEY ?? 'sb_publishable_FsACOB5IUTE3GTxtxbwXsA_DgNlcwzg';
 const RUN = Date.now().toString(36);
 const headers = { apikey: KEY, 'Content-Type': 'application/json' };
 

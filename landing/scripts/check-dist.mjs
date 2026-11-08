@@ -49,17 +49,39 @@ const normalize = h => h
 for (const name of Object.keys(pages))
   check(normalize(head(pages[name])) === normalize(head(read(`${name}.html`, root))), `${name}: <head> matches the template`);
 for (const tag of [
-  '<link rel="preconnect" href="https://fonts.googleapis.com">',
-  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
   '<link rel="preconnect" href="https://vhxcgmupopeochwvmwcv.supabase.co" crossorigin>',
   '<meta property="og:image" content="/assets/og.png">',
   '<link rel="manifest" href="/site.webmanifest">',
 ]) check(index.includes(tag), `index head: ${tag}`);
 
-// Every local URL resolves to a built file, with exact case (Windows matches case-insensitively, Linux hosts don't).
+// Filmstrips on slow 4G (2026-11-04): font preloads held first paint back 146 ms and the hero photo 160 ms, and the
+// font still swapped at about the same moment. Matched fallbacks already stop the jump, so don't add them back.
+check(!/<link\b(?=[^>]*\srel=["']?preload\b)(?=[^>]*\sas=["']?font\b)/i.test(index), 'index: no font preloads');
+
+// Fonts are self-hosted: Google gets no request, and the privacy page doesn't claim otherwise.
+for (const [name, html] of Object.entries(pages))
+  check(!/fonts\.googleapis\.com|fonts\.gstatic\.com|Google Fonts/.test(html), `${name}: no Google Fonts reference`);
+
 const css = readdirSync(new URL('assets/', dist)).filter(f => f.endsWith('.css')).map(f => read(`assets/${f}`)).join('\n');
+
+// Hero and closing photos: in the HTML, so the browser finds them early, and the closing one waits for the scroll.
+const imgWith = file => index.match(new RegExp(`<img\\b[^>]*${file}[^>]*>`))?.[0] ?? '';
+check(/fetchpriority="high"/i.test(imgWith('hero-wide')), 'index: hero photo is a high-priority <img>');
+check(/loading="lazy"/.test(imgWith('lush-wide')), 'index: closing photo is a lazy <img>');
+check(count(index, /<source\b[^>]*media="\(max-aspect-ratio: ?4\/5\)"/g) === 2, 'index: hero and closing photos have tall versions');
+check(!/url\(["']?\/assets\/(hero|lush)/.test(css), 'css: hero and closing photos are not CSS backgrounds');
+
+// Scroll-linked motion is a progressive enhancement; catch a minifier or browser target dropping it.
+check(/@supports \(animation-timeline:\s*view\(\)\)\s*\{[^{}]*\{[^{}]*animation-timeline:\s*view\(\)/.test(css), 'css: closing photo motion kept inside @supports');
+
+// Every local URL resolves to a built file, with exact case (Windows matches case-insensitively, Linux hosts don't).
 const manifest = JSON.parse(read('site.webmanifest'));
+// React writes srcSet and imageSrcSet in camelCase; HTML doesn't care, this regex has to.
+const srcsetUrls = Object.values(pages).flatMap(h => [...h.matchAll(/\b(?:image)?srcset="([^"]+)"/gi)]
+  .flatMap(m => m[1].split(',').map(candidate => candidate.trim().split(/\s+/)[0])));
+check(new Set(srcsetUrls.filter(u => u.endsWith('-480.webp'))).size === 10, 'index: all 10 in-page photos have smaller versions');
 const urls = [...new Set([
+  ...srcsetUrls,
   ...Object.values(pages).flatMap(h => [...h.matchAll(/\b(?:src|href|content)="([^"]+)"/g)].map(m => m[1])),
   ...[...css.matchAll(/url\(([^)]+)\)/g)].map(m => m[1].replace(/["']/g, '')),
   ...manifest.icons.map(i => i.src),
@@ -80,6 +102,7 @@ check(urls.length > 20 && missing.length === 0, `all ${urls.length} local URLs r
 
 // Old-browser output (iOS 14+ in-app browsers).
 const js = [...external.map(u => read(u.replace(/^\//, ''))), ...inline].join('\n');
+check(!/fonts\.googleapis\.com|fonts\.gstatic\.com/.test(css + js), 'css and js: no Google Fonts request');
 check(!css.includes(':has('), 'css: no :has()');
 check(!/@layer\b/.test(css), 'css: no @layer');
 check(!/\{[^{}]*&[^{}]*\{/.test(css), 'css: no nesting');

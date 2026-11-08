@@ -1,4 +1,4 @@
-const CONTACT = 'sanketlakhani80@gmail.com';
+const CONTACT = 'rebloom.plant@gmail.com';
 const Mail = () => <a href={`mailto:${CONTACT}`}>{CONTACT}</a>;
 
 export function PrivacyPage() {
@@ -9,7 +9,7 @@ export function PrivacyPage() {
       </header>
       <main className="mx-auto max-w-[680px] px-[clamp(16px,4vw,32px)] pb-24 pt-[clamp(48px,8vw,96px)] [&_h2]:mb-2 [&_h2]:mt-10 [&_h2]:font-sans [&_h2]:text-[19px] [&_h2]:font-bold [&_h2]:leading-[1.3] [&_h2]:tracking-normal">
         <h1 className="mb-3 text-[clamp(2.6rem,7vw,4rem)] leading-none">Privacy</h1>
-        <p className="text-[14px]">Last updated 31 October 2026</p>
+        <p className="text-[14px]">Last updated 7 November 2026</p>
         {/* TODO before launch: GDPR wants the controller's legal name and country under "Who we are", and the
             transfer sentence is only true once Supabase's DPA is signed (dashboard: Organization > Legal Documents). */}
 
@@ -25,10 +25,15 @@ export function PrivacyPage() {
         <p>To send you one email when Rebloom launches. We do this because you asked us to by joining (your consent). We won't send anything else, and we won't sell your address. We'll only share it with the service we use to send that one email.</p>
 
         <h2>Where it's kept</h2>
-        <p>The waitlist is stored with Supabase on servers in the United States. If you're in the UK or EU, this means your email leaves those regions; the transfer is covered by Supabase's data processing agreement, which includes the standard contractual clauses approved for such transfers. The page's fonts are loaded from Google Fonts, which means Google sees your IP address when the page loads.</p>
+        <p>The waitlist is stored with Supabase on servers in the United States. If you're in the UK or EU, this means your email leaves those regions; the transfer is covered by Supabase's data processing agreement, which includes the standard contractual clauses approved for such transfers.</p>
 
         <h2>How long</h2>
         <p>Until the launch email has been sent. After that we delete the list.</p>
+
+        <h2>App accounts</h2>
+        <p>The Rebloom app works without an account. Scans and plant photos stay on your phone; nothing about them is sent anywhere.</p>
+        <p>If you create an account to keep your plants safe, we store your email address, how you signed in (for now, a code sent by email), and when you created the account and when you last used it. Supabase stores the account on servers in the United States, under the same agreement as the waitlist. Supabase sends the sign-in codes by email.</p>
+        <p>You can delete your account in the app at any time: Settings › Account › Delete account. This deletes the account and what&apos;s stored with it, and can&apos;t be undone; plants on your phone stay. Supabase also keeps a security log of sign-ins and account changes, which includes your email address; that log isn&apos;t removed when the account is. To delete it without the app, email <Mail /> from the address of the account. We&apos;ll delete it within 30 days and confirm by email.</p>
 
         <h2>Your rights</h2>
         <p>You can ask to see what we hold about you, to correct it, or to be removed from the list at any time, which also withdraws your consent. Email <Mail /> from the address you signed up with; to protect the list, we only reply to that address. We'll act within 30 days and confirm by email.</p>

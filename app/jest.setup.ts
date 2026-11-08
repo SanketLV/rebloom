@@ -10,7 +10,16 @@ jest.mock(
 jest.mock('expo-crypto', () => require('./src/testing/nativeMocks').cryptoModule);
 jest.mock('expo-sqlite', () => require('./src/testing/nativeMocks').sqliteModule);
 jest.mock('expo-sqlite/kv-store', () => require('./src/testing/nativeMocks').kvStoreModule);
+// The real one installs a SQLite-backed global `localStorage` (used for the Supabase session).
+jest.mock('expo-sqlite/localStorage/install', () => {
+  require('./src/testing/fakeLocalStorage').installFakeLocalStorage();
+  return {};
+});
+
+// Compile sql.js before any test renders; see loadSqlJs in src/testing/sqljs.ts.
+beforeAll(() => require('./src/testing/sqljs').loadSqlJs());
 
 beforeEach(() => {
   require('./src/testing/nativeMocks').resetNativeMocks();
+  require('./src/testing/fakeLocalStorage').fakeLocalStorage.clear();
 });

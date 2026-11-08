@@ -1,0 +1,19 @@
+// Cloudflare Workers static-assets deploy for the landing page (assets only, no Worker script).
+// `npm run deploy` builds, runs the dist checks, then uploads dist/.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "rebloom-landing",
+  // Not a secret: it only names the account. Deploys still need CLOUDFLARE_API_TOKEN.
+  "account_id": "43328a3d08c11642008ce9462580b94e",
+  "compatibility_date": "2026-11-03",
+  "assets": {
+    "directory": "./dist/"
+  },
+  // Workers Logs, query strings stripped from logged URLs (privacy.html already discloses the host's
+  // short-lived access logs). On the Workers Free plan, ingestion stops at the daily cap instead of billing.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true
+  }
+}
