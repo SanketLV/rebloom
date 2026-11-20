@@ -1,10 +1,15 @@
 import { randomUUID } from 'expo-crypto';
 
+import { confirmDiagnose } from '@/backend/diagnose';
+import type { Diagnosis, PreparedPhoto } from '@/diagnosis/types';
 import { deleteStoredPhoto, persistPhoto } from '@/photos/photos';
 import { validateName, validateRoom } from '@/plants/validation';
 import type { Db } from '@/storage/db';
 import { insertPlant } from '@/storage/plantsRepo';
 import {
+  discardScan,
+  insertPendingScan,
+  markReady,
   persistScan,
   replaceFeedback,
   type ScanInput,
@@ -50,6 +55,10 @@ function scanInput(state: ScanState, photoPath: string, plantId: string | null):
     modelResult: state.diagnosis.candidates,
     answers: state.answers,
     finalResult: state.result.candidates,
+    species: state.diagnosis.species,
+    treatment: state.diagnosis.treatment,
+    kindwiseQuestion: state.diagnosis.question,
+    questionAnswer: state.questionAnswer ?? null,
   };
 }
 
@@ -131,4 +140,48 @@ export async function saveFeedback(
     });
     return { photoStored: true, persisted: true };
   });
+}
+
+// ---- Kindwise scans (plan D5): the row and photo exist before the photo is sent ----
+
+// Stores the photo and a pending row, so a killed app can still finish the scan. A repeat (Try
+// again) keeps the one row. If the row can't be written, the copy this call made is removed.
+export async function beginPendingScan(
+  db: Db,
+  scanId: string,
+  diagnoserId: string,
+  photo: PreparedPhoto,
+  { now = isoNow }: Options = {},
+): Promise<void> {
+  return serializeSave(async () => {
+    const { path, created } = await persistPhoto(photo.uri, scanId);
+    try {
+      await insertPendingScan(db, { id: scanId, photoPath: path, diagnoserId }, now());
+    } catch (error) {
+      if (created) deleteStoredPhoto(path);
+      throw error;
+    }
+  });
+}
+
+// The result arrived: store it, then let the server delete its copy (plan D1). Not confirmed if
+// the write fails, so the result can still be fetched again.
+export async function markScanReady(
+  db: Db,
+  scanId: string,
+  diagnosis: Diagnosis,
+  { now = isoNow }: Options = {},
+): Promise<void> {
+  await serializeSave(() => markReady(db, scanId, diagnosis, now()));
+  void confirmDiagnose(scanId);
+}
+
+// Removes a scan nobody saved, and its stored photo. Never touches a saved scan.
+export async function discardUnsavedScan(
+  db: Db,
+  scanId: string,
+  { now = isoNow }: Options = {},
+): Promise<void> {
+  const path = await serializeSave(() => discardScan(db, scanId, now()));
+  if (path) deleteStoredPhoto(path);
 }

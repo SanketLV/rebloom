@@ -8,9 +8,10 @@ import { hiddenBehindSheet } from '@/components/BottomSheet';
 import { Button, TextButton } from '@/components/Button';
 import { BookmarkIcon, ChevronLeftIcon } from '@/components/icons';
 import { candidateName, candidateSeverity, candidateSubtitle } from '@/diagnosis/conditions';
-import { isDemoDiagnoser, isLowConfidence } from '@/diagnosis/confidence';
+import { isDemoDiagnoser, isLowConfidence, isSpeciesUnsure } from '@/diagnosis/confidence';
+import { KINDWISE_ID } from '@/diagnosis/kindwiseMap';
 import { QUESTIONS } from '@/diagnosis/questions';
-import type { Answers, Candidate, Severity } from '@/diagnosis/types';
+import type { Answers, Candidate, Diagnosis, Severity } from '@/diagnosis/types';
 import { goBackOr } from '@/lib/goBack';
 import { Chip } from '@/scan/components/Chip';
 import { ConfidenceBar } from '@/scan/components/ConfidenceBar';
@@ -32,6 +33,18 @@ const SEVERITY: Record<Severity, { label: string; text: string; bg: string }> = 
 const candidateKey = (c: Candidate) => c.disease?.id ?? c.conditionId ?? 'unknown';
 const guessId = (c: Candidate) =>
   c.conditionId ?? (`kindwise:${c.disease?.id ?? 'unknown'}` as const);
+
+// The name to save the plant under: first common name, else the scientific name (design 8).
+function suggestedName(diagnosis: Diagnosis): string | null {
+  const top = diagnosis.species?.[0];
+  if (!top || isSpeciesUnsure(diagnosis)) return null;
+  return top.commonNames[0] ?? top.name;
+}
+
+function scansLeftText(left: number): string {
+  if (left <= 0) return 'That was your last free scan this month';
+  return left === 1 ? '1 free scan left this month' : `${left} free scans left this month`;
+}
 
 // "Based on your answers" chips, in question order. "I'm not sure" adds nothing.
 function answerChips(answers: Answers): string[] {
@@ -56,8 +69,13 @@ export default function ResultScreen() {
   if (!result || result.candidates.length === 0) return <Redirect href="/scan" />;
 
   const [top, ...others] = result.candidates;
+  const kindwise = result.diagnoserId === KINDWISE_ID;
+  const healthy = top.conditionId === 'healthy';
   const topName = candidateName(top);
-  const topSubtitle = candidateSubtitle(top);
+  const topSubtitle =
+    kindwise && healthy ? 'No signs of disease or pests in this photo.' : candidateSubtitle(top);
+  const species = kindwise ? result.species?.[0] : undefined;
+  const speciesUnsure = isSpeciesUnsure(result);
   const topSeverity = candidateSeverity(top);
   const severity = topSeverity ? SEVERITY[topSeverity] : null;
   // Answers re-weight the model's guesses but can't make an unsure photo sure.
@@ -123,7 +141,9 @@ export default function ResultScreen() {
               />
             )}
             <View style={styles.photoChip}>
-              <Text style={[type.small, styles.photoChipText]}>Scanned on your phone</Text>
+              <Text style={[type.small, styles.photoChipText]}>
+                {kindwise ? 'Saved on your phone only' : 'Scanned on your phone'}
+              </Text>
             </View>
           </View>
 
@@ -132,8 +152,33 @@ export default function ResultScreen() {
               <View style={styles.unsure}>
                 <Text style={[type.bodyStrong, styles.unsureTitle]}>{"We're not sure yet"}</Text>
                 <Text style={[type.small, styles.unsureBody]}>
-                  A clearer photo of the sick leaf will give a better answer.
+                  {healthy
+                    ? "Looks healthy, but the photo isn't clear enough to be sure."
+                    : 'A clearer photo of the sick leaf will give a better answer.'}
                 </Text>
+              </View>
+            )}
+            {kindwise && (
+              <View
+                accessible
+                accessibilityLabel={
+                  species && !speciesUnsure
+                    ? `${species.name}${species.commonNames[0] ? `, ${species.commonNames[0]}` : ''}, ${Math.round(species.probability * 100)} percent likely`
+                    : 'Species not sure'
+                }>
+                {species && !speciesUnsure ? (
+                  <>
+                    <Text style={[type.label, styles.label]} numberOfLines={2}>
+                      {species.name}
+                    </Text>
+                    <Text style={[type.small, styles.subtitle]}>
+                      {species.commonNames[0] ? `${species.commonNames[0]} · ` : ''}species match{' '}
+                      {Math.round(species.probability * 100)}%
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={[type.label, styles.label]}>Species not sure</Text>
+                )}
               </View>
             )}
             <View style={styles.heading}>
@@ -142,7 +187,11 @@ export default function ResultScreen() {
                 {isDemoDiagnoser(result.diagnoserId) && <DemoTag full />}
               </View>
               <View style={styles.nameRow}>
-                <Text accessibilityRole="header" style={[type.title, styles.name]}>
+                <Text
+                  accessibilityRole="header"
+                  accessibilityLabel={topName}
+                  numberOfLines={2}
+                  style={[type.title, styles.name]}>
                   {topName}
                 </Text>
                 {severity && (
@@ -153,13 +202,18 @@ export default function ResultScreen() {
               </View>
               {topSubtitle && <Text style={[type.body, styles.subtitle]}>{topSubtitle}</Text>}
             </View>
-            <ConfidenceBar value={top.confidence} />
+            <ConfidenceBar value={top.confidence} label="Diagnosis confidence" />
             {others.length > 0 && (
               <View style={styles.others}>
                 <Text style={[type.small, styles.othersTitle]}>Other possibilities</Text>
                 {others.map((c) => (
                   <View key={candidateKey(c)} style={styles.otherRow}>
-                    <Text style={[type.body, styles.otherName]}>{candidateName(c)}</Text>
+                    <Text
+                      style={[type.body, styles.otherName]}
+                      numberOfLines={2}
+                      accessibilityLabel={candidateName(c)}>
+                      {candidateName(c)}
+                    </Text>
                     <Text style={[type.body, styles.otherValue]}>
                       {Math.round(c.confidence * 100)}%
                     </Text>
@@ -183,11 +237,19 @@ export default function ResultScreen() {
                 ))}
               </View>
             )}
+            {typeof result.scansLeft === 'number' && (
+              <Text style={[type.small, styles.subtitle]}>{scansLeftText(result.scansLeft)}</Text>
+            )}
           </View>
         </ScrollView>
 
         <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.lg }]}>
-          {low ? (
+          {healthy && kindwise ? (
+            <>
+              <Button label="Save to My Plants" onPress={openSave} />
+              <TextButton label="Scan another" onPress={retake} />
+            </>
+          ) : low ? (
             <>
               <Button label="Retake photo" onPress={retake} />
               <TextButton
@@ -207,6 +269,7 @@ export default function ResultScreen() {
       <SaveSheet
         visible={sheet === 'save'}
         rooms={rooms}
+        suggestedName={suggestedName(result)}
         onSave={savePlant}
         onClose={() => setSheet(null)}
       />

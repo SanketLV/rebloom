@@ -1,26 +1,40 @@
 import { randomUUID } from 'expo-crypto';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { applyAnswers } from '@/diagnosis/rerank';
-import type { Answer, Answers, Diagnosis, PreparedPhoto, QuestionId } from '@/diagnosis/types';
+import { applyAnswers, applyQuestionAnswer } from '@/diagnosis/rerank';
+import type {
+  Answer,
+  Answers,
+  Diagnosis,
+  PreparedPhoto,
+  QuestionAnswer,
+  QuestionId,
+} from '@/diagnosis/types';
 import { deleteCachedPhoto } from '@/photos/photos';
+
+// Where the scan's row stands (kindwise-diagnosis plan D5): none (nothing written), pending (sent,
+// no result yet), ready (result here, not saved), done (saved or feedback given).
+export type ScanStage = 'none' | 'pending' | 'ready' | 'done';
 
 // One scan, from the shutter to Save. Lives only while the scan modal is open.
 export type ScanState = {
   scanId: string;
   // The full-size capture or picker copy, until it's prepared.
   sourceUri: string | null;
-  // The resized temp photo in cache/scans/.
+  // The resized temp photo in cache/scans/, or the stored copy for a resumed scan.
   photo: PreparedPhoto | null;
   // Straight from the diagnoser.
   diagnosis: Diagnosis | null;
   answers: Answers;
+  // Kindwise's follow-up question, when it sent one.
+  questionAnswer?: QuestionAnswer;
   // The diagnosis re-ranked by the answers.
   result: Diagnosis | null;
   // The scan row exists in the database.
   persisted: boolean;
   // The photo has been copied to document/photos/.
   photoStored: boolean;
+  stage: ScanStage;
 };
 
 export type ScanSession = {
@@ -29,9 +43,17 @@ export type ScanSession = {
   setPrepared(photo: PreparedPhoto): void;
   setDiagnosis(diagnosis: Diagnosis): void;
   answer(question: QuestionId, answer: Answer): void;
+  answerQuestion(answer: QuestionAnswer): void;
   finish(): void;
   markPhotoStored(): void;
   markPersisted(): void;
+  // The stored photo and pending row exist (written before the photo is sent).
+  markPending(): void;
+  markReady(): void;
+  // Drops this scan's row now (e.g. not a plant).
+  discard(): void;
+  // Opens a scan stored earlier (My Plants: "Diagnosis ready").
+  resume(scan: { scanId: string; photo: PreparedPhoto; diagnosis: Diagnosis }): void;
 };
 
 const emptyScan = (): ScanState => ({
@@ -43,10 +65,11 @@ const emptyScan = (): ScanState => ({
   result: null,
   persisted: false,
   photoStored: false,
+  stage: 'none',
 });
 
 // Temp files belong to the session: whatever it drops, it deletes. Only
-// app-cache files, never a user's own photo.
+// app-cache files, never a user's own photo or a stored one.
 function deleteTempFiles(state: ScanState) {
   if (state.photo) deleteCachedPhoto(state.photo.uri);
   if (state.sourceUri) deleteCachedPhoto(state.sourceUri);
@@ -54,10 +77,20 @@ function deleteTempFiles(state: ScanState) {
 
 const SessionContext = createContext<ScanSession | null>(null);
 
-export function ScanSessionProvider({ children }: { children: ReactNode }) {
+type Props = {
+  children: ReactNode;
+  // Removes an unsaved scan's row and stored photo (the layout does it with the database).
+  onDiscard?: (scanId: string) => void;
+};
+
+export function ScanSessionProvider({ children, onDiscard }: Props) {
   const [state, setState] = useState(emptyScan);
   // The latest state for event handlers and cleanup, which can run before a re-render.
   const latest = useRef<ScanState>(null);
+  const discardRef = useRef(onDiscard);
+  useEffect(() => {
+    discardRef.current = onDiscard;
+  });
 
   const update = (change: (current: ScanState) => ScanState) => {
     const next = change(latest.current ?? state);
@@ -65,9 +98,14 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
     setState(next);
   };
 
+  // Closing the scan: a result nobody saved goes; a scan still waiting for its result stays, so
+  // My Plants can finish it.
   useEffect(
     () => () => {
-      if (latest.current) deleteTempFiles(latest.current);
+      const last = latest.current;
+      if (!last) return;
+      deleteTempFiles(last);
+      if (last.stage === 'ready') discardRef.current?.(last.scanId);
     },
     [],
   );
@@ -77,6 +115,10 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
     startScan(sourceUri) {
       update((current) => {
         deleteTempFiles(current);
+        // A retake abandons the scan it replaces, waiting or not.
+        if (current.stage === 'pending' || current.stage === 'ready') {
+          discardRef.current?.(current.scanId);
+        }
         return { ...emptyScan(), sourceUri };
       });
     },
@@ -89,10 +131,19 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
     answer(question, answer) {
       update((current) => ({ ...current, answers: { ...current.answers, [question]: answer } }));
     },
+    answerQuestion(questionAnswer) {
+      update((current) => ({ ...current, questionAnswer }));
+    },
     finish() {
       update((current) =>
         current.diagnosis
-          ? { ...current, result: applyAnswers(current.diagnosis, current.answers) }
+          ? {
+              ...current,
+              result: applyAnswers(
+                applyQuestionAnswer(current.diagnosis, current.questionAnswer),
+                current.answers,
+              ),
+            }
           : current,
       );
     },
@@ -100,7 +151,35 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
       update((current) => ({ ...current, photoStored: true }));
     },
     markPersisted() {
-      update((current) => ({ ...current, persisted: true }));
+      update((current) => ({ ...current, persisted: true, stage: 'done' }));
+    },
+    markPending() {
+      update((current) => ({ ...current, persisted: true, photoStored: true, stage: 'pending' }));
+    },
+    markReady() {
+      update((current) => (current.stage === 'pending' ? { ...current, stage: 'ready' } : current));
+    },
+    discard() {
+      update((current) => {
+        if (current.stage === 'pending' || current.stage === 'ready') {
+          discardRef.current?.(current.scanId);
+        }
+        return { ...current, stage: 'none', persisted: false, photoStored: false };
+      });
+    },
+    resume({ scanId, photo, diagnosis }) {
+      update((current) => {
+        deleteTempFiles(current);
+        return {
+          ...emptyScan(),
+          scanId,
+          photo,
+          diagnosis,
+          persisted: true,
+          photoStored: true,
+          stage: 'ready',
+        };
+      });
     },
   };
 

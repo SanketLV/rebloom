@@ -74,10 +74,14 @@ const ALLOWED_BACKEND_IMPORTERS: string[] = [
   'app/account/code.tsx',
   'app/account/email.tsx',
   'app/account/index.tsx',
+  'app/scan/_layout.tsx',
   'app/scan/analyzing.tsx',
+  'app/scan/result.tsx',
   'app/settings.tsx',
   'diagnosis/engine.ts',
   'diagnosis/kindwiseDiagnoser.ts',
+  'scan/runDiagnosis.ts',
+  'scan/saveScan.ts',
 ];
 
 function allSources(dir: string): Record<string, string> {

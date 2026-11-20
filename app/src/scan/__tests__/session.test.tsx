@@ -144,3 +144,104 @@ test('never deletes a source outside the app cache, such as a gallery original',
   await unmount();
   expect(fakeFs.has(original)).toBe(true);
 });
+
+// ---- kindwise-diagnosis: pending/ready scans and the Kindwise question ----
+
+describe('Kindwise scans', () => {
+  const kw: Diagnosis = {
+    diagnoserId: 'kindwise-v1',
+    candidates: [
+      { conditionId: null, confidence: 0.4, disease: { id: 'wet', name: 'wet', commonNames: [], description: null } },
+      { conditionId: null, confidence: 0.35, disease: { id: 'fungus', name: 'fungus', commonNames: [], description: null } },
+    ],
+    question: { text: 'Wet?', yes: { id: 'wet', name: 'wet' }, no: { id: 'fungus', name: 'fungus' } },
+  };
+
+  async function withDiscard() {
+    const onDiscard = jest.fn();
+    const hook = await renderHook(() => useScanSession(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <ScanSessionProvider onDiscard={onDiscard}>{children}</ScanSessionProvider>
+      ),
+    });
+    return { ...hook, onDiscard, session: () => hook.result.current };
+  }
+
+  test('the Kindwise answer re-ranks before our answers; the result keeps the question', async () => {
+    const { session } = await setup();
+    await act(async () => session().setDiagnosis(kw));
+    await act(async () => session().answerQuestion('no'));
+    await act(async () => session().finish());
+    expect(session().state.questionAnswer).toBe('no');
+    expect(session().state.result?.candidates[0].disease?.id).toBe('fungus');
+    expect(session().state.result?.question).toEqual(kw.question);
+  });
+
+  test('a new photo forgets the question answer', async () => {
+    const { session } = await setup();
+    await act(async () => session().answerQuestion('yes'));
+    await act(async () => session().startScan(shot('a')));
+    expect(session().state.questionAnswer).toBeUndefined();
+  });
+
+  test('closing with a ready, unsaved scan discards it; a pending one is kept', async () => {
+    const ready = await withDiscard();
+    await act(async () => ready.session().markPending());
+    await act(async () => ready.session().markReady());
+    const readyId = ready.session().state.scanId;
+    await ready.unmount();
+    expect(ready.onDiscard).toHaveBeenCalledWith(readyId);
+
+    const pending = await withDiscard();
+    await act(async () => pending.session().markPending());
+    await pending.unmount();
+    expect(pending.onDiscard).not.toHaveBeenCalled();
+  });
+
+  test('a saved scan is never discarded', async () => {
+    const { session, unmount, onDiscard } = await withDiscard();
+    await act(async () => session().markPending());
+    await act(async () => session().markReady());
+    await act(async () => session().markPersisted());
+    await unmount();
+    expect(onDiscard).not.toHaveBeenCalled();
+  });
+
+  test('a retake discards the pending or ready scan it replaces', async () => {
+    const { session, onDiscard } = await withDiscard();
+    await act(async () => session().markPending());
+    const first = session().state.scanId;
+    await act(async () => session().startScan(shot('b')));
+    expect(onDiscard).toHaveBeenCalledWith(first);
+    expect(session().state.stage).toBe('none');
+  });
+
+  test('discard on purpose (not a plant) runs once and forgets the stage', async () => {
+    const { session, unmount, onDiscard } = await withDiscard();
+    await act(async () => session().markPending());
+    await act(async () => session().discard());
+    await unmount();
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+  });
+
+  test('pending marks the photo as stored and the row as written', async () => {
+    const { session } = await setup();
+    await act(async () => session().markPending());
+    expect(session().state).toMatchObject({ stage: 'pending', photoStored: true, persisted: true });
+  });
+
+  test('resume loads a stored ready scan at its stage', async () => {
+    const { session } = await setup();
+    const photo = { uri: 'file:///document/photos/s9.jpg', width: 800, height: 600, sizeBytes: 0 };
+    await act(async () => session().resume({ scanId: 's9', photo, diagnosis: kw }));
+    expect(session().state).toMatchObject({
+      scanId: 's9',
+      photo,
+      diagnosis: kw,
+      stage: 'ready',
+      photoStored: true,
+      persisted: true,
+      sourceUri: null,
+    });
+  });
+});

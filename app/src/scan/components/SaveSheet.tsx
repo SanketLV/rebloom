@@ -34,12 +34,16 @@ type Props = {
   rooms: string[];
   onSave: (plant: { name: string; room: string | null }) => Promise<void>;
   onClose: () => void;
+  // The species' common name, when the diagnosis is sure of it (design 8).
+  suggestedName?: string | null;
 };
 
 // SaveSheet artboard. Lengths are cut by whole characters in onChangeText,
 // not TextInput maxLength, which counts UTF-16 units and can split an emoji.
-export function SaveSheet({ visible, rooms, onSave, onClose }: Props) {
-  const [name, setName] = useState(DEFAULT_NAME);
+export function SaveSheet({ visible, rooms, onSave, onClose, suggestedName }: Props) {
+  const [name, setName] = useState(() =>
+    suggestedName?.trim() ? limitChars(suggestedName.trim(), NAME_MAX) : DEFAULT_NAME,
+  );
   const [room, setRoom] = useState<string | null>(null);
   const [addingRoom, setAddingRoom] = useState(false);
   const [newRoom, setNewRoom] = useState('');
@@ -77,6 +81,8 @@ export function SaveSheet({ visible, rooms, onSave, onClose }: Props) {
           value={name}
           onChangeText={(text) => setName(limitChars(text, NAME_MAX))}
           style={[type.bodyStrong, styles.input]}
+          // One tap replaces the suggested name.
+          selectTextOnFocus
           returnKeyType="done"
         />
       </View>

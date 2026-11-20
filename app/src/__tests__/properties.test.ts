@@ -469,6 +469,7 @@ describe('saves interleaving property tests (#1)', () => {
           },
           persisted: false,
           photoStored: false,
+          stage: 'none',
         };
 
         const now = () => '2026-10-24T10:00:00.000Z';

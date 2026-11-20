@@ -1,12 +1,22 @@
+import { DiagnoseFailure, type DiagnoseFailureKind } from '@/diagnosis/kindwiseDiagnoser';
 import type { Diagnoser, Diagnosis, PreparedPhoto } from '@/diagnosis/types';
 import { TimeoutError, withMinDuration, withTimeout } from '@/lib/async';
 import { deletePhoto, preparePhoto } from '@/photos/photos';
 
-export const DIAGNOSIS_TIMEOUT_MS = 10_000;
+// Kindwise answers within the function's 15 s poll plus the upload; past this, the scan stays
+// pending and is finished later (plan D2).
+export const DIAGNOSIS_TIMEOUT_MS = 20_000;
 // Long enough to read the Analyzing steps.
 export const ANALYZING_MIN_MS = 1_200;
 
-export type DiagnosisErrorKind = 'prepare' | 'diagnose' | 'timeout' | 'aborted';
+// store: the photo couldn't be saved before sending. The Kindwise kinds come from DiagnoseFailure.
+export type DiagnosisErrorKind =
+  | 'prepare'
+  | 'store'
+  | 'diagnose'
+  | 'timeout'
+  | 'aborted'
+  | DiagnoseFailureKind;
 
 // `photo` is set when the photo was prepared before the failure, so
 // "Try again" can skip straight to diagnosing.
@@ -15,6 +25,8 @@ export class DiagnosisError extends Error {
     readonly kind: DiagnosisErrorKind,
     readonly photo: PreparedPhoto | null = null,
     options?: { cause?: unknown },
+    // quota only: when the free scans come back (UTC).
+    readonly resetsAt: string | null = null,
   ) {
     super(`Diagnosis failed: ${kind}`, options);
     this.name = 'DiagnosisError';
@@ -29,6 +41,9 @@ type RunOptions = {
   signal?: AbortSignal;
   // `photo` is the prepared photo: from 'prepared' on, the caller owns that file.
   onStep?: (step: Step, photo: PreparedPhoto) => void;
+  // Runs before the diagnoser is asked (the scan row and stored photo must exist before the photo
+  // is sent, so a killed app can finish it). A failure stops the run: nothing is sent.
+  beforeDiagnose?: (photo: PreparedPhoto) => Promise<void>;
   timeoutMs?: number;
   minMs?: number;
 };
@@ -42,6 +57,7 @@ export async function runDiagnosis(
     diagnoser,
     signal,
     onStep,
+    beforeDiagnose,
     timeoutMs = DIAGNOSIS_TIMEOUT_MS,
     minMs = ANALYZING_MIN_MS,
   }: RunOptions,
@@ -67,10 +83,22 @@ export async function runDiagnosis(
     }
     onStep?.('prepared', photo);
 
+    if (beforeDiagnose) {
+      try {
+        await beforeDiagnose(photo);
+      } catch (cause) {
+        throw new DiagnosisError('store', photo, { cause });
+      }
+      if (gone()) throw new DiagnosisError('aborted', photo);
+    }
+
     let diagnosis: Diagnosis;
     try {
       diagnosis = await diagnoser.diagnose(photo, { scanId: input.scanId });
     } catch (cause) {
+      if (cause instanceof DiagnoseFailure) {
+        throw new DiagnosisError(cause.kind, photo, { cause }, cause.resetsAt);
+      }
       throw new DiagnosisError('diagnose', photo, { cause });
     }
     if (gone()) throw new DiagnosisError('aborted', photo);
