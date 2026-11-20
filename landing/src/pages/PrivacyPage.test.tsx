@@ -29,9 +29,9 @@ describe('privacy page', () => {
     expect(text).toMatch(/how you signed in/);
     expect(text).toMatch(/when you created the account and when you last used it/);
     expect(text).toMatch(/Supabase/);
-    // Break-test #3: true until production sends through Gmail (task 25 adds it then).
-    expect(text).toMatch(/Supabase sends the sign-in codes/);
-    expect(text).not.toMatch(/Gmail/);
+    // Task 25: production sends codes through Gmail SMTP, so Google is named as a processor.
+    expect(text).toMatch(/sign-in codes are sent through Gmail/);
+    expect(text).toMatch(/Google/);
     expect(text).toMatch(/Settings › Account › Delete account/);
     // Swarm Medium 5: Supabase's auth audit log keeps the address after a delete; say so.
     expect(text).not.toMatch(/everything stored with it, and/);

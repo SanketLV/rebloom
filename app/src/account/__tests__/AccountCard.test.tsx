@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
 import { renderRouter } from 'expo-router/testing-library';
 import { Text } from 'react-native';
 
@@ -6,10 +6,12 @@ import type { AccountState } from '../store';
 
 let mockState: AccountState = { status: 'guest' };
 const mockRefresh = jest.fn(async () => {});
+const mockClearNotice = jest.fn();
 
 jest.mock('../store', () => ({
   useAccount: () => mockState,
   refreshAccount: () => mockRefresh(),
+  clearAccountNotice: () => mockClearNotice(),
 }));
 
 // eslint-disable-next-line import/first
@@ -61,10 +63,29 @@ test('the server ended the session: "Signed out" and "Sign in"', async () => {
   expect(screen).toHavePathname('/account');
 });
 
-test('after a delete: guest, and says the account is deleted', async () => {
+test('after a delete: guest, and a toast says the account is deleted', async () => {
   await renderSettings({ status: 'guest', notice: 'deleted' });
-  expect(screen.getByText('Your account is deleted.')).toBeOnTheScreen();
+  expect(screen.getByTestId('toast')).toHaveTextContent('Your account is deleted.');
   expect(screen.getByRole('button', { name: 'Save plants' })).toBeOnTheScreen();
+});
+
+test('the deleted toast clears itself after 4 seconds, not before', async () => {
+  jest.useFakeTimers();
+  mockClearNotice.mockClear();
+  await renderSettings({ status: 'guest', notice: 'deleted' });
+  await act(async () => {
+    jest.advanceTimersByTime(3999);
+  });
+  expect(mockClearNotice).not.toHaveBeenCalled();
+  await act(async () => {
+    jest.advanceTimersByTime(1);
+  });
+  expect(mockClearNotice).toHaveBeenCalledTimes(1);
+});
+
+test('no toast without a notice', async () => {
+  await renderSettings({ status: 'guest' });
+  expect(screen.queryByTestId('toast')).toBeNull();
 });
 
 test('offline: says so, and "Try again" reads the account again', async () => {

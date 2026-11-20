@@ -7,6 +7,7 @@ import {
   createContext,
   createElement,
   forwardRef,
+  memo,
   useContext,
   useEffect,
   useImperativeHandle,
@@ -281,7 +282,17 @@ type ProviderProps = {
   children?: ReactNode;
 };
 
-function SQLiteProvider({ onInit, onError, children }: ProviderProps) {
+// Like the real one (expo-sqlite 58), memoized on everything but `children`: a parent's
+// re-render doesn't reach what it wraps, only state from inside does.
+const SQLiteProvider = memo(
+  SQLiteProviderInner,
+  (prev, next) =>
+    prev.databaseName === next.databaseName &&
+    prev.onInit === next.onInit &&
+    prev.onError === next.onError,
+);
+
+function SQLiteProviderInner({ onInit, onError, children }: ProviderProps) {
   const [db, setDb] = useState<TestDb | null>(null);
   useEffect(() => {
     let cancelled = false;

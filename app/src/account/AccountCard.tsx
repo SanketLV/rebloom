@@ -2,10 +2,11 @@ import { router } from 'expo-router';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ProfileIcon } from '@/components/icons';
+import { Toast } from '@/components/Toast';
 import { colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
 
 import { signedInWith } from './methodLabel';
-import { refreshAccount, useAccount } from './store';
+import { clearAccountNotice, refreshAccount, useAccount } from './store';
 
 // The account card at the top of Settings (artboard 16). Hidden when the app has no backend, so
 // there's never a dead end.
@@ -73,11 +74,15 @@ export function AccountCard() {
           </Pressable>
         ) : null}
       </View>
-      {account.status === 'guest' && account.notice === 'deleted' ? (
-        <Text style={styles.notice}>Your account is deleted.</Text>
-      ) : null}
     </View>
   );
+}
+
+// Screen-level, so it can sit at the bottom of the screen rather than inside the card's scroll.
+export function AccountToast() {
+  const account = useAccount();
+  if (account.status !== 'guest' || account.notice !== 'deleted') return null;
+  return <Toast message="Your account is deleted." onHide={clearAccountNotice} />;
 }
 
 function Avatar() {
@@ -121,5 +126,4 @@ const styles = StyleSheet.create({
   buttonText: { ...type.chip, fontFamily: type.tabLabelActive.fontFamily },
   rewardText: { color: colors.text },
   quietText: { color: colors.onPrimarySoft },
-  notice: { ...type.caption, color: colors.textSecondary, paddingHorizontal: spacing.xs },
 });
