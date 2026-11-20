@@ -89,6 +89,11 @@ export function noteAccountDeleted(): void {
   else deletedPending = true;
 }
 
+/** Ends the "account is deleted" toast; any other state is left alone. */
+export function clearAccountNotice(): void {
+  if (state.status === 'guest' && state.notice) set({ status: 'guest' });
+}
+
 /** Tests only. */
 export function resetAccountForTests(): void {
   stopListening?.();

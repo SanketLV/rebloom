@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import type { Result, SessionEvent, SessionUser } from '@/backend/session';
 
 import {
+  clearAccountNotice,
   getAccountState,
   noteAccountDeleted,
   refreshAccount,
@@ -102,6 +103,21 @@ test('the user signs out → guest', async () => {
   const { result } = await renderHook(() => useAccount());
   await flush();
   await act(async () => mockEmit({ type: 'signed_out', reason: 'user' }));
+  expect(result.current).toEqual({ status: 'guest' });
+});
+
+test('clearing the notice leaves a plain guest, and touches no other state', async () => {
+  mockCurrentUser = async () => ({ ok: true, value: sam });
+  const { result } = await renderHook(() => useAccount());
+  await flush();
+  await act(async () => clearAccountNotice());
+  expect(result.current).toEqual({ status: 'signed_in', user: sam });
+
+  await act(async () => {
+    noteAccountDeleted();
+    mockEmit({ type: 'signed_out', reason: 'user' });
+  });
+  await act(async () => clearAccountNotice());
   expect(result.current).toEqual({ status: 'guest' });
 });
 
