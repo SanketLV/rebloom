@@ -38,7 +38,7 @@ const auth = jest.requireMock('@/backend/auth') as Record<
 >;
 const session = jest.requireMock('@/backend/session') as { signOut: jest.Mock };
 
-const sam: SessionUser = { id: 'u-1', email: 'sam@example.com', provider: 'email' };
+const sam: SessionUser = { id: 'u-1', email: 'sam@example.com', provider: 'email', isAnonymous: false };
 const ok = <T,>(value: T): Result<T> => ({ ok: true, value });
 
 const androidBack = {
@@ -467,7 +467,7 @@ describe('answers that arrive after the user left the screen', () => {
           };
         }),
     );
-    mockUser = { ...sam, provider: 'google' };
+    mockUser = { ...sam, provider: 'google', isAnonymous: false };
     await renderRouter(ROUTES, { initialUrl: '/settings' });
     await fireEvent.press(await screen.findByRole('button', { name: 'Account' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Delete account' }));
@@ -525,7 +525,7 @@ describe('the address on the code screen', () => {
 });
 
 describe('account screen', () => {
-  async function openSignedIn(user: SessionUser = { ...sam, provider: 'google' }) {
+  async function openSignedIn(user: SessionUser = { ...sam, provider: 'google', isAnonymous: false }) {
     mockUser = user;
     await renderRouter(ROUTES, { initialUrl: '/settings' });
     await fireEvent.press(await screen.findByRole('button', { name: 'Account' }));

@@ -59,11 +59,12 @@ test('image picker asks for photos only and leaves the camera permission alone',
   expect(picker).not.toHaveProperty('cameraPermission');
 });
 
-// Only the account feature reaches the backend, and only once Settings or an account screen is
-// open, so an app start makes no network request (root-layout test). Imports are parsed, resolved
+// Only the account feature and the scan (diagnosis) reach the backend, and only once Settings, an
+// account screen or a scan needs it, so an app start makes no network request (root-layout test). Imports are parsed, resolved
 // and followed through other files (see src/testing/importGraph.ts); every file under src/
 // counts, .js too. Add a file here only on purpose.
 const ALLOWED_BACKEND_IMPORTERS: string[] = [
+  'app/(tabs)/plants.tsx',
   'account/AccountCard.tsx',
   'account/AccountView.tsx',
   'account/DeleteAccountSheet.tsx',
@@ -74,7 +75,16 @@ const ALLOWED_BACKEND_IMPORTERS: string[] = [
   'app/account/code.tsx',
   'app/account/email.tsx',
   'app/account/index.tsx',
+  'app/scan/_layout.tsx',
+  'app/scan/analyzing.tsx',
+  'app/scan/result.tsx',
+  'app/scan/resume.tsx',
   'app/settings.tsx',
+  'diagnosis/engine.ts',
+  'diagnosis/kindwiseDiagnoser.ts',
+  'scan/resumePending.ts',
+  'scan/runDiagnosis.ts',
+  'scan/saveScan.ts',
 ];
 
 function allSources(dir: string): Record<string, string> {
@@ -122,4 +132,15 @@ test('the backend import guard sees every import form, path and file type', () =
   const found = backendReachers({ ...backend, ...helpers, ...caught, ...clean }, []);
   expect(found).toEqual(Object.keys(caught).sort());
   expect(backendReachers({ ...backend, ...caught }, Object.keys(caught))).toEqual([]);
+});
+
+// kindwise-diagnosis: the Kindwise key lives only in the diagnose function. The app never names
+// Kindwise's API, its key variable, or an Api-Key header.
+test('the app holds no Kindwise key, address or header', () => {
+  const sources = allSources(SRC);
+  const offenders = Object.entries(sources)
+    .filter(([path]) => !path.startsWith('testing/'))
+    .filter(([, text]) => /KINDWISE_API_KEY|\/\/plant\.id|plant\.id\/api|kindwise\.com|Api-Key/i.test(text))
+    .map(([path]) => path);
+  expect(offenders).toEqual([]);
 });

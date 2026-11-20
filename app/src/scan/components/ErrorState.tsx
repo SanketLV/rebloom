@@ -1,25 +1,45 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { Button, TextButton } from '@/components/Button';
-import { colors, spacing, type } from '@/theme/tokens';
+import { colors, radius, spacing, type } from '@/theme/tokens';
 
-type Props = { onRetry: () => void; onScanAnother: () => void };
+type Action = { label: string; onPress: () => void };
 
-const TITLE = "We couldn't read this photo";
+// Kindwise saw a plant but named nothing we can show (review #1).
+export const NO_CLEAR_PROBLEM = {
+  title: "We couldn't find a clear problem",
+  body: 'Nothing in this photo points to a clear problem. A close photo of the leaf that looks wrong may help.',
+};
 
-// ErrorState artboard layout, with copy for a photo that couldn't be read.
-export function ErrorState({ onRetry, onScanAnother }: Props) {
+type Props = {
+  title?: string;
+  body?: string;
+  primary: Action;
+  secondary?: Action;
+  // The photo that was checked, shown small above the title (not a plant, out of free scans).
+  photoUri?: string | null;
+};
+
+// ErrorState artboard layout. Defaults: a photo that couldn't be read.
+export function ErrorState({
+  title = "We couldn't read this photo",
+  body = 'Something went wrong while checking it. Try again, or scan another plant.',
+  primary,
+  secondary,
+  photoUri,
+}: Props) {
   return (
     <View style={styles.wrap}>
+      {photoUri && (
+        <Image source={{ uri: photoUri }} style={styles.thumb} accessibilityLabel="Your photo" />
+      )}
       <Text accessibilityRole="header" style={[type.title, styles.center, styles.title]}>
-        {TITLE}
+        {title}
       </Text>
-      <Text style={[type.body, styles.center, styles.body]}>
-        Something went wrong while checking it. Try again, or scan another plant.
-      </Text>
+      <Text style={[type.body, styles.center, styles.body]}>{body}</Text>
       <View style={styles.actions}>
-        <Button label="Try again" onPress={onRetry} />
-        <TextButton label="Scan another plant" onPress={onScanAnother} />
+        <Button label={primary.label} onPress={primary.onPress} />
+        {secondary && <TextButton label={secondary.label} onPress={secondary.onPress} />}
       </View>
     </View>
   );
@@ -32,6 +52,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.xxl,
     backgroundColor: colors.bg,
+  },
+  thumb: {
+    width: 96,
+    height: 96,
+    borderRadius: radius.md,
+    alignSelf: 'center',
+    backgroundColor: colors.photoBg,
+    marginBottom: spacing.sm,
   },
   center: { textAlign: 'center' },
   title: { color: colors.text },

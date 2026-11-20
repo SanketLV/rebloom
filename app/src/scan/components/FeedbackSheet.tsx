@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
-import type { ConditionId } from '@/diagnosis/types';
 import { useSingleFlight } from '@/lib/useSingleFlight';
 import type { UserGuess, Verdict } from '@/storage/scansRepo';
 import { colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
@@ -12,7 +11,7 @@ type Props = {
   visible: boolean;
   conditionName: string;
   // The other likely causes, offered when the user says "No".
-  alternatives: { id: ConditionId; name: string }[];
+  alternatives: { id: Exclude<UserGuess, 'something_else'>; name: string }[];
   onSubmit: (feedback: { verdict: Verdict; userGuess: UserGuess | null }) => Promise<void>;
   onClose: () => void;
 };

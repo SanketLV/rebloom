@@ -8,6 +8,8 @@ import { createTestDb, type TestDb } from '@/testing/sqljs';
 import { saveAsPlant, saveFeedback } from '../saveScan';
 import type { ScanState } from '../session';
 
+jest.mock('@/backend/diagnose', () => ({ confirmDiagnose: jest.fn(async () => {}) }));
+
 const NOW = '2026-10-24T10:00:00.000Z';
 const diagnosis: Diagnosis = {
   diagnoserId: 'fake-v1',
@@ -38,6 +40,7 @@ const state = (overrides: Partial<ScanState> = {}): ScanState => ({
   result,
   persisted: false,
   photoStored: false,
+  stage: 'none',
   ...overrides,
 });
 
@@ -274,3 +277,82 @@ test('a concurrent failed save does not block subsequent saves in the queue', as
 });
 
 
+
+// ---- kindwise-diagnosis: the row and photo exist before the photo is sent (plan D5) ----
+
+describe('pending scans', () => {
+  const { beginPendingScan, markScanReady, discardUnsavedScan } = jest.requireActual('../saveScan') as typeof import('../saveScan');
+  const mockConfirm = jest.requireMock('@/backend/diagnose').confirmDiagnose as jest.Mock;
+  const kw: Diagnosis = {
+    diagnoserId: 'kindwise-v1',
+    candidates: [{ conditionId: 'overwatering', confidence: 0.64, disease: { id: 'd1', name: 'water excess', commonNames: [], description: null } }],
+    species: [{ name: 'Monstera deliciosa', commonNames: ['Swiss cheese plant'], probability: 0.91 }],
+    question: { text: 'Wet?', yes: { id: 'd1', name: 'water excess' }, no: { id: 'd2', name: 'fungi' } },
+    treatment: { d1: { prevention: ['Dry out.'], biological: [], chemical: [] } },
+  };
+  const photo = { uri: tempPhoto, width: 800, height: 600, sizeBytes: 90_000 };
+  const pendingState = () => state({ diagnosis: null, result: null, persisted: true, photoStored: true, stage: 'pending' });
+
+  beforeEach(() => mockConfirm.mockClear());
+
+  test('begin stores the photo and a pending row', async () => {
+    await beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options());
+    expect(fakeFs.has(storedPhoto)).toBe(true);
+    expect(await db.getFirstAsync('SELECT status, photo_path FROM scans', [])).toEqual({ status: 'pending', photo_path: 'photos/scan-1.jpg' });
+  });
+
+  test('begin twice (Try again) keeps one row and one photo', async () => {
+    await beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options());
+    await beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options());
+    expect(await count(db, 'scans')).toBe(1);
+  });
+
+  test('claim fills a missing owner and never replaces one (review round 2 #3)', async () => {
+    const { claimPendingScan } = jest.requireActual('../saveScan') as typeof import('../saveScan');
+    await beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options());
+    expect(await db.getFirstAsync('SELECT owner_id FROM scans', [])).toEqual({ owner_id: null });
+    await claimPendingScan(db, 'scan-1', 'u-1');
+    await claimPendingScan(db, 'scan-1', 'u-2');
+    expect(await db.getFirstAsync('SELECT owner_id FROM scans', [])).toEqual({ owner_id: 'u-1' });
+  });
+
+  test('a failed row insert deletes the photo copy it made', async () => {
+    await failNextInsertInto(db, 'scans');
+    await expect(beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options())).rejects.toThrow();
+    expect(fakeFs.has(storedPhoto)).toBe(false);
+  });
+
+  test('ready stores the result, then tells the server it can delete its copy', async () => {
+    await beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options());
+    await markScanReady(db, 'scan-1', kw, options());
+    expect(await db.getFirstAsync('SELECT status FROM scans', [])).toEqual({ status: 'ready' });
+    expect(mockConfirm).toHaveBeenCalledWith('scan-1');
+  });
+
+  test('ready that cannot be written does not confirm (the server keeps its copy for GET)', async () => {
+    await beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options());
+    await db.execAsync("CREATE TEMP TRIGGER fail_upd BEFORE UPDATE ON scans BEGIN SELECT RAISE(ABORT, 'disk full'); END;");
+    await expect(markScanReady(db, 'scan-1', kw, options())).rejects.toThrow();
+    expect(mockConfirm).not.toHaveBeenCalled();
+  });
+
+  test('discard removes the unsaved row and its stored photo', async () => {
+    await beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options());
+    await discardUnsavedScan(db, 'scan-1', options());
+    expect(fakeFs.has(storedPhoto)).toBe(false);
+    expect(await db.getFirstAsync('SELECT deleted_at FROM scans', [])).toEqual({ deleted_at: NOW });
+  });
+
+  test('saving a ready Kindwise scan keeps species and treatment and stores the question answer', async () => {
+    await beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options());
+    await markScanReady(db, 'scan-1', kw, options());
+    await saveAsPlant(db, { ...pendingState(), stage: 'ready', diagnosis: kw, result: kw, questionAnswer: 'yes' }, { name: 'Monty', room: null }, options());
+    const row = await db.getFirstAsync<Record<string, string>>('SELECT status, question_answer, species, treatment FROM scans', []);
+    expect(row).toMatchObject({ status: 'done', question_answer: 'yes' });
+    expect(JSON.parse(row!.species)[0].name).toBe('Monstera deliciosa');
+    expect(JSON.parse(row!.treatment).d1.prevention).toEqual(['Dry out.']);
+    expect(await count(db, 'scans')).toBe(1);
+    // The stored photo the pending row used is the plant's photo now.
+    expect(fakeFs.has(storedPhoto)).toBe(true);
+  });
+});

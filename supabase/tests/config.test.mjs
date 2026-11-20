@@ -42,8 +42,11 @@ test('supabase/config.toml exists (supabase init)', () => {
   assert.equal(config[''].project_id, 'rebloom');
 });
 
-test('no anonymous accounts, no phone sign-in; email sign-in by code is on', () => {
-  assert.equal(config.auth.enable_anonymous_sign_ins, false);
+// Anonymous accounts let the first scan count against a server-trusted user with no visible sign-up
+// (kindwise-diagnosis spec). Rate limited per IP; the global credit cap bounds the rest.
+test('anonymous accounts on (30 per hour per IP), no phone sign-in; email sign-in by code is on', () => {
+  assert.equal(config.auth.enable_anonymous_sign_ins, true);
+  assert.equal(config['auth.rate_limit'].anonymous_users, 30);
   assert.equal(config.auth.enable_signup, true, 'email-code sign-in creates the account on first use');
   assert.equal(config['auth.sms'].enabled, false);
   assert.equal(config['auth.email'].enabled, true);
@@ -76,4 +79,9 @@ for (const name of ['magic_link', 'confirmation']) {
 test('delete-account checks its own token: verify_jwt off, and the function exists', () => {
   assert.equal(config?.['functions.delete-account']?.verify_jwt, false);
   assert.ok(existsSync(new URL('supabase/functions/delete-account/index.ts', ROOT)));
+});
+
+test('diagnose checks its own token: verify_jwt off, and the function exists', () => {
+  assert.equal(config?.['functions.diagnose']?.verify_jwt, false);
+  assert.ok(existsSync(new URL('supabase/functions/diagnose/index.ts', ROOT)));
 });

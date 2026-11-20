@@ -32,7 +32,7 @@ const FAKE_ID = 'fake-v1';
 
 export const fakeDiagnoser: Diagnoser = {
   id: FAKE_ID,
-  async diagnose({ width, height, sizeBytes }) {
+  async diagnose({ width, height, sizeBytes }, _options) {
     const fixture = FAKE_FIXTURES[fnv1a(`${width}x${height}:${sizeBytes}`) % FAKE_FIXTURES.length];
     return { diagnoserId: FAKE_ID, candidates: fixture.map((c) => ({ ...c })) };
   },

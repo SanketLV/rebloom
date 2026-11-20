@@ -22,6 +22,8 @@ export type FakeSessionOptions = {
   refreshToken?: string;
   /** Default: one identity of `provider`, signed in now. */
   identities?: { provider: string; last_sign_in_at: string | null }[];
+  /** An anonymous account: no email, no identities, `is_anonymous: true`. */
+  anonymous?: boolean;
 };
 
 function base64url(value: object): string {
@@ -29,15 +31,16 @@ function base64url(value: object): string {
 }
 
 export function fakeSession(options: FakeSessionOptions = {}) {
+  const anonymous = options.anonymous === true;
   const userId = options.userId ?? '00000000-0000-4000-8000-000000000001';
-  const email = options.email ?? 'sam@example.com';
-  const provider = options.provider ?? 'email';
+  const email = anonymous ? '' : (options.email ?? 'sam@example.com');
+  const provider = anonymous ? 'anonymous' : (options.provider ?? 'email');
   const expiresIn = options.expiresIn ?? 3600;
   const expiresAt = Math.floor(Date.now() / 1000) + expiresIn;
   const accessToken = [
     base64url({ alg: 'HS256', typ: 'JWT' }),
     base64url({ sub: userId, email, role: 'authenticated', aud: 'authenticated', exp: expiresAt }),
-    'signature',
+    base64url({ fake: 'signature' }),
   ].join('.');
   return {
     access_token: accessToken,
@@ -50,10 +53,12 @@ export function fakeSession(options: FakeSessionOptions = {}) {
       aud: 'authenticated',
       role: 'authenticated',
       email,
+      is_anonymous: anonymous,
       app_metadata: { provider, providers: [provider] },
       user_metadata: {},
-      identities: (
-        options.identities ?? [{ provider, last_sign_in_at: new Date().toISOString() }]
+      identities: (anonymous
+        ? []
+        : (options.identities ?? [{ provider, last_sign_in_at: new Date().toISOString() }])
       ).map((identity, i) => ({ id: `${userId}-${i}`, user_id: userId, ...identity })),
       created_at: '2026-11-03T10:00:00.000Z',
       updated_at: '2026-11-03T10:00:00.000Z',
@@ -103,7 +108,17 @@ function failure(
 }
 
 export class FakeAuthServer {
-  next: { verify: Mode; refresh: Mode; logout: Mode; otp: Mode; deleteAccount: Mode | 'unauthorized' } = {
+  next: {
+    verify: Mode;
+    refresh: Mode;
+    logout: Mode;
+    otp: Mode;
+    signup: Mode;
+    user: Mode;
+    deleteAccount: Mode | 'unauthorized';
+  } = {
+    signup: 'ok',
+    user: 'ok',
     verify: 'ok',
     refresh: 'ok',
     logout: 'ok',
@@ -112,6 +127,10 @@ export class FakeAuthServer {
   };
   /** What a successful verify or refresh returns. */
   sessionOptions: FakeSessionOptions = {};
+  /** What an anonymous sign-up returns (always anonymous). */
+  anonymousOptions: FakeSessionOptions = { userId: '00000000-0000-4000-8000-0000000000a0' };
+  /** What a refresh returns, when it should differ from sessionOptions (e.g. restoring a stash). */
+  refreshOptions: FakeSessionOptions | null = null;
   readonly calls: {
     method: string;
     path: string;
@@ -172,7 +191,23 @@ export class FakeAuthServer {
     }
     if (path === '/auth/v1/token?grant_type=refresh_token') {
       if (this.next.refresh !== 'ok') return failure(this.next.refresh, 'refresh_token_not_found');
-      return json(200, fakeSession(this.sessionOptions));
+      return json(200, fakeSession(this.refreshOptions ?? this.sessionOptions));
+    }
+    if (path === '/auth/v1/signup') {
+      if (this.next.signup !== 'ok') return failure(this.next.signup, 'otp_expired');
+      return json(200, fakeSession({ ...this.anonymousOptions, anonymous: true }));
+    }
+    if (path === '/auth/v1/user' && method === 'GET') {
+      if (this.next.user !== 'ok') return failure(this.next.user, 'session_not_found');
+      // The user the bearer token was made for.
+      const token = headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+      try {
+        const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+        const anonymous = claims.email === '';
+        return json(200, fakeSession({ userId: claims.sub, email: claims.email, anonymous }).user);
+      } catch {
+        return failure('bad_jwt', 'session_not_found');
+      }
     }
     if (path === '/auth/v1/otp') {
       if (this.next.otp === 'rate_limited') {

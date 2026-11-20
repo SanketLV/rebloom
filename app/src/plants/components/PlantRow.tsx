@@ -1,6 +1,6 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 
-import { CONDITIONS } from '@/diagnosis/conditions';
+import { candidateName } from '@/diagnosis/conditions';
 import { isDemoDiagnoser } from '@/diagnosis/confidence';
 import { photoUri } from '@/photos/photos';
 import { DemoTag } from '@/scan/components/DemoTag';
@@ -13,7 +13,7 @@ const savedOn = (iso: string) =>
 
 // One row of My Plants. Status badges and plant detail come with the My Plants spec.
 export function PlantRow({ plant }: { plant: PlantSummary }) {
-  const condition = plant.conditionId ? CONDITIONS[plant.conditionId] : null;
+  const condition = plant.candidate ? candidateName(plant.candidate) : null;
   const details = [plant.room, `Saved ${savedOn(plant.createdAt)}`].filter(Boolean).join(' · ');
   return (
     <View testID="plant-row" style={styles.row}>
@@ -33,7 +33,9 @@ export function PlantRow({ plant }: { plant: PlantSummary }) {
         <Text style={[type.small, styles.muted]}>{details}</Text>
         {condition && (
           <View style={styles.diagnosis}>
-            <Text style={[type.chip, styles.condition]}>{condition.name}</Text>
+            <Text style={[type.chip, styles.condition]} numberOfLines={1}>
+              {condition}
+            </Text>
             {plant.diagnoserId && isDemoDiagnoser(plant.diagnoserId) && <DemoTag />}
           </View>
         )}
