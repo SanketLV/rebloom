@@ -64,6 +64,7 @@ test('image picker asks for photos only and leaves the camera permission alone',
 // and followed through other files (see src/testing/importGraph.ts); every file under src/
 // counts, .js too. Add a file here only on purpose.
 const ALLOWED_BACKEND_IMPORTERS: string[] = [
+  'app/(tabs)/plants.tsx',
   'account/AccountCard.tsx',
   'account/AccountView.tsx',
   'account/DeleteAccountSheet.tsx',
@@ -80,6 +81,7 @@ const ALLOWED_BACKEND_IMPORTERS: string[] = [
   'app/settings.tsx',
   'diagnosis/engine.ts',
   'diagnosis/kindwiseDiagnoser.ts',
+  'scan/resumePending.ts',
   'scan/runDiagnosis.ts',
   'scan/saveScan.ts',
 ];

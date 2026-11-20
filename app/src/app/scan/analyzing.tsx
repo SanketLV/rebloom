@@ -71,7 +71,8 @@ export default function AnalyzingScreen() {
     const scanId = state.scanId;
     // Kindwise: the stored photo and a pending row exist before the photo leaves the phone, so a
     // killed app can still finish this scan from My Plants (plan D5).
-    const beforeDiagnose = kindwise
+    // A scan resumed from My Plants (or retried) already has its row and stored photo.
+    const beforeDiagnose = kindwise && state.stage === 'none'
       ? async (photo: PreparedPhoto) => {
           await beginPendingScan(db, scanId, diagnoser.id, photo);
           session.markPending();

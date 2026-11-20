@@ -244,4 +244,11 @@ describe('Kindwise scans', () => {
       sourceUri: null,
     });
   });
+
+  test('resume without a result is a pending scan to send again', async () => {
+    const { session } = await setup();
+    const photo = { uri: 'file:///document/photos/s9.jpg', width: 0, height: 0, sizeBytes: 0 };
+    await act(async () => session().resume({ scanId: 's9', photo, diagnosis: null }));
+    expect(session().state).toMatchObject({ scanId: 's9', diagnosis: null, stage: 'pending' });
+  });
 });

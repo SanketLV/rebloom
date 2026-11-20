@@ -52,8 +52,9 @@ export type ScanSession = {
   markReady(): void;
   // Drops this scan's row now (e.g. not a plant).
   discard(): void;
-  // Opens a scan stored earlier (My Plants: "Diagnosis ready").
-  resume(scan: { scanId: string; photo: PreparedPhoto; diagnosis: Diagnosis }): void;
+  // Opens a scan stored earlier from My Plants: with its result ("Diagnosis ready"), or without one
+  // to send it again ("Try again").
+  resume(scan: { scanId: string; photo: PreparedPhoto; diagnosis: Diagnosis | null }): void;
 };
 
 const emptyScan = (): ScanState => ({
@@ -177,7 +178,7 @@ export function ScanSessionProvider({ children, onDiscard }: Props) {
           diagnosis,
           persisted: true,
           photoStored: true,
-          stage: 'ready',
+          stage: diagnosis ? 'ready' : 'pending',
         };
       });
     },

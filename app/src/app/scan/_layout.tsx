@@ -26,6 +26,7 @@ export default function ScanLayout() {
         <Stack.Screen name="questions" />
         <Stack.Screen name="result" />
         <Stack.Screen name="treatment" />
+        <Stack.Screen name="resume" options={{ animation: 'none' }} />
       </Stack>
     </ScanSessionProvider>
   );
