@@ -80,7 +80,12 @@ export class FakeDiagnoseServer extends FakeAuthServer {
 
       const answer = this.answers.length > 1 ? this.answers.shift()! : this.answers[0];
       if (answer === 'offline') throw new TypeError('Network request failed');
-      if (answer === 'hang') return new Promise<Response>(() => {});
+      if (answer === 'hang') {
+        // Never answers, but gives way when the caller aborts (functions.invoke's timeout).
+        return new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))),
+        );
+      }
       if (answer.status === 200) return json(200, answer.body);
       if (answer.status === 202) return json(202, { status: 'pending' });
       if (answer.status === 204) return new Response(null, { status: 204 });

@@ -8,6 +8,7 @@ import { EmptyPlants } from '@/plants/components/EmptyPlants';
 import { PlantRow } from '@/plants/components/PlantRow';
 import { UnfinishedScanRow } from '@/plants/components/UnfinishedScanRow';
 import { finishPendingScans, type PendingState } from '@/scan/resumePending';
+import { removeUnfinishedScan } from '@/scan/saveScan';
 import {
   listPlants,
   listUnfinishedScans,
@@ -56,6 +57,14 @@ export default function MyPlantsScreen() {
     scan.status === 'ready' ? 'ready' : (pending[scan.id] ?? 'finishing');
   const open = (scan: UnfinishedScan) =>
     router.push({ pathname: '/scan/resume', params: { id: scan.id } });
+  const remove = (scan: UnfinishedScan) => {
+    setLoad((current) =>
+      current.status === 'ready'
+        ? { ...current, unfinished: current.unfinished.filter((s) => s.id !== scan.id) }
+        : current,
+    );
+    void removeUnfinishedScan(db, scan.id).catch(() => {});
+  };
 
   const header = (
     <Text accessibilityRole="header" style={[type.screenTitle, styles.title]}>
@@ -79,6 +88,7 @@ export default function MyPlantsScreen() {
                   scan={scan}
                   state={stateOf(scan)}
                   onOpen={() => open(scan)}
+                  onRemove={() => remove(scan)}
                 />
               ))}
             </View>

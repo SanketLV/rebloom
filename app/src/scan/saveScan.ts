@@ -168,6 +168,20 @@ export async function beginPendingScan(
   });
 }
 
+// Names the account a pending scan is sent with, when it has none yet (it was stored offline,
+// before any session existed). Never replaces an owner. Without `ownerId`, the scan session's.
+export async function claimPendingScan(db: Db, scanId: string, ownerId?: string): Promise<void> {
+  let owner = ownerId ?? null;
+  if (!owner) {
+    const session = await ensureScanSession();
+    owner = session.ok ? session.value.id : null;
+  }
+  if (!owner) return;
+  await serializeSave(() =>
+    db.runAsync('UPDATE scans SET owner_id = ? WHERE id = ? AND owner_id IS NULL', [owner, scanId]),
+  );
+}
+
 // The result arrived: store it, then let the server delete its copy (plan D1). Not confirmed if
 // the write fails, so the result can still be fetched again.
 export async function markScanReady(
@@ -177,6 +191,12 @@ export async function markScanReady(
   { now = isoNow }: Options = {},
 ): Promise<void> {
   await serializeSave(() => markReady(db, scanId, diagnosis, now()));
+  void confirmDiagnose(scanId);
+}
+
+// The user removed an unfinished scan from My Plants: gone here, and the server's copy too.
+export async function removeUnfinishedScan(db: Db, scanId: string): Promise<void> {
+  await discardUnsavedScan(db, scanId);
   void confirmDiagnose(scanId);
 }
 

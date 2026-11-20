@@ -78,6 +78,7 @@ const ALLOWED_BACKEND_IMPORTERS: string[] = [
   'app/scan/_layout.tsx',
   'app/scan/analyzing.tsx',
   'app/scan/result.tsx',
+  'app/scan/resume.tsx',
   'app/settings.tsx',
   'diagnosis/engine.ts',
   'diagnosis/kindwiseDiagnoser.ts',

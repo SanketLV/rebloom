@@ -69,8 +69,9 @@ export function identificationUrl(base: string, token?: string): string {
   return `${root}?${query.toString().replace(/%2C/g, ',')}`;
 }
 
+// Only an explicit FAILED ends a scan: one unreadable answer is treated as still running.
 export function kindwiseStatus(raw: unknown): 'done' | 'running' | 'failed' {
-  if (!raw || typeof raw !== 'object') return 'failed';
+  if (!raw || typeof raw !== 'object') return 'running';
   const { status, completed } = raw as { status?: unknown; completed?: unknown };
   if (status === 'COMPLETED' || (typeof completed === 'number' && status !== 'FAILED')) return 'done';
   if (status === 'FAILED') return 'failed';

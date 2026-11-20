@@ -170,7 +170,7 @@ test('a healthy plant: Looks healthy, the species, and Save instead of a treatme
 });
 
 test('the app closed mid-call: the scan waits as pending with its photo', async () => {
-  server.answers = ['hang'];
+  server.answers = ['hang', { status: 202 }];
   const view = await shoot();
   await waitFor(async () => expect((await scans())[0]?.status).toBe('pending'));
   await act(async () => router.dismissTo('/plants'));

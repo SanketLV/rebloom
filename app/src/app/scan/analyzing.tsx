@@ -15,7 +15,7 @@ import { ErrorState, NO_CLEAR_PROBLEM } from '@/scan/components/ErrorState';
 import { LowConfidenceSheet } from '@/scan/components/LowConfidenceSheet';
 import { TipsSheet } from '@/scan/components/TipsSheet';
 import { DiagnosisError, runDiagnosis, type DiagnosisErrorKind, type Step } from '@/scan/runDiagnosis';
-import { beginPendingScan, markScanReady } from '@/scan/saveScan';
+import { beginPendingScan, claimPendingScan, markScanReady } from '@/scan/saveScan';
 import { useScanSession } from '@/scan/session';
 import { cameraColors, colors, radius, spacing, type } from '@/theme/tokens';
 
@@ -71,13 +71,16 @@ export default function AnalyzingScreen() {
     const scanId = state.scanId;
     // Kindwise: the stored photo and a pending row exist before the photo leaves the phone, so a
     // killed app can still finish this scan from My Plants (plan D5).
-    // A scan resumed from My Plants (or retried) already has its row and stored photo.
-    const beforeDiagnose = kindwise && state.stage === 'none'
-      ? async (photo: PreparedPhoto) => {
-          await beginPendingScan(db, scanId, diagnoser.id, photo);
-          session.markPending();
-        }
-      : undefined;
+    // A scan resumed from My Plants (or retried) already has its row and stored photo; it only
+    // needs an owner if it was stored before any session existed.
+    const beforeDiagnose = !kindwise
+      ? undefined
+      : state.stage === 'none'
+        ? async (photo: PreparedPhoto) => {
+            await beginPendingScan(db, scanId, diagnoser.id, photo);
+            session.markPending();
+          }
+        : () => claimPendingScan(db, scanId);
     runDiagnosis(
       { scanId, sourceUri: state.sourceUri, prepared: state.photo },
       { diagnoser, signal, onStep, beforeDiagnose },

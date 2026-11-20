@@ -24,13 +24,20 @@ const IN_PROGRESS_RETRIES = 5;
 const IN_PROGRESS_WAIT_MS = 2_000;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// One call: the function polls Kindwise for up to 15 s. Past this the call counts as offline, so a
+// hung request can never block the scan or My Plants' pass.
+export const CALL_TIMEOUT_MS = 25_000;
 
 type Call = { status: number; body: unknown } | { status: 'offline' };
 
 async function invoke(path: string, method: 'POST' | 'GET' | 'DELETE', body?: Record<string, unknown>): Promise<Call | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
-  const { data, error, response } = await supabase.functions.invoke(path, { method, body });
+  const { data, error, response } = await supabase.functions.invoke(path, {
+    method,
+    body,
+    timeout: CALL_TIMEOUT_MS,
+  });
   if (error instanceof FunctionsFetchError) return { status: 'offline' };
   if (error instanceof FunctionsHttpError) {
     const context = error.context as Response;

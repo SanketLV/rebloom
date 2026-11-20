@@ -5,6 +5,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { photoUri } from '@/photos/photos';
 import { ErrorState, NO_CLEAR_PROBLEM } from '@/scan/components/ErrorState';
+import { removeUnfinishedScan } from '@/scan/saveScan';
 import { useScanSession } from '@/scan/session';
 import { getScan } from '@/storage/scansRepo';
 import { colors } from '@/theme/tokens';
@@ -52,8 +53,20 @@ export default function ResumeScanScreen() {
       <ErrorState
         title={NO_CLEAR_PROBLEM.title}
         body={NO_CLEAR_PROBLEM.body}
-        primary={{ label: 'Retake photo', onPress: () => router.replace('/scan') }}
-        secondary={{ label: 'Done', onPress: () => router.dismissTo('/plants') }}
+        primary={{
+          label: 'Retake photo',
+          onPress: () => {
+            if (typeof id === 'string') void removeUnfinishedScan(db, id).catch(() => {});
+            router.replace('/scan');
+          },
+        }}
+        secondary={{
+          label: 'Done',
+          onPress: () => {
+            if (typeof id === 'string') void removeUnfinishedScan(db, id).catch(() => {});
+            router.dismissTo('/plants');
+          },
+        }}
       />
     );
   }

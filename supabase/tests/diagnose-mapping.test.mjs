@@ -80,7 +80,9 @@ test('kindwiseStatus: done, running, failed', () => {
   assert.equal(kindwiseStatus({ status: 'CREATED', completed: null }), 'running');
   assert.equal(kindwiseStatus({ status: 'IN_PROGRESS' }), 'running');
   assert.equal(kindwiseStatus({ status: 'FAILED' }), 'failed');
-  assert.equal(kindwiseStatus(null), 'failed');
+  // Review round 2 #5: one unreadable answer is not a verdict; only an explicit FAILED is.
+  assert.equal(kindwiseStatus(null), 'running');
+  assert.equal(kindwiseStatus('<html>'), 'running');
 });
 
 // ---- mapResult ----

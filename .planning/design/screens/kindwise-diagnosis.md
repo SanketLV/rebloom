@@ -197,7 +197,9 @@ Review round 1 (build): "This didn't use a free scan" now shows only where the s
 
 | other account (sent with an account that isn't signed in now) | "Scanned with another account: switch back to finish it" | no-op (re-sending would count it twice) |
 
-Row title: "Scan from <date>" (no plant name yet). A scan opened from My Plants isn't removed when it's closed without saving (review round 1). Rows sit above the plants. Added in the build (plan D6): a scan finished in the background needed somewhere to go.
+Row title: "Scan from <date>" (no plant name yet). A scan opened from My Plants isn't removed when it's closed without saving (review round 1).
+
+**Every unfinished row has a Remove link** (review round 2): `type.small`, `colors.textSecondary`, underlined, ≥ 44 pt, label "Remove scan from <date>". It deletes the scan and its photo on the phone and asks the server to delete Kindwise's copy. This is the one exit for any state a row can get stuck in. Rows sit above the plants. Added in the build (plan D6): a scan finished in the background needed somewhere to go.
 
 Text, not color alone, carries the state.
 

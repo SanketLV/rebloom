@@ -4,7 +4,7 @@ import { fakeSession } from '@/testing/fakeAuthServer';
 import { FakeDiagnoseServer, SICK_BODY } from '@/testing/fakeDiagnoseServer';
 import { fakeLocalStorage } from '@/testing/fakeLocalStorage';
 
-import { confirmDiagnose, getDiagnose, postDiagnose } from '../diagnose';
+import { CALL_TIMEOUT_MS, confirmDiagnose, getDiagnose, postDiagnose } from '../diagnose';
 import { resetSessionForTests } from '../session';
 import { SESSION_STORAGE_KEY } from '../supabase';
 
@@ -112,4 +112,12 @@ test('confirm sends DELETE and never throws, even offline', async () => {
   server.answers = ['offline'];
   globalThis.fetch = (() => Promise.reject(new TypeError('offline'))) as typeof fetch;
   await expect(confirmDiagnose(SCAN)).resolves.toBeUndefined();
+});
+
+test('a call that never answers ends as offline after 25 s', async () => {
+  jest.useFakeTimers({ doNotFake: ['queueMicrotask', 'nextTick', 'setImmediate'] });
+  server.answers = ['hang'];
+  const pending = getDiagnose(SCAN);
+  await jest.advanceTimersByTimeAsync(CALL_TIMEOUT_MS + 100);
+  expect(await pending).toEqual({ kind: 'offline' });
 });

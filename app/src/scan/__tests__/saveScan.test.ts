@@ -307,6 +307,15 @@ describe('pending scans', () => {
     expect(await count(db, 'scans')).toBe(1);
   });
 
+  test('claim fills a missing owner and never replaces one (review round 2 #3)', async () => {
+    const { claimPendingScan } = jest.requireActual('../saveScan') as typeof import('../saveScan');
+    await beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options());
+    expect(await db.getFirstAsync('SELECT owner_id FROM scans', [])).toEqual({ owner_id: null });
+    await claimPendingScan(db, 'scan-1', 'u-1');
+    await claimPendingScan(db, 'scan-1', 'u-2');
+    expect(await db.getFirstAsync('SELECT owner_id FROM scans', [])).toEqual({ owner_id: 'u-1' });
+  });
+
   test('a failed row insert deletes the photo copy it made', async () => {
     await failNextInsertInto(db, 'scans');
     await expect(beginPendingScan(db, 'scan-1', 'kindwise-v1', photo, options())).rejects.toThrow();
