@@ -231,3 +231,13 @@ describe('anonymous accounts', () => {
     expect(getAccountState()).toEqual({ status: 'guest', notice: 'deleted' });
   });
 });
+
+test('a scan making an anonymous session keeps the "session expired" notice (review #9)', async () => {
+  subscribeAccount(() => {});
+  await flush();
+  act(() => mockEmit({ type: 'signed_in', user: sam }));
+  act(() => mockEmit({ type: 'signed_out', reason: 'session_expired' }));
+  expect(getAccountState()).toEqual({ status: 'expired' });
+  act(() => mockEmit({ type: 'signed_in', user: { id: 'u-anon', email: null, provider: 'anonymous', isAnonymous: true } }));
+  expect(getAccountState()).toEqual({ status: 'expired' });
+});

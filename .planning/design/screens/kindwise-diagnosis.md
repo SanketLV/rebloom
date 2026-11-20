@@ -152,6 +152,10 @@ Full screen, `ErrorState` layout (centered, `colors.bg`), the user's photo as a 
 
 The last row was added in the build: Kindwise may already have counted the scan, so "This didn't use a free scan" would be false there (plan D2).
 
+Review round 1 (build): "This didn't use a free scan" now shows only where the server said so (502, busy, not a plant). Offline drops it (the connection can fail after the server started), and any other server error shows "We couldn't check this photo" / "Something went wrong on our side. Your photo is saved on your phone." without it.
+
+**No clear problem** (Kindwise saw a plant but named nothing we show): ErrorState layout with the photo thumbnail, "We couldn't find a clear problem" / "Nothing in this photo points to a clear problem. A close photo of the leaf that looks wrong may help.", Retake photo (primary), Done.
+
 - "Scan later" closes the scan and keeps it `pending` in My Plants (row 9).
 - "This didn't use a free scan" is repeated on purpose: the fear after an error is "did that cost me one?".
 
@@ -191,7 +195,9 @@ The last row was added in the build: Kindwise may already have counted the scan,
 | ready (result fetched, not saved) | "Diagnosis ready · See result" | opens the scan at its questions, then Result (plan D6) |
 | needs retry (server had nothing) | "Diagnosis didn't finish · Try again" in `colors.warning` | re-runs the diagnosis with the saved photo |
 
-Row title: "Scan from <date>" (no plant name yet). Rows sit above the plants. Added in the build (plan D6): a scan finished in the background needed somewhere to go.
+| other account (sent with an account that isn't signed in now) | "Scanned with another account: switch back to finish it" | no-op (re-sending would count it twice) |
+
+Row title: "Scan from <date>" (no plant name yet). A scan opened from My Plants isn't removed when it's closed without saving (review round 1). Rows sit above the plants. Added in the build (plan D6): a scan finished in the background needed somewhere to go.
 
 Text, not color alone, carries the state.
 

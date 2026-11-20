@@ -116,7 +116,7 @@ test('unfinished scans: pending and ready ones without a plant, newest first', a
   await persistScan(db, scanFor('p1', 'saved'), at(6));
 
   expect(await listUnfinishedScans(db)).toEqual([
-    { id: 'new', photoPath: 'photos/new.jpg', status: 'ready', createdAt: at(2) },
-    { id: 'old', photoPath: 'photos/old.jpg', status: 'pending', createdAt: at(1) },
+    { id: 'new', photoPath: 'photos/new.jpg', status: 'ready', createdAt: at(2), ownerId: null },
+    { id: 'old', photoPath: 'photos/old.jpg', status: 'pending', createdAt: at(1), ownerId: null },
   ]);
 });

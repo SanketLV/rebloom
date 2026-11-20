@@ -35,6 +35,8 @@ export type ScanState = {
   // The photo has been copied to document/photos/.
   photoStored: boolean;
   stage: ScanStage;
+  // Opened from My Plants: closing keeps it (review #5); only a retake replaces it.
+  resumed?: boolean;
 };
 
 export type ScanSession = {
@@ -106,7 +108,7 @@ export function ScanSessionProvider({ children, onDiscard }: Props) {
       const last = latest.current;
       if (!last) return;
       deleteTempFiles(last);
-      if (last.stage === 'ready') discardRef.current?.(last.scanId);
+      if (last.stage === 'ready' && !last.resumed) discardRef.current?.(last.scanId);
     },
     [],
   );
@@ -179,6 +181,7 @@ export function ScanSessionProvider({ children, onDiscard }: Props) {
           persisted: true,
           photoStored: true,
           stage: diagnosis ? 'ready' : 'pending',
+          resumed: true,
         };
       });
     },

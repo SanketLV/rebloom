@@ -13,7 +13,8 @@ export type DiagnoseOutcome =
   | { kind: 'not_plant' }
   | { kind: 'quota'; resetsAt: string | null }
   | { kind: 'busy' } // today's credit cap
-  | { kind: 'server' }
+  | { kind: 'server' } // 502: Kindwise refused or gave up; the scan was given back
+  | { kind: 'error' } // anything else: the scan may or may not have been counted
   | { kind: 'offline' }
   | { kind: 'not_found' } // GET: the server has nothing for this scan
   | { kind: 'not_configured' };
@@ -58,10 +59,12 @@ function outcome(call: Call): DiagnoseOutcome {
         : null;
       return { kind: 'quota', resetsAt };
     }
-    case 503:
-      return error?.code === 'daily_cap' ? { kind: 'busy' } : { kind: 'server' };
-    default:
+    case 502:
       return { kind: 'server' };
+    case 503:
+      return error?.code === 'daily_cap' ? { kind: 'busy' } : { kind: 'error' };
+    default:
+      return { kind: 'error' };
   }
 }
 
@@ -74,7 +77,8 @@ async function send(path: string, method: 'POST' | 'GET', body?: Record<string, 
     if (!session.ok) return session.error === 'not_configured' ? { kind: 'not_configured' } : { kind: 'offline' };
     const call = await invoke(path, method, body);
     if (!call) return { kind: 'not_configured' };
-    if (call.status === 401 && !retriedAuth) {
+    if (call.status === 401) {
+      if (retriedAuth) return { kind: 'error' };
       retriedAuth = true;
       continue;
     }

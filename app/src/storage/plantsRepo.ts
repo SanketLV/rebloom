@@ -69,15 +69,33 @@ export async function listRooms(db: Db): Promise<string[]> {
   return rows.map((r) => r.room);
 }
 
-export type UnfinishedScan = { id: string; photoPath: string; status: Exclude<ScanStatus, 'done'>; createdAt: string };
+export type UnfinishedScan = {
+  id: string;
+  photoPath: string;
+  status: Exclude<ScanStatus, 'done'>;
+  createdAt: string;
+  ownerId: string | null;
+};
 
 // Scans sent but not saved as a plant: still waiting for a result, or with a result to look at.
 export async function listUnfinishedScans(db: Db): Promise<UnfinishedScan[]> {
-  const rows = await db.getAllAsync<{ id: string; photo_path: string; status: 'pending' | 'ready'; created_at: string }>(
-    `SELECT id, photo_path, status, created_at FROM scans
+  const rows = await db.getAllAsync<{
+    id: string;
+    photo_path: string;
+    status: 'pending' | 'ready';
+    created_at: string;
+    owner_id: string | null;
+  }>(
+    `SELECT id, photo_path, status, created_at, owner_id FROM scans
      WHERE deleted_at IS NULL AND plant_id IS NULL AND status IN ('pending', 'ready')
      ORDER BY created_at DESC, id DESC`,
     [],
   );
-  return rows.map((r) => ({ id: r.id, photoPath: r.photo_path, status: r.status, createdAt: r.created_at }));
+  return rows.map((r) => ({
+    id: r.id,
+    photoPath: r.photo_path,
+    status: r.status,
+    createdAt: r.created_at,
+    ownerId: r.owner_id,
+  }));
 }

@@ -11,7 +11,7 @@ import { diagnoser } from '@/diagnosis/engine';
 import { KINDWISE_ID } from '@/diagnosis/kindwiseMap';
 import type { PreparedPhoto } from '@/diagnosis/types';
 import { DemoTag } from '@/scan/components/DemoTag';
-import { ErrorState } from '@/scan/components/ErrorState';
+import { ErrorState, NO_CLEAR_PROBLEM } from '@/scan/components/ErrorState';
 import { LowConfidenceSheet } from '@/scan/components/LowConfidenceSheet';
 import { TipsSheet } from '@/scan/components/TipsSheet';
 import { DiagnosisError, runDiagnosis, type DiagnosisErrorKind, type Step } from '@/scan/runDiagnosis';
@@ -26,7 +26,7 @@ const SLOW_MS = 8_000;
 const SLOW_TEXT = 'Still checking. This can take up to 20 seconds.';
 
 type Phase = 'running' | 'low' | 'error';
-type Failure = { kind: DiagnosisErrorKind; resetsAt: string | null };
+type Failure = { kind: DiagnosisErrorKind | 'no_problem'; resetsAt: string | null };
 
 const NOT_COUNTED = "This didn't use a free scan.";
 
@@ -94,7 +94,10 @@ export default function AnalyzingScreen() {
         }
         session.setPrepared(photo);
         session.setDiagnosis(diagnosis);
-        if (isLowConfidence(diagnosis)) setPhase('low');
+        if (diagnosis.candidates.length === 0) {
+          setFailure({ kind: 'no_problem', resetsAt: null });
+          setPhase('error');
+        } else if (isLowConfidence(diagnosis)) setPhase('low');
         else router.replace('/scan/questions');
       },
       (error: unknown) => {
@@ -179,11 +182,22 @@ export default function AnalyzingScreen() {
             primary={{ label: 'Done', onPress: scanLater }}
           />
         );
+      case 'no_problem':
+        return (
+          <ErrorState
+            photoUri={checked}
+            title={NO_CLEAR_PROBLEM.title}
+            body={NO_CLEAR_PROBLEM.body}
+            primary={{ label: 'Retake photo', onPress: backToCamera }}
+            secondary={{ label: 'Done', onPress: scanLater }}
+          />
+        );
       case 'offline':
+        // The connection can drop after the server has started: don't promise it was free.
         return (
           <ErrorState
             title="Can't diagnose without internet"
-            body={`Your photo is saved on your phone. Connect and try again. ${NOT_COUNTED}`}
+            body="Your photo is saved on your phone. Connect and try again."
             primary={retry}
             secondary={{ label: 'Scan later', onPress: scanLater }}
           />
@@ -193,6 +207,15 @@ export default function AnalyzingScreen() {
           <ErrorState
             title="We couldn't check this photo"
             body={`Something went wrong on our side. Your photo is saved on your phone. ${NOT_COUNTED}`}
+            primary={retry}
+            secondary={{ label: 'Scan later', onPress: scanLater }}
+          />
+        );
+      case 'error':
+        return (
+          <ErrorState
+            title="We couldn't check this photo"
+            body="Something went wrong on our side. Your photo is saved on your phone."
             primary={retry}
             secondary={{ label: 'Scan later', onPress: scanLater }}
           />

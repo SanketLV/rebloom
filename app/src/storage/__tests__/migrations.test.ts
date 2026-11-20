@@ -61,6 +61,7 @@ test('scans has the columns the spec lists', async () => {
     'kindwise_question',
     'question_answer',
     'status',
+    'owner_id',
   ]);
 });
 
@@ -143,5 +144,6 @@ test('scans saved under version 1 survive migration 2 unchanged, as done', async
     kindwise_question: null,
     question_answer: null,
     status: 'done',
+    owner_id: null,
   });
 });

@@ -7,6 +7,8 @@
 //   healthy          a healthy plant, no question
 //   notplant         is_plant false
 //   slow             never completes
+//   failed           Kindwise reports the identification FAILED
+//   hangcreate       create never answers (the function's 10 s limit runs out)
 //   fail             create → 500
 //   nocredits        create → 429 (Kindwise out of credits)
 // Every request is recorded in `calls` so tests can count Kindwise creates and check what was sent.
@@ -83,6 +85,7 @@ export function startFakeKindwise() {
         const word = wordIn(body?.images?.[0]);
         if (word === 'fail') return send(500, 'boom');
         if (word === 'nocredits') return send(429, 'Client does not have sufficient number of available credits.');
+        if (word === 'hangcreate') return;
         const token = `tok-${(next += 1)}-${word}`;
         identifications.set(token, { word, gets: 0 });
         return send(201, { access_token: token, status: 'CREATED', completed: null, result: null });
@@ -97,6 +100,7 @@ export function startFakeKindwise() {
       }
       if (req.method === 'GET') {
         found.gets += 1;
+        if (found.word === 'failed') return send(200, { access_token: token, status: 'FAILED', completed: null, result: null });
         if (found.word === 'slow' || found.gets < 2) {
           return send(200, { access_token: token, status: 'IN_PROGRESS', completed: null, result: null });
         }

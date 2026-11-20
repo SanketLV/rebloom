@@ -5,6 +5,12 @@ import { colors, radius, spacing, type } from '@/theme/tokens';
 
 type Action = { label: string; onPress: () => void };
 
+// Kindwise saw a plant but named nothing we can show (review #1).
+export const NO_CLEAR_PROBLEM = {
+  title: "We couldn't find a clear problem",
+  body: 'Nothing in this photo points to a clear problem. A close photo of the leaf that looks wrong may help.',
+};
+
 type Props = {
   title?: string;
   body?: string;

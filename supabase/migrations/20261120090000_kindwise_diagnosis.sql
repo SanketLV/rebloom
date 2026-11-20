@@ -139,6 +139,8 @@ as $$
 declare
   request public.diagnosis_requests;
 begin
+  -- Same lock order as begin_diagnosis (the user's usage rows first), so the two never deadlock.
+  perform 1 from public.scan_usage where user_id = p_user for update;
   delete from public.diagnosis_requests where user_id = p_user and scan_id = p_scan returning * into request;
   if found then
     perform public.release_diagnosis(p_user, request.created_at, p_release_credits);

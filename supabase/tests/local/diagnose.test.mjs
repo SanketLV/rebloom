@@ -129,6 +129,37 @@ test('not a plant → 422, the scan is given back, the credits stay spent', asyn
   assert.equal(await credits(), creditsBefore + 2);
 });
 
+test('Kindwise reports FAILED → 502, the scan given back, credits kept; a retry is charged afresh', async () => {
+  const s = await anonymous();
+  const id = scan();
+  const creditsBefore = await credits();
+  const r = await diagnose(s.access_token, id, 'failed');
+  assert.equal(r.status, 502);
+  assert.equal((await r.json()).error.code, 'upstream_failed');
+  assert.equal(await usage(s.user.id), 0);
+  assert.equal(await credits(), creditsBefore + 2);
+  assert.deepEqual(await admin(`diagnosis_requests?scan_id=eq.${id}`), []);
+});
+
+test('a create that never answers → 502; the scan is given back but its credits stay counted', async () => {
+  const s = await anonymous();
+  const creditsBefore = await credits();
+  const r = await diagnose(s.access_token, scan(), 'hangcreate');
+  assert.equal(r.status, 502);
+  assert.equal(await usage(s.user.id), 0);
+  assert.equal(await credits(), creditsBefore + 2, 'Kindwise may have accepted it');
+});
+
+test('a body over the size limit is refused before it is read → 413', async () => {
+  const s = await anonymous();
+  const r = await fetch(FUNCTION, {
+    method: 'POST',
+    headers: { apikey: KEY, Authorization: `Bearer ${s.access_token}`, 'Content-Type': 'application/json' },
+    body: 'x'.repeat(9 * 1024 * 1024),
+  });
+  assert.equal(r.status, 413);
+});
+
 for (const word of ['fail', 'nocredits']) {
   test(`Kindwise create refused (${word}) → 502, scan and credits given back`, async () => {
     const s = await anonymous();
@@ -198,6 +229,21 @@ test('bad bodies → 400, a 3 MB photo → 413; nothing counted', async () => {
   const big = await call({ token: s.access_token, body: { scan_id: scan(), images: [photo('plant', 3 * 1024 * 1024)] } });
   assert.equal(big.status, 413);
   assert.equal(await usage(s.user.id), 0);
+});
+
+test('deleting an account deletes its Kindwise copies first (delete-account)', async () => {
+  const s = await anonymous();
+  const id = scan();
+  assert.equal((await diagnose(s.access_token, id)).status, 200);
+  const token = (await admin(`diagnosis_requests?scan_id=eq.${id}&select=access_token`))[0].access_token;
+  assert.ok(fake.identifications.has(token));
+  const r = await fetch(`${URL_}/functions/v1/delete-account`, {
+    method: 'POST',
+    headers: { apikey: KEY, Authorization: `Bearer ${s.access_token}` },
+  });
+  assert.equal(r.status, 204);
+  assert.ok(!fake.identifications.has(token), 'the Kindwise copy is deleted');
+  assert.deepEqual(await admin(`diagnosis_requests?scan_id=eq.${id}`), []);
 });
 
 test('PUT → 405', async () => {

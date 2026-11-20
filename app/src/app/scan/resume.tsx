@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { photoUri } from '@/photos/photos';
+import { ErrorState, NO_CLEAR_PROBLEM } from '@/scan/components/ErrorState';
 import { useScanSession } from '@/scan/session';
 import { getScan } from '@/storage/scansRepo';
 import { colors } from '@/theme/tokens';
@@ -16,6 +17,7 @@ export default function ResumeScanScreen() {
   const session = useScanSession();
   const db = useSQLiteContext();
   const [missing, setMissing] = useState(false);
+  const [noProblem, setNoProblem] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -24,6 +26,10 @@ export default function ResumeScanScreen() {
       if (!active) return;
       if (!scan || scan.status === 'done') {
         setMissing(true);
+        return;
+      }
+      if (scan.diagnosis && scan.diagnosis.candidates.length === 0) {
+        setNoProblem(true);
         return;
       }
       session.resume({
@@ -41,6 +47,16 @@ export default function ResumeScanScreen() {
   }, [id]);
 
   if (missing) return <Redirect href="/plants" />;
+  if (noProblem) {
+    return (
+      <ErrorState
+        title={NO_CLEAR_PROBLEM.title}
+        body={NO_CLEAR_PROBLEM.body}
+        primary={{ label: 'Retake photo', onPress: () => router.replace('/scan') }}
+        secondary={{ label: 'Done', onPress: () => router.dismissTo('/plants') }}
+      />
+    );
+  }
   return (
     <View style={styles.wrap} accessibilityLabel="Opening your scan">
       <ActivityIndicator color={colors.primary} />

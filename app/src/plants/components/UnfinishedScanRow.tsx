@@ -5,7 +5,7 @@ import type { UnfinishedScan } from '@/storage/plantsRepo';
 import { colors, radius, spacing, type } from '@/theme/tokens';
 
 // Same values as scan/resumePending's PendingState (not imported: rows stay off the backend graph).
-type PendingState = 'finishing' | 'retry' | 'ready';
+type PendingState = 'finishing' | 'retry' | 'ready' | 'other_account';
 
 const scannedOn = (iso: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(iso));
@@ -26,7 +26,9 @@ export function UnfinishedScanRow({
       ? 'Diagnosis ready · See result'
       : state === 'retry'
         ? "Diagnosis didn't finish · Try again"
-        : 'Finishing diagnosis…';
+        : state === 'other_account'
+          ? 'Scanned with another account: switch back to finish it'
+          : 'Finishing diagnosis…';
   const body = (
     <>
       <Image
@@ -43,7 +45,7 @@ export function UnfinishedScanRow({
       </View>
     </>
   );
-  if (state === 'finishing') {
+  if (state === 'finishing' || state === 'other_account') {
     return (
       <View testID="unfinished-scan-row" accessible accessibilityLabel={`${title}. ${line}`} style={styles.row}>
         {body}

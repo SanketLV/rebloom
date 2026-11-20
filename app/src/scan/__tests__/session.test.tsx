@@ -245,6 +245,14 @@ describe('Kindwise scans', () => {
     });
   });
 
+  test('closing a scan opened from My Plants keeps it (review #5)', async () => {
+    const { session, unmount, onDiscard } = await withDiscard();
+    const photo = { uri: 'file:///document/photos/s9.jpg', width: 0, height: 0, sizeBytes: 0 };
+    await act(async () => session().resume({ scanId: 's9', photo, diagnosis: kw }));
+    await unmount();
+    expect(onDiscard).not.toHaveBeenCalled();
+  });
+
   test('resume without a result is a pending scan to send again', async () => {
     const { session } = await setup();
     const photo = { uri: 'file:///document/photos/s9.jpg', width: 0, height: 0, sizeBytes: 0 };

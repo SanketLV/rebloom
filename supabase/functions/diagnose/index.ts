@@ -11,11 +11,11 @@
 // 503 daily_cap | unavailable. Stores no photo and no result; never logs the body.
 
 import { admin, caller } from '../_shared/caller.ts';
+import { deleteAtKindwise, kindwise, KINDWISE_BASE, KINDWISE_KEY } from '../_shared/kindwise.ts';
 import { createBody, identificationUrl, kindwiseStatus, mapResult, validateBody } from './kindwise.ts';
 
-const KINDWISE_KEY = Deno.env.get('KINDWISE_API_KEY') ?? '';
-const KINDWISE_BASE = Deno.env.get('KINDWISE_BASE_URL') ?? 'https://plant.id';
-const REQUEST_MS = 10_000; // one Kindwise HTTP call
+// 3 photos of 2 MB as base64, plus room for the JSON around them.
+const MAX_BODY_BYTES = 3 * Math.ceil((2 * 1024 * 1024) / 3) * 4 + 64 * 1024;
 const POLL_EVERY_MS = 1_500;
 const POST_POLL_MS = 15_000; // the app waits 20 s in all
 const GET_POLL_MS = 5_000;
@@ -29,16 +29,8 @@ const fail = (status: number, code: string, message: string, extra: Record<strin
   json(status, { error: { code, message, ...extra } });
 const pending = () => json(202, { status: 'pending' });
 
+// Kindwise ended the identification (FAILED, or refused the token): it will never finish.
 class Upstream extends Error {}
-
-function kindwise(method: string, url: string, body?: unknown): Promise<Response> {
-  return fetch(url, {
-    method,
-    headers: { 'Api-Key': KINDWISE_KEY, 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(REQUEST_MS),
-  });
-}
 
 /** Polls until done or out of time: the finished identification, or null (still running). */
 async function poll(token: string, budgetMs: number): Promise<unknown | null> {
@@ -56,11 +48,6 @@ async function poll(token: string, budgetMs: number): Promise<unknown | null> {
     if (Date.now() + POLL_EVERY_MS > until) return null;
     await new Promise((resolve) => setTimeout(resolve, POLL_EVERY_MS));
   }
-}
-
-async function deleteAtKindwise(token: string) {
-  const r = await kindwise('DELETE', identificationUrl(KINDWISE_BASE, token)).catch(() => null);
-  if (r && !r.ok && r.status !== 404) console.error('[diagnose] kindwise delete failed', r.status);
 }
 
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
@@ -89,6 +76,28 @@ function background(work: Promise<unknown>) {
   if (runtime?.waitUntil) runtime.waitUntil(work);
 }
 
+// Polls a token and answers: the result, 202 while Kindwise works, or 502 once it has failed for
+// good (the scan is given back, the credits stay spent: plan D3).
+async function answer(
+  userId: string,
+  scanId: string,
+  token: string,
+  budgetMs: number,
+  extra: Record<string, unknown>,
+) {
+  let done: unknown | null;
+  try {
+    done = await poll(token, budgetMs);
+  } catch (error) {
+    if (!(error instanceof Upstream)) throw error;
+    console.error('[diagnose] kindwise gave up', error.message);
+    await deleteAtKindwise(token);
+    await rpc('fail_diagnosis', { p_user: userId, p_scan: scanId, p_release_credits: false });
+    return fail(502, 'upstream_failed', "We couldn't check this photo.");
+  }
+  return done ? finish(userId, scanId, token, done, extra) : pending();
+}
+
 /** A finished identification → the answer for the app (not-a-plant gives the scan back). */
 async function finish(userId: string, scanId: string, token: string, raw: unknown, extra: Record<string, unknown>) {
   const mapped = mapResult(raw);
@@ -100,10 +109,38 @@ async function finish(userId: string, scanId: string, token: string, raw: unknow
   return json(200, { ...mapped, ...extra });
 }
 
+// The body as text, or null once it passes `max` bytes: never holds more than that in memory
+// (anyone can make an anonymous account). The gateway may drop Content-Length, so count.
+async function readLimited(request: Request, max: number): Promise<string | null> {
+  if (!request.body) return '';
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) {
+    all.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return new TextDecoder().decode(all);
+}
+
 async function post(request: Request, userId: string) {
+  const text = await readLimited(request, MAX_BODY_BYTES);
+  if (text === null) return fail(413, 'image_too_large', 'Each photo must be 2 MB or less.');
   let raw: unknown;
   try {
-    raw = await request.json();
+    raw = JSON.parse(text);
   } catch {
     return fail(400, 'bad_request', 'The body must be JSON.');
   }
@@ -126,39 +163,36 @@ async function post(request: Request, userId: string) {
       return fail(429, 'quota_exceeded', "You've used your free scans this month.", { resets_at: begun.resets_at });
     case 'daily_cap':
       return fail(503, 'daily_cap', 'Diagnosis is busy today. Try again tomorrow.');
-    case 'has_token': {
-      const done = await poll(begun.access_token!, POST_POLL_MS);
-      return done ? finish(userId, scanId, begun.access_token!, done, left) : pending();
-    }
+    case 'has_token':
+      return answer(userId, scanId, begun.access_token!, POST_POLL_MS, left);
   }
 
   background(sweep());
 
-  // Kindwise create. Refused or unreachable → nothing was charged: give everything back.
+  // Kindwise create. No token: the user's scan is given back; the credits only when Kindwise
+  // answered with a refusal (no answer at all: it may have accepted, and charged, it).
   let token: string | null = null;
+  let refused = false;
   try {
     const r = await kindwise('POST', identificationUrl(KINDWISE_BASE), createBody(images));
     const created = r.ok ? await r.json().catch(() => null) : null;
-    if (!r.ok) console.error('[diagnose] kindwise create failed', r.status);
+    if (!r.ok) {
+      refused = true;
+      console.error('[diagnose] kindwise create failed', r.status);
+    }
     token = typeof created?.access_token === 'string' && created.access_token ? created.access_token : null;
   } catch (error) {
     console.error('[diagnose] kindwise create failed', String(error));
   }
   if (!token) {
-    await rpc('fail_diagnosis', { p_user: userId, p_scan: scanId, p_release_credits: true });
+    await rpc('fail_diagnosis', { p_user: userId, p_scan: scanId, p_release_credits: refused });
     return fail(502, 'upstream_failed', "We couldn't check this photo.");
   }
   await rpc('attach_token', { p_user: userId, p_scan: scanId, p_token: token });
 
-  // Kindwise has accepted (and charged) it: from here nothing is given back except for
-  // not-a-plant (plan D2, D3). A poll that fails leaves the scan for GET later.
-  try {
-    const done = await poll(token, POST_POLL_MS);
-    return done ? finish(userId, scanId, token, done, left) : pending();
-  } catch (error) {
-    console.error('[diagnose] kindwise poll failed', String(error));
-    return pending();
-  }
+  // Kindwise has accepted (and charged) it: from here only not-a-plant or a FAILED identification
+  // gives the scan back (plan D2, D3).
+  return answer(userId, scanId, token, POST_POLL_MS, left);
 }
 
 async function requestRow(userId: string, scanId: string) {
@@ -176,13 +210,7 @@ async function get(userId: string, scanId: string) {
   const row = await requestRow(userId, scanId);
   if (!row) return fail(404, 'not_found', 'Nothing found for this scan.');
   if (!row.access_token) return pending();
-  try {
-    const done = await poll(row.access_token, GET_POLL_MS);
-    return done ? finish(userId, scanId, row.access_token, done, {}) : pending();
-  } catch (error) {
-    console.error('[diagnose] kindwise get failed', String(error));
-    return pending();
-  }
+  return answer(userId, scanId, row.access_token, GET_POLL_MS, {});
 }
 
 async function remove(userId: string, scanId: string) {

@@ -163,16 +163,18 @@ export async function persistScan(db: Db, scan: ScanInput, now: string): Promise
 
 // Written before the photo is sent, so a killed app leaves a scan it can finish (plan D5).
 // The photo must already be stored at photoPath. A repeat (Try again) keeps the one row.
+// `ownerId`: the account the photo is sent with (null when no session could be made, so nothing
+// was sent).
 export async function insertPendingScan(
   db: Db,
-  scan: { id: string; photoPath: string; diagnoserId: string },
+  scan: { id: string; photoPath: string; diagnoserId: string; ownerId?: string | null },
   now: string,
 ): Promise<void> {
   await db.runAsync(
-    `INSERT INTO scans (id, plant_id, photo_path, diagnoser_id, model_result, answers, final_result, low_confidence, status, created_at, updated_at)
-     VALUES (?, NULL, ?, ?, '[]', '{}', '[]', 1, 'pending', ?, ?)
+    `INSERT INTO scans (id, plant_id, photo_path, diagnoser_id, model_result, answers, final_result, low_confidence, status, owner_id, created_at, updated_at)
+     VALUES (?, NULL, ?, ?, '[]', '{}', '[]', 1, 'pending', ?, ?, ?)
      ON CONFLICT(id) DO NOTHING`,
-    [scan.id, scan.photoPath, scan.diagnoserId, now, now],
+    [scan.id, scan.photoPath, scan.diagnoserId, scan.ownerId ?? null, now, now],
   );
 }
 

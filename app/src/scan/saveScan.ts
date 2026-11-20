@@ -1,6 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 
 import { confirmDiagnose } from '@/backend/diagnose';
+import { ensureScanSession } from '@/backend/session';
 import type { Diagnosis, PreparedPhoto } from '@/diagnosis/types';
 import { deleteStoredPhoto, persistPhoto } from '@/photos/photos';
 import { validateName, validateRoom } from '@/plants/validation';
@@ -153,10 +154,13 @@ export async function beginPendingScan(
   photo: PreparedPhoto,
   { now = isoNow }: Options = {},
 ): Promise<void> {
+  // The account the photo goes out with: made now, so the row can name it (review #2).
+  const session = await ensureScanSession();
+  const ownerId = session.ok ? session.value.id : null;
   return serializeSave(async () => {
     const { path, created } = await persistPhoto(photo.uri, scanId);
     try {
-      await insertPendingScan(db, { id: scanId, photoPath: path, diagnoserId }, now());
+      await insertPendingScan(db, { id: scanId, photoPath: path, diagnoserId, ownerId }, now());
     } catch (error) {
       if (created) deleteStoredPhoto(path);
       throw error;

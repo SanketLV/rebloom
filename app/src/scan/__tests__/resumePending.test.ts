@@ -7,6 +7,9 @@ import { createTestDb, type TestDb } from '@/testing/sqljs';
 
 import { finishPendingScans } from '../resumePending';
 
+let mockSignedIn: string | null = 'u-1';
+jest.mock('@/backend/session', () => ({ signedInUserId: () => mockSignedIn }));
+
 jest.mock('@/backend/diagnose', () => ({
   getDiagnose: jest.fn(),
   confirmDiagnose: jest.fn(async () => {}),
@@ -23,10 +26,14 @@ beforeEach(async () => {
   backend.confirmDiagnose.mockClear();
 });
 
-const pending = async (id: string) => {
+const pending = async (id: string, ownerId: string | null = 'u-1') => {
   fakeFs.put(`${DOCUMENT}/photos/${id}.jpg`, { size: 90_000 });
-  await insertPendingScan(db, { id, photoPath: `photos/${id}.jpg`, diagnoserId: 'kindwise-v1' }, T);
+  await insertPendingScan(db, { id, photoPath: `photos/${id}.jpg`, diagnoserId: 'kindwise-v1', ownerId }, T);
 };
+
+beforeEach(() => {
+  mockSignedIn = 'u-1';
+});
 
 test('a finished scan becomes ready, stored, and confirmed to the server', async () => {
   await pending('a');
@@ -45,14 +52,14 @@ test('the server has nothing → needs retry; the scan and photo stay', async ()
 });
 
 test('still running, offline or a server error → still finishing', async () => {
-  for (const kind of ['pending', 'offline', 'server', 'busy', 'not_configured'] as const) {
+  for (const kind of ['pending', 'offline', 'error', 'busy', 'not_configured'] as const) {
     await pending(kind);
     backend.getDiagnose.mockResolvedValue({ kind });
   }
   expect(await finishPendingScans(db)).toEqual({
     pending: 'finishing',
     offline: 'finishing',
-    server: 'finishing',
+    error: 'finishing',
     busy: 'finishing',
     not_configured: 'finishing',
   });
@@ -87,4 +94,24 @@ test('ready scans are not asked about again', async () => {
   backend.getDiagnose.mockClear();
   expect(await finishPendingScans(db)).toEqual({});
   expect(backend.getDiagnose).not.toHaveBeenCalled();
+});
+
+// Review #2: a scan belongs to the account that sent it; another account must not re-send it.
+test('the server has nothing, but the scan was sent by another account → other_account, no re-send', async () => {
+  await pending('a', 'u-anon');
+  backend.getDiagnose.mockResolvedValue({ kind: 'not_found' });
+  expect(await finishPendingScans(db)).toEqual({ a: 'other_account' });
+});
+
+test('a scan never sent (no owner) can be sent again', async () => {
+  await pending('a', null);
+  backend.getDiagnose.mockResolvedValue({ kind: 'not_found' });
+  expect(await finishPendingScans(db)).toEqual({ a: 'retry' });
+});
+
+// Review #3: Kindwise gave up; the server gave the scan back.
+test('Kindwise failed for good (502) → retry', async () => {
+  await pending('a');
+  backend.getDiagnose.mockResolvedValue({ kind: 'server' });
+  expect(await finishPendingScans(db)).toEqual({ a: 'retry' });
 });

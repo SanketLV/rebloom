@@ -34,10 +34,10 @@ function set(next: AccountState) {
 
 function handle(event: SessionEvent) {
   version += 1;
-  // The invisible account a scan makes (kindwise-diagnosis): still a guest to the user. Keep any
-  // "deleted" notice that's showing.
+  // The invisible account a scan makes (kindwise-diagnosis): still a guest to the user. Keep a
+  // "deleted" notice or a "session expired" state that's showing.
   if ((event.type === 'signed_in' || event.type === 'refreshed') && event.user.isAnonymous) {
-    if (state.status !== 'guest') set({ status: 'guest' });
+    if (state.status !== 'guest' && state.status !== 'expired') set({ status: 'guest' });
     return;
   }
   if (event.type === 'signed_in' || event.type === 'refreshed') {

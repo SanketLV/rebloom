@@ -5,7 +5,15 @@ import { postDiagnose } from '@/backend/diagnose';
 import { fromServer, KINDWISE_ID } from './kindwiseMap';
 import type { Diagnoser } from './types';
 
-export type DiagnoseFailureKind = 'pending' | 'not_plant' | 'quota' | 'busy' | 'server' | 'offline';
+// server: Kindwise refused or gave up, the scan wasn't counted. error: anything else (it may have been).
+export type DiagnoseFailureKind =
+  | 'pending'
+  | 'not_plant'
+  | 'quota'
+  | 'busy'
+  | 'server'
+  | 'error'
+  | 'offline';
 
 // Why Kindwise gave no diagnosis, for the screens (design 5–7). `resetsAt`: UTC, quota only.
 export class DiagnoseFailure extends Error {
@@ -34,9 +42,10 @@ export const kindwiseDiagnoser: Diagnoser = {
       case 'busy':
       case 'offline':
       case 'server':
+      case 'error':
         throw new DiagnoseFailure(answer.kind);
       default:
-        throw new DiagnoseFailure('server');
+        throw new DiagnoseFailure('error');
     }
   },
 };

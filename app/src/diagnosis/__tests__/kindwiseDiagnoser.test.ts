@@ -31,8 +31,9 @@ test.each([
   [{ kind: 'busy' }, 'busy', null],
   [{ kind: 'server' }, 'server', null],
   [{ kind: 'offline' }, 'offline', null],
-  [{ kind: 'not_configured' }, 'server', null],
-  [{ kind: 'not_found' }, 'server', null],
+  [{ kind: 'error' }, 'error', null],
+  [{ kind: 'not_configured' }, 'error', null],
+  [{ kind: 'not_found' }, 'error', null],
 ])('%j → DiagnoseFailure %s', async (answer, kind, resetsAt) => {
   mockPost.mockResolvedValue(answer);
   const error = await kindwiseDiagnoser.diagnose(photo, { scanId: 's1' }).catch((e) => e);

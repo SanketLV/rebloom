@@ -126,7 +126,11 @@ export function sweepTempPhotos(): void {
 // killed before its transaction committed. Run at start-up, before any save.
 export async function sweepOrphanPhotos(db: Db): Promise<void> {
   try {
-    const rows = await db.getAllAsync<{ photo_path: string }>('SELECT photo_path FROM scans', []);
+    // A discarded scan that was never saved owns nothing (review #6); a saved one keeps its photo.
+    const rows = await db.getAllAsync<{ photo_path: string }>(
+      "SELECT photo_path FROM scans WHERE deleted_at IS NULL OR status = 'done'",
+      [],
+    );
     const dir = photosDir();
     if (!dir.exists) return;
     const files = dir.list().filter((item): item is File => item instanceof File);

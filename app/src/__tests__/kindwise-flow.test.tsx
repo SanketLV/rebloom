@@ -138,6 +138,22 @@ test('offline, then Scan later: My Plants finishes it when the server has it, an
   expect(screen.getByText('1 of 4')).toBeOnTheScreen();
 });
 
+// Review #1: Kindwise saw a plant but named nothing we can show (only harmless classes).
+test('no clear problem: its own screen with Retake, never an empty result', async () => {
+  server.answers = [{ status: 200, body: { ...SICK_BODY, diseases: [], question: null } }];
+  await shoot();
+  expect(await screen.findByRole('header', { name: "We couldn't find a clear problem" })).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Retake photo' })).toBeOnTheScreen();
+});
+
+// Review #7: only a sure "not counted" answer says so.
+test('a server error that may have counted the scan does not promise it was free', async () => {
+  server.answers = [{ status: 503 }];
+  await shoot();
+  expect(await screen.findByRole('header', { name: "We couldn't check this photo" })).toBeOnTheScreen();
+  expect(screen.queryByText(/didn't use a free scan/)).toBeNull();
+});
+
 test('a healthy plant: Looks healthy, the species, and Save instead of a treatment plan', async () => {
   server.answers = [
     { status: 200, body: { ...SICK_BODY, is_healthy: { probability: 0.88, binary: true }, diseases: [], question: null } },

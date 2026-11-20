@@ -49,6 +49,8 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE scans ADD COLUMN kindwise_question TEXT;
   ALTER TABLE scans ADD COLUMN question_answer TEXT;
   ALTER TABLE scans ADD COLUMN status TEXT NOT NULL DEFAULT 'done';
+  -- The account a Kindwise scan was sent with: only that account can fetch its result.
+  ALTER TABLE scans ADD COLUMN owner_id TEXT;
   -- My Plants lists scans that aren't a plant yet and haven't finished.
   CREATE INDEX idx_scans_unfinished ON scans(status) WHERE deleted_at IS NULL AND plant_id IS NULL;
   `,

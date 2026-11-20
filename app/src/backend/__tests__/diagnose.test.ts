@@ -46,7 +46,7 @@ test.each([
   [{ status: 422 as const }, { kind: 'not_plant' }],
   [{ status: 429 as const, resetsAt: '2026-12-01T00:00:00Z' }, { kind: 'quota', resetsAt: '2026-12-01T00:00:00Z' }],
   [{ status: 503 as const, code: 'daily_cap' as const }, { kind: 'busy' }],
-  [{ status: 503 as const }, { kind: 'server' }],
+  [{ status: 503 as const }, { kind: 'error' }],
   [{ status: 502 as const }, { kind: 'server' }],
   [{ status: 404 as const }, { kind: 'not_found' }],
   ['offline' as const, { kind: 'offline' }],
@@ -89,9 +89,9 @@ test('still in progress after 5 retries → pending', async () => {
   expect(server.callsOf('POST')).toBe(6);
 });
 
-test('a 401 is retried once with a fresh session, then counts as a server error', async () => {
+test('a 401 is retried once with a fresh session, then counts as an error', async () => {
   server.answers = [{ status: 401 }];
-  expect(await postDiagnose(SCAN, IMAGE)).toEqual({ kind: 'server' });
+  expect(await postDiagnose(SCAN, IMAGE)).toEqual({ kind: 'error' });
   expect(server.callsOf('POST')).toBe(2);
 });
 
