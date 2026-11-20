@@ -74,7 +74,7 @@ describe('verifyEmailCode', () => {
 
     const result = await verifyEmailCode('sam@example.com', '123456');
 
-    expect(result).toEqual({ ok: true, value: { id: 'u-1', email: 'sam@example.com', provider: 'email' } });
+    expect(result).toEqual({ ok: true, value: { id: 'u-1', email: 'sam@example.com', provider: 'email', isAnonymous: false } });
     const verify = server.calls.find((c) => c.path === '/auth/v1/verify');
     expect(verify?.body).toMatchObject({ email: 'sam@example.com', token: '123456', type: 'email' });
     expect(events.filter((e) => e.type === 'signed_in')).toHaveLength(1);

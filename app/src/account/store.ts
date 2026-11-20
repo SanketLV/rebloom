@@ -34,6 +34,12 @@ function set(next: AccountState) {
 
 function handle(event: SessionEvent) {
   version += 1;
+  // The invisible account a scan makes (kindwise-diagnosis): still a guest to the user. Keep any
+  // "deleted" notice that's showing.
+  if ((event.type === 'signed_in' || event.type === 'refreshed') && event.user.isAnonymous) {
+    if (state.status !== 'guest') set({ status: 'guest' });
+    return;
+  }
   if (event.type === 'signed_in' || event.type === 'refreshed') {
     deletedPending = false;
     set({ status: 'signed_in', user: event.user });
@@ -53,7 +59,7 @@ export async function refreshAccount(): Promise<void> {
   const result = await getCurrentUser();
   if (version !== at) return;
   if (result.ok) {
-    if (result.value) set({ status: 'signed_in', user: result.value });
+    if (result.value && !result.value.isAnonymous) set({ status: 'signed_in', user: result.value });
     else if (state.status !== 'expired' && state.status !== 'guest') set({ status: 'guest' });
     return;
   }

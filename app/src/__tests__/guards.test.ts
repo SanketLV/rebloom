@@ -59,8 +59,8 @@ test('image picker asks for photos only and leaves the camera permission alone',
   expect(picker).not.toHaveProperty('cameraPermission');
 });
 
-// Only the account feature reaches the backend, and only once Settings or an account screen is
-// open, so an app start makes no network request (root-layout test). Imports are parsed, resolved
+// Only the account feature and the scan (diagnosis) reach the backend, and only once Settings, an
+// account screen or a scan needs it, so an app start makes no network request (root-layout test). Imports are parsed, resolved
 // and followed through other files (see src/testing/importGraph.ts); every file under src/
 // counts, .js too. Add a file here only on purpose.
 const ALLOWED_BACKEND_IMPORTERS: string[] = [
@@ -74,7 +74,10 @@ const ALLOWED_BACKEND_IMPORTERS: string[] = [
   'app/account/code.tsx',
   'app/account/email.tsx',
   'app/account/index.tsx',
+  'app/scan/analyzing.tsx',
   'app/settings.tsx',
+  'diagnosis/engine.ts',
+  'diagnosis/kindwiseDiagnoser.ts',
 ];
 
 function allSources(dir: string): Record<string, string> {

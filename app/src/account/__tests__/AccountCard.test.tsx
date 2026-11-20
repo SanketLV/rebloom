@@ -27,7 +27,7 @@ async function renderSettings(state: AccountState) {
   );
 }
 
-const sam = { id: 'u-1', email: 'sam@example.com', provider: 'google' };
+const sam = { id: 'u-1', email: 'sam@example.com', provider: 'google', isAnonymous: false };
 
 test('guest: plants on this phone only, "Save plants" opens the account screen', async () => {
   await renderSettings({ status: 'guest' });
