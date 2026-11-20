@@ -1,4 +1,4 @@
-import type { Answers, ConditionId, Diagnosis, OptionId } from './types';
+import type { Answers, Candidate, ConditionId, Diagnosis, OptionId, QuestionAnswer } from './types';
 
 const BOOST = 1.6;
 const LOWER = 0.6;
@@ -22,18 +22,33 @@ export function applyAnswers(diagnosis: Diagnosis, answers: Answers): Diagnosis 
   );
   if (rules.length === 0) return diagnosis;
 
-  const weighted = diagnosis.candidates.map((c) => ({
-    conditionId: c.conditionId,
-    confidence: rules.reduce((value, rule) => value * (rule[c.conditionId] ?? 1), c.confidence),
-  }));
+  return reweight(diagnosis, (c) =>
+    rules.reduce((value, rule) => value * ((c.conditionId && rule[c.conditionId]) || 1), 1),
+  );
+}
+
+// Multiplies each candidate by its factor, then scales back to the same total, so answers can
+// reorder candidates but never make the whole result more certain.
+function reweight(diagnosis: Diagnosis, factor: (c: Candidate) => number): Diagnosis {
+  const weighted = diagnosis.candidates.map((c) => ({ ...c, confidence: c.confidence * factor(c) }));
   const before = diagnosis.candidates.reduce((total, c) => total + c.confidence, 0);
   const after = weighted.reduce((total, c) => total + c.confidence, 0);
   const scale = after > 0 ? before / after : 0;
 
   return {
-    diagnoserId: diagnosis.diagnoserId,
+    ...diagnosis,
     candidates: weighted
-      .map((c) => ({ conditionId: c.conditionId, confidence: c.confidence * scale }))
+      .map((c) => ({ ...c, confidence: c.confidence * scale }))
       .sort((a, b) => b.confidence - a.confidence),
   };
+}
+
+// Kindwise's yes/no question: each answer points at one disease. Same weights as our questions.
+export function applyQuestionAnswer(diagnosis: Diagnosis, answer: QuestionAnswer | undefined): Diagnosis {
+  const question = diagnosis.question;
+  if (!question || !answer || answer === 'not_sure') return diagnosis;
+  const [up, down] = answer === 'yes' ? [question.yes.id, question.no.id] : [question.no.id, question.yes.id];
+  return reweight(diagnosis, (c) =>
+    c.disease?.id === up ? BOOST : c.disease?.id === down ? LOWER : 1,
+  );
 }

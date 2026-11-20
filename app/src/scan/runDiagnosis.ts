@@ -69,7 +69,7 @@ export async function runDiagnosis(
 
     let diagnosis: Diagnosis;
     try {
-      diagnosis = await diagnoser.diagnose(photo);
+      diagnosis = await diagnoser.diagnose(photo, { scanId: input.scanId });
     } catch (cause) {
       throw new DiagnosisError('diagnose', photo, { cause });
     }

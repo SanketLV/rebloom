@@ -1,8 +1,8 @@
 import { createTestDb, type TestDb } from '@/testing/sqljs';
 
 import { migrate } from '../migrations';
-import { insertPlant, listPlants, listRooms } from '../plantsRepo';
-import { persistScan, type ScanInput } from '../scansRepo';
+import { insertPlant, listPlants, listRooms, listUnfinishedScans } from '../plantsRepo';
+import { discardScan, insertPendingScan, markReady, persistScan, type ScanInput } from '../scansRepo';
 
 const at = (minute: number) => `2026-10-24T10:${String(minute).padStart(2, '0')}:00.000Z`;
 
@@ -33,7 +33,7 @@ test('a saved plant is listed with its scan photo and diagnosis', async () => {
       room: 'Kitchen',
       createdAt: at(0),
       photoPath: 'photos/s1.jpg',
-      conditionId: 'overwatering',
+      candidate: { conditionId: 'overwatering', confidence: 0.8 },
       diagnoserId: 'fake-v1',
     },
   ]);
@@ -55,7 +55,7 @@ test('shows the latest scan of a plant', async () => {
     at(2),
   );
   const [plant] = await listPlants(db);
-  expect(plant).toMatchObject({ photoPath: 'photos/s2.jpg', conditionId: 'sunburn' });
+  expect(plant).toMatchObject({ photoPath: 'photos/s2.jpg', candidate: { conditionId: 'sunburn' } });
 });
 
 test('soft-deleted plants and scans are left out', async () => {
@@ -71,7 +71,7 @@ test('soft-deleted plants and scans are left out', async () => {
   await db.runAsync('UPDATE scans SET deleted_at = ? WHERE id = ?', [at(3), 's2']);
   const plants = await listPlants(db);
   expect(plants.map((p) => p.id)).toEqual(['p2']);
-  expect(plants[0].conditionId).toBe('overwatering');
+  expect(plants[0].candidate?.conditionId).toBe('overwatering');
   expect(await listRooms(db)).toEqual([]);
 });
 
@@ -80,14 +80,14 @@ test('a plant with a corrupt stored result still shows, without a diagnosis', as
   await persistScan(db, scanFor('p1', 's1'), at(0));
   await db.runAsync('UPDATE scans SET final_result = ? WHERE id = ?', ['{broken', 's1']);
   const [plant] = await listPlants(db);
-  expect(plant).toMatchObject({ id: 'p1', conditionId: null, photoPath: 'photos/s1.jpg' });
+  expect(plant).toMatchObject({ id: 'p1', candidate: null, photoPath: 'photos/s1.jpg' });
 });
 
 test('a plant without a scan has no photo or diagnosis', async () => {
   await insertPlant(db, { id: 'p1', name: 'Fern', room: null }, at(0));
   expect((await listPlants(db))[0]).toMatchObject({
     photoPath: null,
-    conditionId: null,
+    candidate: null,
     diagnoserId: null,
   });
 });
@@ -104,4 +104,19 @@ test('names are stored exactly as given, injection strings included', async () =
   const nasty = "Robert'); DROP TABLE plants;--";
   await insertPlant(db, { id: 'p1', name: nasty, room: '🌿 ベランダ' }, at(0));
   expect((await listPlants(db))[0]).toMatchObject({ name: nasty, room: '🌿 ベランダ' });
+});
+
+// Scans that aren't a plant yet and haven't finished (plan D4-D6).
+test('unfinished scans: pending and ready ones without a plant, newest first', async () => {
+  await insertPendingScan(db, { id: 'old', photoPath: 'photos/old.jpg', diagnoserId: 'kindwise-v1' }, at(1));
+  await insertPendingScan(db, { id: 'new', photoPath: 'photos/new.jpg', diagnoserId: 'kindwise-v1' }, at(2));
+  await markReady(db, 'new', { diagnoserId: 'kindwise-v1', candidates: [{ conditionId: 'sunburn', confidence: 0.7 }] }, at(3));
+  await insertPendingScan(db, { id: 'gone', photoPath: 'photos/gone.jpg', diagnoserId: 'kindwise-v1' }, at(4));
+  await discardScan(db, 'gone', at(5));
+  await persistScan(db, scanFor('p1', 'saved'), at(6));
+
+  expect(await listUnfinishedScans(db)).toEqual([
+    { id: 'new', photoPath: 'photos/new.jpg', status: 'ready', createdAt: at(2) },
+    { id: 'old', photoPath: 'photos/old.jpg', status: 'pending', createdAt: at(1) },
+  ]);
 });

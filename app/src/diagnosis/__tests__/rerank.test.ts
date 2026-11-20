@@ -104,3 +104,43 @@ test('all-zero confidences stay zero instead of dividing by zero', () => {
   const after = applyAnswers(before, { watering: 'water_2_3_days' });
   for (const c of after.candidates) expect(c.confidence).toBe(0);
 });
+
+describe('Kindwise follow-up question', () => {
+  const { applyQuestionAnswer } = jest.requireActual('../rerank') as typeof import('../rerank');
+  const kw = (id: string, confidence: number) => ({
+    conditionId: null,
+    confidence,
+    disease: { id, name: id, commonNames: [], description: null },
+  });
+  const base: Diagnosis = {
+    diagnoserId: 'kindwise-v1',
+    candidates: [kw('wet', 0.4), kw('fungus', 0.35), kw('other', 0.1)],
+    question: { text: 'Wet?', yes: { id: 'wet', name: 'wet' }, no: { id: 'fungus', name: 'fungus' } },
+  };
+  const ids = (d: Diagnosis) => d.candidates.map((c) => c.disease?.id);
+
+  test('yes raises the yes disease over the no disease, keeping the total', () => {
+    const d = applyQuestionAnswer(base, 'yes');
+    expect(ids(d)).toEqual(['wet', 'fungus', 'other']);
+    expect(d.candidates[0].confidence).toBeGreaterThan(0.4);
+    expect(sum(d)).toBeCloseTo(sum(base), 10);
+  });
+
+  test('no swaps them', () => {
+    const d = applyQuestionAnswer(base, 'no');
+    expect(ids(d)).toEqual(['fungus', 'wet', 'other']);
+    expect(sum(d)).toBeCloseTo(sum(base), 10);
+  });
+
+  test('not sure, no answer, or no question changes nothing', () => {
+    expect(applyQuestionAnswer(base, 'not_sure')).toBe(base);
+    expect(applyQuestionAnswer(base, undefined)).toBe(base);
+    expect(applyQuestionAnswer({ ...base, question: null }, 'yes')).toEqual({ ...base, question: null });
+  });
+
+  test('keeps the question, species and treatment on the result', () => {
+    const d = applyQuestionAnswer({ ...base, species: [], treatment: { wet: { prevention: ['x'], biological: [], chemical: [] } } }, 'yes');
+    expect(d.question).toBe(base.question);
+    expect(d.treatment?.wet.prevention).toEqual(['x']);
+  });
+});

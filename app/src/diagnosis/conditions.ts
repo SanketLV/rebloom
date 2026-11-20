@@ -1,4 +1,4 @@
-import type { Condition, ConditionId } from './types';
+import type { Candidate, Condition, ConditionId, Severity } from './types';
 
 export const CONDITION_IDS = [
   'overwatering',
@@ -61,3 +61,32 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
     severity: 'none',
   },
 };
+
+// Kindwise names are lower case ("water excess or uneven watering"); scientific names start with a
+// capital and stay as they are.
+const sentenceCase = (name: string) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+
+export function candidateName(c: Candidate): string {
+  if (c.conditionId) return CONDITIONS[c.conditionId].name;
+  return c.disease ? sentenceCase(c.disease.name) : 'Unknown problem';
+}
+
+// Reads mid-sentence: "Overwatering or fungal leaf spot?".
+export function candidateShortName(c: Candidate): string {
+  if (c.conditionId) return CONDITIONS[c.conditionId].shortName;
+  const name = c.disease?.name ?? 'unknown problem';
+  return /^[A-Z][a-z]+ [a-z]/.test(name) ? name : name.toLowerCase();
+}
+
+// Our subtitle, or the first sentence of Kindwise's description.
+export function candidateSubtitle(c: Candidate): string | null {
+  if (c.conditionId) return CONDITIONS[c.conditionId].subtitle;
+  const description = c.disease?.description?.trim();
+  if (!description) return null;
+  return description.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? description;
+}
+
+// No severity for diseases we don't map: we don't invent one (design 3).
+export function candidateSeverity(c: Candidate): Severity | null {
+  return c.conditionId ? CONDITIONS[c.conditionId].severity : null;
+}

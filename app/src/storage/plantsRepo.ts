@@ -1,7 +1,7 @@
-import type { ConditionId } from '@/diagnosis/types';
+import type { Candidate } from '@/diagnosis/types';
 
 import type { Db } from './db';
-import { parseCandidates } from './scansRepo';
+import { parseCandidates, type ScanStatus } from './scansRepo';
 
 export type PlantInput = { id: string; name: string; room: string | null };
 
@@ -12,7 +12,8 @@ export type PlantSummary = {
   room: string | null;
   createdAt: string;
   photoPath: string | null;
-  conditionId: ConditionId | null;
+  // The latest scan's top result.
+  candidate: Candidate | null;
   diagnoserId: string | null;
 };
 
@@ -54,9 +55,7 @@ export async function listPlants(db: Db): Promise<PlantSummary[]> {
     room: row.room,
     createdAt: row.created_at,
     photoPath: row.photo_path,
-    conditionId: row.final_result
-      ? (parseCandidates(row.final_result)[0]?.conditionId ?? null)
-      : null,
+    candidate: row.final_result ? (parseCandidates(row.final_result)[0] ?? null) : null,
     diagnoserId: row.diagnoser_id,
   }));
 }
@@ -68,4 +67,17 @@ export async function listRooms(db: Db): Promise<string[]> {
     [],
   );
   return rows.map((r) => r.room);
+}
+
+export type UnfinishedScan = { id: string; photoPath: string; status: Exclude<ScanStatus, 'done'>; createdAt: string };
+
+// Scans sent but not saved as a plant: still waiting for a result, or with a result to look at.
+export async function listUnfinishedScans(db: Db): Promise<UnfinishedScan[]> {
+  const rows = await db.getAllAsync<{ id: string; photo_path: string; status: 'pending' | 'ready'; created_at: string }>(
+    `SELECT id, photo_path, status, created_at FROM scans
+     WHERE deleted_at IS NULL AND plant_id IS NULL AND status IN ('pending', 'ready')
+     ORDER BY created_at DESC, id DESC`,
+    [],
+  );
+  return rows.map((r) => ({ id: r.id, photoPath: r.photo_path, status: r.status, createdAt: r.created_at }));
 }

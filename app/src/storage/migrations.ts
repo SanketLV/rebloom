@@ -2,7 +2,7 @@ import type { Db } from './db';
 
 // Project DB rules: snake_case, TEXT UUID ids, TEXT not VARCHAR, no foreign
 // keys, soft delete via deleted_at, ISO 8601 UTC timestamps as TEXT.
-const MIGRATIONS: string[] = [
+export const MIGRATIONS: string[] = [
   `
   CREATE TABLE plants (
     id TEXT PRIMARY KEY NOT NULL,
@@ -39,6 +39,18 @@ const MIGRATIONS: string[] = [
   );
   -- One live answer per scan; replaceFeedback soft-deletes the old one first.
   CREATE UNIQUE INDEX idx_scan_feedback_scan_id ON scan_feedback(scan_id) WHERE deleted_at IS NULL;
+  `,
+  // 2: Kindwise diagnosis. JSON columns are snake_case; NULL for scans made before (fake-v1).
+  // status: pending (sent, no result yet) → ready (result here, not saved) → done (saved, or
+  // feedback given). Old rows were all saved, so they start as done.
+  `
+  ALTER TABLE scans ADD COLUMN species TEXT;
+  ALTER TABLE scans ADD COLUMN treatment TEXT;
+  ALTER TABLE scans ADD COLUMN kindwise_question TEXT;
+  ALTER TABLE scans ADD COLUMN question_answer TEXT;
+  ALTER TABLE scans ADD COLUMN status TEXT NOT NULL DEFAULT 'done';
+  -- My Plants lists scans that aren't a plant yet and haven't finished.
+  CREATE INDEX idx_scans_unfinished ON scans(status) WHERE deleted_at IS NULL AND plant_id IS NULL;
   `,
 ];
 

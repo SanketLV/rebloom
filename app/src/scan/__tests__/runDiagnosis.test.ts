@@ -32,7 +32,7 @@ test('prepares the photo, then diagnoses the prepared photo', async () => {
     { ...fast, diagnoser, onStep: (s) => steps.push(s) },
   );
   expect(out.photo).toMatchObject({ uri: `${CACHE}/scans/s1.jpg`, width: 800, height: 600 });
-  expect(diagnoser.diagnose).toHaveBeenCalledWith(out.photo);
+  expect(diagnoser.diagnose).toHaveBeenCalledWith(out.photo, { scanId: 's1' });
   expect(out.diagnosis).toEqual(result);
   expect(steps).toEqual(['prepared', 'diagnosed']);
 });

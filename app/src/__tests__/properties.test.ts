@@ -275,8 +275,8 @@ describe('fake diagnoser', () => {
         fc.integer({ min: 0, max: 50_000_000 }),
         async (width, height, sizeBytes) => {
           const photo = { uri: 'x', width, height, sizeBytes };
-          const a = await fakeDiagnoser.diagnose(photo);
-          const b = await fakeDiagnoser.diagnose(photo);
+          const a = await fakeDiagnoser.diagnose(photo, { scanId: 's' });
+          const b = await fakeDiagnoser.diagnose(photo, { scanId: 's' });
           expect(a).toEqual(b);
           expect(a.candidates).not.toBe(b.candidates);
           expect(a.candidates.length).toBeGreaterThan(0);

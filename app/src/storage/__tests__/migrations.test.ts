@@ -1,6 +1,6 @@
 import { createTestDb } from '@/testing/sqljs';
 
-import { migrate, SCHEMA_VERSION } from '../migrations';
+import { migrate, MIGRATIONS, SCHEMA_VERSION } from '../migrations';
 
 const tables = async (db: Awaited<ReturnType<typeof createTestDb>>) =>
   (
@@ -23,7 +23,7 @@ test('creates plants, scans and scan_feedback and sets user_version', async () =
   expect(await db.getFirstAsync('PRAGMA user_version', [])).toEqual({
     user_version: SCHEMA_VERSION,
   });
-  expect(SCHEMA_VERSION).toBe(1);
+  expect(SCHEMA_VERSION).toBe(2);
 });
 
 test('every table has a TEXT id primary key, timestamps and a soft-delete column', async () => {
@@ -56,6 +56,11 @@ test('scans has the columns the spec lists', async () => {
     'created_at',
     'updated_at',
     'deleted_at',
+    'species',
+    'treatment',
+    'kindwise_question',
+    'question_answer',
+    'status',
   ]);
 });
 
@@ -66,7 +71,11 @@ test('lookups have partial indexes that skip soft-deleted rows', async () => {
     "SELECT name, sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL ORDER BY name",
     [],
   );
-  expect(indexes.map((i) => i.name)).toEqual(['idx_scan_feedback_scan_id', 'idx_scans_plant_id']);
+  expect(indexes.map((i) => i.name)).toEqual([
+    'idx_scan_feedback_scan_id',
+    'idx_scans_plant_id',
+    'idx_scans_unfinished',
+  ]);
   for (const index of indexes) expect(index.sql).toMatch(/WHERE deleted_at IS NULL/);
 });
 
@@ -87,7 +96,7 @@ test('running it again changes nothing and keeps data', async () => {
   );
   await migrate(db);
   expect(await db.getAllAsync('SELECT id FROM plants', [])).toEqual([{ id: 'p1' }]);
-  expect(await db.getFirstAsync('PRAGMA user_version', [])).toEqual({ user_version: 1 });
+  expect(await db.getFirstAsync('PRAGMA user_version', [])).toEqual({ user_version: 2 });
 });
 
 test('a scan can have only one live feedback row; soft-deleted ones do not count', async () => {
@@ -103,4 +112,36 @@ test('a scan can have only one live feedback row; soft-deleted ones do not count
   await insert('f2', 't');
   await insert('f3', null);
   await expect(insert('f4', null)).rejects.toThrow(/UNIQUE/);
+});
+
+// Migration 2 (kindwise-diagnosis): scans made before it keep working.
+test('scans saved under version 1 survive migration 2 unchanged, as done', async () => {
+  const db = await createTestDb();
+  await db.execAsync(MIGRATIONS[0]);
+  await db.execAsync('PRAGMA user_version = 1');
+  await db.runAsync(
+    `INSERT INTO scans (id, plant_id, photo_path, diagnoser_id, model_result, answers, final_result, low_confidence, created_at, updated_at)
+     VALUES ('s1', 'p1', 'photos/s1.jpg', 'fake-v1', '[{"condition_id":"sunburn","confidence":0.74}]', '{}',
+             '[{"condition_id":"sunburn","confidence":0.74}]', 0, 't', 't')`,
+    [],
+  );
+  await migrate(db);
+  expect(await db.getFirstAsync('SELECT * FROM scans', [])).toEqual({
+    id: 's1',
+    plant_id: 'p1',
+    photo_path: 'photos/s1.jpg',
+    diagnoser_id: 'fake-v1',
+    model_result: '[{"condition_id":"sunburn","confidence":0.74}]',
+    answers: '{}',
+    final_result: '[{"condition_id":"sunburn","confidence":0.74}]',
+    low_confidence: 0,
+    created_at: 't',
+    updated_at: 't',
+    deleted_at: null,
+    species: null,
+    treatment: null,
+    kindwise_question: null,
+    question_answer: null,
+    status: 'done',
+  });
 });

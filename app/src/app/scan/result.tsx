@@ -7,10 +7,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hiddenBehindSheet } from '@/components/BottomSheet';
 import { Button, TextButton } from '@/components/Button';
 import { BookmarkIcon, ChevronLeftIcon } from '@/components/icons';
-import { CONDITIONS } from '@/diagnosis/conditions';
+import { candidateName, candidateSeverity, candidateSubtitle } from '@/diagnosis/conditions';
 import { isDemoDiagnoser, isLowConfidence } from '@/diagnosis/confidence';
 import { QUESTIONS } from '@/diagnosis/questions';
-import type { Answers, Severity } from '@/diagnosis/types';
+import type { Answers, Candidate, Severity } from '@/diagnosis/types';
 import { goBackOr } from '@/lib/goBack';
 import { Chip } from '@/scan/components/Chip';
 import { ConfidenceBar } from '@/scan/components/ConfidenceBar';
@@ -28,6 +28,10 @@ const SEVERITY: Record<Severity, { label: string; text: string; bg: string }> = 
   moderate: { label: 'Moderate', text: colors.warning, bg: colors.warningBg },
   severe: { label: 'Severe', text: colors.severe, bg: colors.severeBg },
 };
+
+const candidateKey = (c: Candidate) => c.disease?.id ?? c.conditionId ?? 'unknown';
+const guessId = (c: Candidate) =>
+  c.conditionId ?? (`kindwise:${c.disease?.id ?? 'unknown'}` as const);
 
 // "Based on your answers" chips, in question order. "I'm not sure" adds nothing.
 function answerChips(answers: Answers): string[] {
@@ -52,8 +56,10 @@ export default function ResultScreen() {
   if (!result || result.candidates.length === 0) return <Redirect href="/scan" />;
 
   const [top, ...others] = result.candidates;
-  const condition = CONDITIONS[top.conditionId];
-  const severity = SEVERITY[condition.severity];
+  const topName = candidateName(top);
+  const topSubtitle = candidateSubtitle(top);
+  const topSeverity = candidateSeverity(top);
+  const severity = topSeverity ? SEVERITY[topSeverity] : null;
   // Answers re-weight the model's guesses but can't make an unsure photo sure.
   const low = isLowConfidence(result) || (diagnosis !== null && isLowConfidence(diagnosis));
   const chips = answerChips(answers);
@@ -137,23 +143,23 @@ export default function ResultScreen() {
               </View>
               <View style={styles.nameRow}>
                 <Text accessibilityRole="header" style={[type.title, styles.name]}>
-                  {condition.name}
+                  {topName}
                 </Text>
-                <View style={[styles.severity, { backgroundColor: severity.bg }]}>
-                  <Text style={[type.label, { color: severity.text }]}>{severity.label}</Text>
-                </View>
+                {severity && (
+                  <View style={[styles.severity, { backgroundColor: severity.bg }]}>
+                    <Text style={[type.label, { color: severity.text }]}>{severity.label}</Text>
+                  </View>
+                )}
               </View>
-              <Text style={[type.body, styles.subtitle]}>{condition.subtitle}</Text>
+              {topSubtitle && <Text style={[type.body, styles.subtitle]}>{topSubtitle}</Text>}
             </View>
             <ConfidenceBar value={top.confidence} />
             {others.length > 0 && (
               <View style={styles.others}>
                 <Text style={[type.small, styles.othersTitle]}>Other possibilities</Text>
                 {others.map((c) => (
-                  <View key={c.conditionId} style={styles.otherRow}>
-                    <Text style={[type.body, styles.otherName]}>
-                      {CONDITIONS[c.conditionId].name}
-                    </Text>
+                  <View key={candidateKey(c)} style={styles.otherRow}>
+                    <Text style={[type.body, styles.otherName]}>{candidateName(c)}</Text>
                     <Text style={[type.body, styles.otherValue]}>
                       {Math.round(c.confidence * 100)}%
                     </Text>
@@ -207,11 +213,8 @@ export default function ResultScreen() {
       <FeedbackSheet
         key={feedbackKey}
         visible={sheet === 'feedback'}
-        conditionName={condition.name}
-        alternatives={others.map((c) => ({
-          id: c.conditionId,
-          name: CONDITIONS[c.conditionId].name,
-        }))}
+        conditionName={topName}
+        alternatives={others.map((c) => ({ id: guessId(c), name: candidateName(c) }))}
         onSubmit={sendFeedback}
         onClose={() => setSheet(null)}
       />

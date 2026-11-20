@@ -95,6 +95,7 @@ describe('Analyzing', () => {
         uri: expect.stringMatching(/^file:\/\/\/cache\/scans\/.+\.jpg$/),
         width: 800,
       }),
+      { scanId: expect.any(String) },
     );
   });
 
