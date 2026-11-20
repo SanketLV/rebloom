@@ -38,9 +38,20 @@ npx expo-doctor
 
 Design source: the "Rebloom App Screens" canvas. Each placeholder screen names the artboard it becomes.
 
+## Diagnosis
+
+`src/diagnosis/engine.ts` is the one swap point. With the backend configured, scans go to **Kindwise** (plant.id, species + health) through the `diagnose` Edge Function (`.planning/specs/kindwise-diagnosis.md`):
+
+- **The Kindwise key is never in the app.** Only the function holds `KINDWISE_API_KEY`; a test (`guards.test.ts`) fails if `app/src` mentions Kindwise's key or address.
+- **Who scans:** the first scan signs in an anonymous account (no email, no UI; Settings still shows a guest). Signing in with email keeps the anonymous session aside (`rebloom-anon-session`) and the next scan after a sign-out goes back to it, so its used free scans stay counted.
+- **3 free scans a month** per account, counted on the server. Failed and not-a-plant scans aren't counted.
+- **The photo leaves the phone** (800 px, no location). The scan row and a stored copy of the photo are written *before* it's sent (`status = pending`), so a scan cut off by a closed or killed app finishes from My Plants (`scan/resumePending.ts`, only when My Plants opens: an app start still sends nothing). With the result stored (`ready`), the app tells the server to delete Kindwise's copy. Closing a result without saving removes the scan, as before.
+- **Kindwise names** for our 7 conditions are in `src/diagnosis/kindwiseMap.ts`. Kindwise publishes no class list: confirm them against real answers (device checklist). Unknown names keep Kindwise's name and aren't re-ranked by our questions.
+- **Locally**: copy `../supabase/functions/.env.example` to `../supabase/functions/.env` and run `npx -y supabase@3 functions serve`. It points the function at the fake plant.id the local tests start, so nothing reaches Kindwise or spends credits. A real key goes only in that `.env`, never in the repo.
+
 ## The fake diagnoser
 
-Until the on-device model is ready, `fakeDiagnoser` gives realistic, repeatable results (the same photo always gets the same answer; about 1 in 4 comes out low-confidence). Anything it produces carries a **Demo** tag on Analyzing, Questions, Result and My Plants, so a demo result is never mistaken for a real one.
+Without a backend, `fakeDiagnoser` gives realistic, repeatable results (the same photo always gets the same answer; about 1 in 4 comes out low-confidence). Anything it produces carries a **Demo** tag on Analyzing, Questions, Result and My Plants, so a demo result is never mistaken for a real one.
 
 ## Tests and native modules
 
@@ -50,7 +61,8 @@ Native modules don't run in jest, so `jest.setup.ts` swaps in the fakes from `sr
 - **File system**: an in-memory `File` / `Directory` / `Paths` that can fail on demand (`fakeFs.failNext('copy')`).
 - **Camera, image picker, image manipulator, crypto**: controllable through `mockCamera`, `mockPicker`, `mockManipulator`, `mockSqlite` in `src/testing/nativeMocks.ts`.
 - **Supabase session storage**: `expo-sqlite/localStorage/install` is replaced by an in-memory `localStorage` (`src/testing/fakeLocalStorage.ts`), cleared before each test.
-- **Supabase Auth**: the session tests run the real `supabase-js` against `src/testing/fakeAuthServer.ts`, a `fetch` stand-in for the verify, refresh and logout endpoints that can fail on demand (`server.next.refresh = 'offline'`).
+- **Supabase Auth**: the session tests run the real `supabase-js` against `src/testing/fakeAuthServer.ts`, a `fetch` stand-in for the verify, refresh, logout, anonymous sign-up and user endpoints that can fail on demand (`server.next.refresh = 'offline'`).
+- **The diagnose function**: `src/testing/fakeDiagnoseServer.ts` answers `/functions/v1/diagnose` on top of the auth fake (`server.answers = [{ status: 429, resetsAt }]`). `kindwise-flow.test.tsx` runs the whole Kindwise path on it.
 
 ## Backend
 
@@ -59,7 +71,7 @@ The app talks to Supabase through `src/backend/` only. Server-side rules, migrat
 - **Config**: copy `.env.example` to `.env.local` and fill in `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Without them the backend counts as not configured and every call returns `not_configured`; the app works as before. Release builds need an `https://` URL.
 - **Local stack**: from the repo root, `npx -y supabase@3 start`, then `npx -y supabase@3 status` for the values. On the iOS simulator use `http://127.0.0.1:54321`; on the Android emulator `http://10.0.2.2:54321` (its `127.0.0.1` is the emulator itself), or `adb reverse tcp:54321 tcp:54321` first. On a phone running Expo Go use this computer's LAN address (`http://192.168.x.x:54321`): `localhost` on the phone is the phone.
 - **Session** (`src/backend/session.ts`): the only module that reads or changes the session. It is stored in `expo-sqlite` localStorage, refreshed only while the app is in the foreground, and `getSession()` answers within 10 s even offline. Signing out never touches plants, scans or photos.
-- **Who reaches `src/backend/`**: only the files listed in `ALLOWED_BACKEND_IMPORTERS` (`src/__tests__/guards.test.ts`): the account feature and Settings. Opening the app and its tabs sends nothing (`root-layout.test.tsx`); the Settings account card reads the session when Settings opens.
+- **Who reaches `src/backend/`**: only the files listed in `ALLOWED_BACKEND_IMPORTERS` (`src/__tests__/guards.test.ts`): the account feature, Settings, and the scan files that send a photo or finish a pending scan. Opening the app and its tabs sends nothing (`root-layout.test.tsx`); the Settings account card reads the session when Settings opens.
 - **Accounts** (`.planning/specs/accounts.md`): sign-in by a 6-digit email code from Settings → account card. `/account` shows the sign-in screen when signed out and the account (sign out, delete) when signed in; the email and code steps are dismissed back to it after a sign-in. On the local stack every code lands in Mailpit (`http://127.0.0.1:54324`); the delete needs `npx -y supabase@3 functions serve`.
 - **Device checks** for this part are in `../.handoff/device-checklist.md`.
 

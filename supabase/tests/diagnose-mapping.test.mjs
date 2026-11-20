@@ -195,3 +195,50 @@ test('very long Kindwise text is cut, never dropped whole', () => {
   long.result.disease.suggestions[0].details.description = 'x'.repeat(10_000);
   assert.equal(mapResult(long).diseases[0].description.length, 2000);
 });
+
+// Mass check (review.md, high risk): thousands of random, half-broken Kindwise answers and bodies.
+// Seeded, so a failure repeats.
+function rng(seed) {
+  return () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+}
+function junk(r, depth = 0) {
+  const pick = Math.floor(r() * 10);
+  if (depth > 3 || pick < 4) {
+    return [null, undefined, true, 0, -1, 1.5, Number.NaN, '', 'x', '<b>', 'é​'][Math.floor(r() * 11)];
+  }
+  if (pick < 7) return Array.from({ length: Math.floor(r() * 5) }, () => junk(r, depth + 1));
+  const keys = ['result', 'is_plant', 'is_healthy', 'classification', 'disease', 'suggestions', 'question', 'options',
+    'yes', 'no', 'id', 'name', 'probability', 'binary', 'details', 'treatment', 'prevention', 'description', 'text',
+    'entity_id', 'common_names', 'is_harmful', 'scan_id', 'images'];
+  return Object.fromEntries(Array.from({ length: Math.floor(r() * 6) }, () => [keys[Math.floor(r() * keys.length)], junk(r, depth + 1)]));
+}
+
+test('5000 random answers: mapResult never throws and always gives the safe shape', () => {
+  const r = rng(42);
+  for (let i = 0; i < 5000; i += 1) {
+    const raw = junk(r);
+    const m = mapResult(raw);
+    assert.equal(typeof m.is_plant.binary, 'boolean');
+    assert.ok(m.species.length <= 3 && m.diseases.length <= 3);
+    for (const p of [m.is_plant.probability, m.is_healthy.probability, ...m.species.map((s) => s.probability), ...m.diseases.map((d) => d.probability)]) {
+      assert.ok(p >= 0 && p <= 1, `probability ${p} for ${JSON.stringify(raw)}`);
+    }
+    for (const d of m.diseases) {
+      for (const list of Object.values(d.treatment)) assert.ok(list.every((t) => typeof t === 'string'));
+    }
+  }
+});
+
+test('5000 random bodies: validateBody never throws and only accepts a UUID with 1-3 JPEGs', () => {
+  const r = rng(7);
+  for (let i = 0; i < 5000; i += 1) {
+    const raw = junk(r);
+    const v = validateBody(raw);
+    if (v.ok) {
+      assert.match(v.scanId, /^[0-9a-f-]{36}$/i);
+      assert.ok(v.images.length >= 1 && v.images.length <= 3);
+    } else {
+      assert.ok(v.status === 400 || v.status === 413);
+    }
+  }
+});

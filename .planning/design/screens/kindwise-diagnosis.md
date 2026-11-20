@@ -148,6 +148,9 @@ Full screen, `ErrorState` layout (centered, `colors.bg`), the user's photo as a 
 | Offline / timeout | "Can't diagnose without internet" | "Your photo is saved on your phone. Connect and try again. This didn't use a free scan." | Try again | Scan later |
 | Server failed (`502`) | "We couldn't check this photo" | "Something went wrong on our side. Your photo is saved on your phone. This didn't use a free scan." | Try again | Scan later |
 | Busy today (`503`) | "Diagnosis is busy today" | "Lots of people are scanning. Try again tomorrow. This didn't use a free scan." | Done | none |
+| Still running (`202`, or the app's 20 s ran out) | "Still checking your photo" | "This is taking longer than usual. Your photo is saved on your phone, and the answer will wait for you in My Plants." | Try again | Scan later |
+
+The last row was added in the build: Kindwise may already have counted the scan, so "This didn't use a free scan" would be false there (plan D2).
 
 - "Scan later" closes the scan and keeps it `pending` in My Plants (row 9).
 - "This didn't use a free scan" is repeated on purpose: the fear after an error is "did that cost me one?".
@@ -177,7 +180,7 @@ Full screen, `ErrorState` layout (centered, `colors.bg`), the user's photo as a 
 
 ## 8. Save sheet
 
-- Name field pre-filled with the first common name ("Swiss cheese plant"); scientific name if there's no common name; empty if species is unsure. Text is selected on focus so one tap replaces it.
+- Name field pre-filled with the first common name ("Swiss cheese plant"); scientific name if there's no common name; the existing default ("My plant") if species is unsure (build: kept the current default rather than an empty field that blocks Save). Text is selected on focus so one tap replaces it.
 - Everything else unchanged.
 
 ## 9. My Plants row: unfinished scan
@@ -185,7 +188,10 @@ Full screen, `ErrorState` layout (centered, `colors.bg`), the user's photo as a 
 | State | Row secondary line | Tap |
 |---|---|---|
 | finishing (app fetches the result) | "Finishing diagnosis…" with a small `ActivityIndicator` | no-op |
+| ready (result fetched, not saved) | "Diagnosis ready · See result" | opens the scan at its questions, then Result (plan D6) |
 | needs retry (server had nothing) | "Diagnosis didn't finish · Try again" in `colors.warning` | re-runs the diagnosis with the saved photo |
+
+Row title: "Scan from <date>" (no plant name yet). Rows sit above the plants. Added in the build (plan D6): a scan finished in the background needed somewhere to go.
 
 Text, not color alone, carries the state.
 

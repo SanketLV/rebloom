@@ -132,3 +132,14 @@ test('the backend import guard sees every import form, path and file type', () =
   expect(found).toEqual(Object.keys(caught).sort());
   expect(backendReachers({ ...backend, ...caught }, Object.keys(caught))).toEqual([]);
 });
+
+// kindwise-diagnosis: the Kindwise key lives only in the diagnose function. The app never names
+// Kindwise's API, its key variable, or an Api-Key header.
+test('the app holds no Kindwise key, address or header', () => {
+  const sources = allSources(SRC);
+  const offenders = Object.entries(sources)
+    .filter(([path]) => !path.startsWith('testing/'))
+    .filter(([, text]) => /KINDWISE_API_KEY|\/\/plant\.id|plant\.id\/api|kindwise\.com|Api-Key/i.test(text))
+    .map(([path]) => path);
+  expect(offenders).toEqual([]);
+});
