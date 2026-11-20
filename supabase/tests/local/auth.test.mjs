@@ -29,11 +29,13 @@ test('the guard stops the run, before any request, when pointed at a non-local a
   assert.match(child.stderr, /refusing to run against https:\/\/vhxcgmupopeochwvmwcv\.supabase\.co/);
 });
 
-test('anonymous sign-in is refused', async () => {
+// Anonymous accounts back scanning (kindwise-diagnosis spec): no email, flagged as anonymous.
+test('anonymous sign-in makes an anonymous account with no email', async () => {
   const r = await post('/auth/v1/signup', {});
-  const body = await r.text();
-  assert.ok(!r.ok, `anonymous sign-in should fail, got ${r.status} ${body}`);
-  assert.match(body, /anonymous/i);
+  const body = await r.json();
+  assert.equal(r.status, 200, JSON.stringify(body));
+  assert.equal(body.user.is_anonymous, true);
+  assert.ok(!body.user.email, 'no email on an anonymous account');
 });
 
 let token;
@@ -107,6 +109,8 @@ test('a password set by someone else before the owner signs up never signs in', 
   assert.ok(!early.ok, `an unconfirmed account must not sign in, got ${early.status} ${await early.text()}`);
 
   // ...until the owner signs in by code, which confirms it and clears the attacker's password.
+  // The signup above sent an email to this address; Auth allows one per second (max_frequency).
+  await new Promise((resolve) => setTimeout(resolve, 1100));
   const sent = await post('/auth/v1/otp', { email: victim, create_user: true });
   assert.equal(sent.status, 200, await sent.text());
   const { code } = await readCode(victim);

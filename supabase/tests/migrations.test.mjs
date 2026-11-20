@@ -23,6 +23,8 @@ const EXPECTED = [
   '20261104050000_ping_grant.sql',
   '20261104060000_default_privileges.sql',
   '20261104070000_clear_password_on_confirm.sql',
+  // kindwise-diagnosis.
+  '20261120090000_kindwise_diagnosis.sql',
 ];
 
 test('every migration is the expected file, in order (none renamed, re-dated or slipped in)', () => {
