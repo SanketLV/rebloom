@@ -20,14 +20,14 @@ test('id marks it as a fake', () => {
 });
 
 test('the same photo always gets the same result', async () => {
-  const first = await fakeDiagnoser.diagnose(photo(800, 600, 123_456));
-  const second = await fakeDiagnoser.diagnose(photo(800, 600, 123_456));
+  const first = await fakeDiagnoser.diagnose(photo(800, 600, 123_456), { scanId: 's' });
+  const second = await fakeDiagnoser.diagnose(photo(800, 600, 123_456), { scanId: 's' });
   expect(second).toEqual(first);
 });
 
 test('the uri (which holds a random scan id) has no effect', async () => {
-  const a = await fakeDiagnoser.diagnose(photo(800, 600, 98_765, 'file:///cache/scans/one.jpg'));
-  const b = await fakeDiagnoser.diagnose(photo(800, 600, 98_765, 'file:///cache/scans/two.jpg'));
+  const a = await fakeDiagnoser.diagnose(photo(800, 600, 98_765, 'file:///cache/scans/one.jpg'), { scanId: 's' });
+  const b = await fakeDiagnoser.diagnose(photo(800, 600, 98_765, 'file:///cache/scans/two.jpg'), { scanId: 's' });
   expect(b).toEqual(a);
 });
 
@@ -41,7 +41,7 @@ test('has 8 fixtures, 2 of them low confidence (about 1 in 4)', () => {
 test('across many photos both low and normal results come up, each a valid top 3', async () => {
   const results = await Promise.all(
     Array.from({ length: 100 }, (_, i) =>
-      fakeDiagnoser.diagnose(photo(800, 600 + i, 50_000 + i * 977)),
+      fakeDiagnoser.diagnose(photo(800, 600 + i, 50_000 + i * 977), { scanId: 's' }),
     ),
   );
   expect(results.some(isLowConfidence)).toBe(true);
@@ -59,8 +59,8 @@ test('across many photos both low and normal results come up, each a valid top 3
 });
 
 test('returned results are copies, so callers cannot change the fixtures', async () => {
-  const result = await fakeDiagnoser.diagnose(photo(800, 600, 1));
+  const result = await fakeDiagnoser.diagnose(photo(800, 600, 1), { scanId: 's' });
   result.candidates[0].confidence = 0;
-  const again = await fakeDiagnoser.diagnose(photo(800, 600, 1));
+  const again = await fakeDiagnoser.diagnose(photo(800, 600, 1), { scanId: 's' });
   expect(again.candidates[0].confidence).toBeGreaterThan(0);
 });

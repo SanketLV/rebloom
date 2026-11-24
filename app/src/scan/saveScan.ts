@@ -1,10 +1,16 @@
 import { randomUUID } from 'expo-crypto';
 
+import { confirmDiagnose } from '@/backend/diagnose';
+import { ensureScanSession } from '@/backend/session';
+import type { Diagnosis, PreparedPhoto } from '@/diagnosis/types';
 import { deleteStoredPhoto, persistPhoto } from '@/photos/photos';
 import { validateName, validateRoom } from '@/plants/validation';
 import type { Db } from '@/storage/db';
 import { insertPlant } from '@/storage/plantsRepo';
 import {
+  discardScan,
+  insertPendingScan,
+  markReady,
   persistScan,
   replaceFeedback,
   type ScanInput,
@@ -50,6 +56,10 @@ function scanInput(state: ScanState, photoPath: string, plantId: string | null):
     modelResult: state.diagnosis.candidates,
     answers: state.answers,
     finalResult: state.result.candidates,
+    species: state.diagnosis.species,
+    treatment: state.diagnosis.treatment,
+    kindwiseQuestion: state.diagnosis.question,
+    questionAnswer: state.questionAnswer ?? null,
   };
 }
 
@@ -131,4 +141,71 @@ export async function saveFeedback(
     });
     return { photoStored: true, persisted: true };
   });
+}
+
+// ---- Kindwise scans (plan D5): the row and photo exist before the photo is sent ----
+
+// Stores the photo and a pending row, so a killed app can still finish the scan. A repeat (Try
+// again) keeps the one row. If the row can't be written, the copy this call made is removed.
+export async function beginPendingScan(
+  db: Db,
+  scanId: string,
+  diagnoserId: string,
+  photo: PreparedPhoto,
+  { now = isoNow }: Options = {},
+): Promise<void> {
+  // The account the photo goes out with: made now, so the row can name it (review #2).
+  const session = await ensureScanSession();
+  const ownerId = session.ok ? session.value.id : null;
+  return serializeSave(async () => {
+    const { path, created } = await persistPhoto(photo.uri, scanId);
+    try {
+      await insertPendingScan(db, { id: scanId, photoPath: path, diagnoserId, ownerId }, now());
+    } catch (error) {
+      if (created) deleteStoredPhoto(path);
+      throw error;
+    }
+  });
+}
+
+// Names the account a pending scan is sent with, when it has none yet (it was stored offline,
+// before any session existed). Never replaces an owner. Without `ownerId`, the scan session's.
+export async function claimPendingScan(db: Db, scanId: string, ownerId?: string): Promise<void> {
+  let owner = ownerId ?? null;
+  if (!owner) {
+    const session = await ensureScanSession();
+    owner = session.ok ? session.value.id : null;
+  }
+  if (!owner) return;
+  await serializeSave(() =>
+    db.runAsync('UPDATE scans SET owner_id = ? WHERE id = ? AND owner_id IS NULL', [owner, scanId]),
+  );
+}
+
+// The result arrived: store it, then let the server delete its copy (plan D1). Not confirmed if
+// the write fails, so the result can still be fetched again.
+export async function markScanReady(
+  db: Db,
+  scanId: string,
+  diagnosis: Diagnosis,
+  { now = isoNow }: Options = {},
+): Promise<void> {
+  await serializeSave(() => markReady(db, scanId, diagnosis, now()));
+  void confirmDiagnose(scanId);
+}
+
+// The user removed an unfinished scan from My Plants: gone here, and the server's copy too.
+export async function removeUnfinishedScan(db: Db, scanId: string): Promise<void> {
+  await discardUnsavedScan(db, scanId);
+  void confirmDiagnose(scanId);
+}
+
+// Removes a scan nobody saved, and its stored photo. Never touches a saved scan.
+export async function discardUnsavedScan(
+  db: Db,
+  scanId: string,
+  { now = isoNow }: Options = {},
+): Promise<void> {
+  const path = await serializeSave(() => discardScan(db, scanId, now()));
+  if (path) deleteStoredPhoto(path);
 }

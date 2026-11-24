@@ -3,17 +3,17 @@ import { StyleSheet, Text, View } from 'react-native';
 import { colors, spacing, type } from '@/theme/tokens';
 
 // `value` is 0–1.
-export function ConfidenceBar({ value }: { value: number }) {
+export function ConfidenceBar({ value, label = 'Confidence' }: { value: number; label?: string }) {
   const percent = Math.round(Math.min(1, Math.max(0, value)) * 100);
   return (
     <View
       accessible
       accessibilityRole="progressbar"
-      accessibilityLabel="Confidence"
+      accessibilityLabel={label}
       accessibilityValue={{ min: 0, max: 100, now: percent }}
       style={styles.wrap}>
       <View style={styles.row}>
-        <Text style={[type.chip, styles.label]}>Confidence</Text>
+        <Text style={[type.chip, styles.label]}>{label}</Text>
         <Text style={[type.chip, styles.value]}>{percent}%</Text>
       </View>
       <View style={styles.track}>

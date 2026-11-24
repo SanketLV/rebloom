@@ -177,7 +177,9 @@ refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project. Existing users can still sign in.
 enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
-enable_anonymous_sign_ins = false
+# Rebloom: on, so a scan counts against a server-trusted user without a visible sign-up
+# (kindwise-diagnosis spec). Production: set in the dashboard, ticked in the PR (README).
+enable_anonymous_sign_ins = true
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
@@ -411,6 +413,10 @@ deno_version = 2
 # The platform's JWT check only understands the legacy keys; the function checks the caller's
 # token itself (supabase/functions/delete-account/index.ts).
 [functions.delete-account]
+verify_jwt = false
+
+# Same reason (supabase/functions/diagnose/index.ts).
+[functions.diagnose]
 verify_jwt = false
 
 [analytics]

@@ -114,10 +114,27 @@ test('LowConfidenceSheet is honest about why and offers both ways on', async () 
 test('ErrorState offers Try again and Scan another plant', async () => {
   const onRetry = jest.fn();
   const onScanAnother = jest.fn();
-  await show(<ErrorState onRetry={onRetry} onScanAnother={onScanAnother} />);
+  await show(
+    <ErrorState
+      primary={{ label: 'Try again', onPress: onRetry }}
+      secondary={{ label: 'Scan another plant', onPress: onScanAnother }}
+    />,
+  );
   expect(screen.getByRole('header', { name: "We couldn't read this photo" })).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Scan another plant' }));
   expect(onRetry).toHaveBeenCalled();
   expect(onScanAnother).toHaveBeenCalled();
+});
+
+test('ErrorState takes its own copy, one action, and the checked photo', async () => {
+  const onDone = jest.fn();
+  await show(
+    <ErrorState title="Diagnosis is busy today" body="Try again tomorrow." primary={{ label: 'Done', onPress: onDone }} photoUri="file:///x.jpg" />,
+  );
+  expect(screen.getByRole('header', { name: 'Diagnosis is busy today' })).toBeOnTheScreen();
+  expect(screen.getByLabelText('Your photo')).toBeOnTheScreen();
+  expect(screen.getAllByRole('button')).toHaveLength(1);
+  await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+  expect(onDone).toHaveBeenCalled();
 });

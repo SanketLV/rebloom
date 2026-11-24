@@ -2,7 +2,9 @@ import type { Diagnoser, Diagnosis, PreparedPhoto } from '@/diagnosis/types';
 import { CACHE, fakeFs } from '@/testing/fileSystemFake';
 import { mockManipulator } from '@/testing/nativeMocks';
 
-import { DiagnosisError, runDiagnosis } from '../runDiagnosis';
+import { DiagnoseFailure } from '@/diagnosis/kindwiseDiagnoser';
+
+import { DIAGNOSIS_TIMEOUT_MS, DiagnosisError, runDiagnosis } from '../runDiagnosis';
 
 const result: Diagnosis = {
   diagnoserId: 'fake-v1',
@@ -32,7 +34,7 @@ test('prepares the photo, then diagnoses the prepared photo', async () => {
     { ...fast, diagnoser, onStep: (s) => steps.push(s) },
   );
   expect(out.photo).toMatchObject({ uri: `${CACHE}/scans/s1.jpg`, width: 800, height: 600 });
-  expect(diagnoser.diagnose).toHaveBeenCalledWith(out.photo);
+  expect(diagnoser.diagnose).toHaveBeenCalledWith(out.photo, { scanId: 's1' });
   expect(out.diagnosis).toEqual(result);
   expect(steps).toEqual(['prepared', 'diagnosed']);
 });
@@ -89,13 +91,18 @@ describe('with fake timers', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  test('a diagnoser that never answers times out after 10 seconds', async () => {
+  test('a diagnoser that never answers times out after 20 seconds (Kindwise needs up to 20)', async () => {
     const diagnoser: Diagnoser = { id: 'x', diagnose: () => new Promise(() => {}) };
     const run = runDiagnosis(
       { scanId: 's1', sourceUri: shot(), prepared: null },
       { diagnoser, minMs: 0 },
     ).catch((e) => e);
-    await jest.advanceTimersByTimeAsync(10_000);
+    await jest.advanceTimersByTimeAsync(19_999);
+    let settled = false;
+    void run.then(() => (settled = true));
+    await jest.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
     const error = await run;
     expect(error.kind).toBe('timeout');
   });
@@ -119,7 +126,7 @@ describe('with fake timers', () => {
       { scanId: 's1', sourceUri: shot(), prepared: null },
       { diagnoser: diagnoserReturning(result), minMs: 0 },
     ).catch((e) => e);
-    await jest.advanceTimersByTimeAsync(10_000);
+    await jest.advanceTimersByTimeAsync(20_000);
     expect((await run).kind).toBe('timeout');
     mockManipulator.hang = false;
     mockManipulator.release();
@@ -192,10 +199,68 @@ test('a run that already timed out reports no further steps', async () => {
     { scanId: 's1', sourceUri: shot(), prepared: null },
     { diagnoser, minMs: 0, onStep: (s) => steps.push(s) },
   ).catch((e) => e);
-  await jest.advanceTimersByTimeAsync(10_000);
+  await jest.advanceTimersByTimeAsync(20_000);
   expect((await run).kind).toBe('timeout');
   finish(result);
   await jest.advanceTimersByTimeAsync(0);
   expect(steps).toEqual(['prepared']);
   jest.useRealTimers();
+});
+
+// kindwise-diagnosis
+test('the time limit is 20 seconds', () => {
+  expect(DIAGNOSIS_TIMEOUT_MS).toBe(20_000);
+});
+
+test.each(['pending', 'not_plant', 'busy', 'server', 'offline'] as const)(
+  'a Kindwise "%s" answer is that error kind, with the photo kept',
+  async (kind) => {
+    const diagnoser: Diagnoser = { id: 'kindwise-v1', diagnose: () => Promise.reject(new DiagnoseFailure(kind)) };
+    const error = await runDiagnosis({ scanId: 's1', sourceUri: shot(), prepared: null }, { diagnoser, ...fast }).catch((e) => e);
+    expect(error).toBeInstanceOf(DiagnosisError);
+    expect(error.kind).toBe(kind);
+    expect(error.photo?.uri).toMatch(/scans\/s1\.jpg$/);
+  },
+);
+
+test('a quota answer carries the reset time', async () => {
+  const diagnoser: Diagnoser = {
+    id: 'kindwise-v1',
+    diagnose: () => Promise.reject(new DiagnoseFailure('quota', '2026-12-01T00:00:00Z')),
+  };
+  const error = await runDiagnosis({ scanId: 's1', sourceUri: shot(), prepared: null }, { diagnoser, ...fast }).catch((e) => e);
+  expect(error).toMatchObject({ kind: 'quota', resetsAt: '2026-12-01T00:00:00Z' });
+});
+
+test('beforeDiagnose runs with the prepared photo before the diagnoser is asked', async () => {
+  const order: string[] = [];
+  const diagnoser: Diagnoser = {
+    id: 'kindwise-v1',
+    diagnose: async () => {
+      order.push('diagnose');
+      return result;
+    },
+  };
+  await runDiagnosis(
+    { scanId: 's1', sourceUri: shot(), prepared: null },
+    {
+      diagnoser,
+      ...fast,
+      beforeDiagnose: async (photo) => {
+        order.push(`before:${photo.uri.split('/').pop()}`);
+      },
+    },
+  );
+  expect(order).toEqual(['before:s1.jpg', 'diagnose']);
+});
+
+test('a failing beforeDiagnose stops the run before anything is sent ("store" error, photo kept)', async () => {
+  const diagnoser = diagnoserReturning(result);
+  const error = await runDiagnosis(
+    { scanId: 's1', sourceUri: shot(), prepared: null },
+    { diagnoser, ...fast, beforeDiagnose: () => Promise.reject(new Error('disk full')) },
+  ).catch((e) => e);
+  expect(error.kind).toBe('store');
+  expect(error.photo).not.toBeNull();
+  expect(diagnoser.diagnose).not.toHaveBeenCalled();
 });

@@ -2,7 +2,7 @@ import { CACHE, DOCUMENT, fakeFs } from '@/testing/fileSystemFake';
 import { mockManipulator } from '@/testing/nativeMocks';
 import { createTestDb } from '@/testing/sqljs';
 import { migrate } from '@/storage/migrations';
-import { persistScan } from '@/storage/scansRepo';
+import { insertPendingScan, persistScan } from '@/storage/scansRepo';
 
 import {
   deleteCachedPhoto,
@@ -181,6 +181,18 @@ describe('sweepOrphanPhotos', () => {
       `${DOCUMENT}/photos/a.jpg`,
       `${DOCUMENT}/photos/b.jpg`,
     ]);
+  });
+
+  // Review #6: a crash between discarding an unsaved scan and deleting its file.
+  test('the photo of a discarded, never-saved scan is swept', async () => {
+    const db = await migratedDb();
+    await insertPendingScan(db, { id: 'p', photoPath: 'photos/p.jpg', diagnoserId: 'kindwise-v1' }, 't');
+    await db.runAsync("UPDATE scans SET deleted_at = 't' WHERE id = 'p'", []);
+    await persistScan(db, { id: 'k', plantId: null, photoPath: 'photos/k.jpg', diagnoserId: 'fake-v1', modelResult: [], answers: {}, finalResult: [] }, 't');
+    fakeFs.put(`${DOCUMENT}/photos/p.jpg`);
+    fakeFs.put(`${DOCUMENT}/photos/k.jpg`);
+    await sweepOrphanPhotos(db);
+    expect(fakeFs.uris()).toEqual([`${DOCUMENT}/photos/k.jpg`]);
   });
 
   test('is fine with no photos folder, and never throws', async () => {

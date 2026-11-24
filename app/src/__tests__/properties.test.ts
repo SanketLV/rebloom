@@ -60,7 +60,7 @@ const text = fc
   .map((parts) => parts.join(''));
 
 describe('applyAnswers', () => {
-  test('keeps the same conditions and total, sorted, never negative or NaN', () => {
+  test('keeps the same conditions, never a higher total or top, sorted, never negative or NaN', () => {
     fc.assert(
       fc.property(diagnosis, answers, (d, a) => {
         const out = applyAnswers(d, a).candidates;
@@ -68,7 +68,9 @@ describe('applyAnswers', () => {
         expect(out.map((c) => c.conditionId).sort()).toEqual(
           d.candidates.map((c) => c.conditionId).sort(),
         );
-        expect(total(out)).toBeCloseTo(total(d.candidates), 9);
+        expect(total(out)).toBeLessThanOrEqual(total(d.candidates) + 1e-9);
+        const top = Math.max(0, ...d.candidates.map((c) => c.confidence));
+        for (const c of out) expect(c.confidence).toBeLessThanOrEqual(top + 1e-12);
         for (let i = 0; i < out.length; i++) {
           expect(Number.isFinite(out[i].confidence)).toBe(true);
           expect(out[i].confidence).toBeGreaterThanOrEqual(0);
@@ -91,11 +93,15 @@ describe('applyAnswers', () => {
 });
 
 describe('low confidence (#2)', () => {
-  test('the generated data includes answers that lift an unsure guess over 50%', () => {
-    const lifted = fc
-      .sample(fc.tuple(diagnosis, answers), 2000)
-      .filter(([d, a]) => isLowConfidence(d) && !isLowConfidence(applyAnswers(d, a)));
-    expect(lifted.length).toBeGreaterThan(20);
+  // Answers used to be able to lift one over 50% (the stored flag below still guards that);
+  // since PR #32's review they never raise any confidence.
+  test('answers never lift an unsure guess over 50%', () => {
+    fc.assert(
+      fc.property(diagnosis, answers, (d, a) => {
+        expect(isLowConfidence(d) && !isLowConfidence(applyAnswers(d, a))).toBe(false);
+      }),
+      { numRuns: 2000 },
+    );
   });
 
   test('a scan the model was unsure of is always stored as low confidence', async () => {
@@ -275,8 +281,8 @@ describe('fake diagnoser', () => {
         fc.integer({ min: 0, max: 50_000_000 }),
         async (width, height, sizeBytes) => {
           const photo = { uri: 'x', width, height, sizeBytes };
-          const a = await fakeDiagnoser.diagnose(photo);
-          const b = await fakeDiagnoser.diagnose(photo);
+          const a = await fakeDiagnoser.diagnose(photo, { scanId: 's' });
+          const b = await fakeDiagnoser.diagnose(photo, { scanId: 's' });
           expect(a).toEqual(b);
           expect(a.candidates).not.toBe(b.candidates);
           expect(a.candidates.length).toBeGreaterThan(0);
@@ -469,6 +475,7 @@ describe('saves interleaving property tests (#1)', () => {
           },
           persisted: false,
           photoStored: false,
+          stage: 'none',
         };
 
         const now = () => '2026-10-24T10:00:00.000Z';

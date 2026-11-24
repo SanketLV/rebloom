@@ -35,7 +35,7 @@ const session = jest.requireMock('@/backend/session') as {
   getCurrentUser: jest.Mock;
 };
 
-const sam: SessionUser = { id: 'u-1', email: 'sam@example.com', provider: 'email' };
+const sam: SessionUser = { id: 'u-1', email: 'sam@example.com', provider: 'email', isAnonymous: false };
 const flush = () => act(async () => {});
 
 beforeEach(() => {
@@ -189,4 +189,55 @@ test('a second screen subscribing does not start a second listener', async () =>
   await renderHook(() => useAccount());
   await flush();
   expect(session.onSessionChange).toHaveBeenCalledTimes(1);
+});
+
+// kindwise-diagnosis: the invisible account a scan makes is never shown as signed in.
+describe('anonymous accounts', () => {
+  const anon: SessionUser = { id: 'u-anon', email: null, provider: 'anonymous', isAnonymous: true };
+
+  test('a stored anonymous session reads as guest', async () => {
+    mockCurrentUser = async () => ({ ok: true, value: anon });
+    subscribeAccount(() => {});
+    await flush();
+    expect(getAccountState()).toEqual({ status: 'guest' });
+  });
+
+  test('an anonymous sign-in or refresh reads as guest', async () => {
+    subscribeAccount(() => {});
+    await flush();
+    act(() => mockEmit({ type: 'signed_in', user: anon }));
+    expect(getAccountState()).toEqual({ status: 'guest' });
+    act(() => mockEmit({ type: 'refreshed', user: anon }));
+    expect(getAccountState()).toEqual({ status: 'guest' });
+  });
+
+  test('switching from anonymous to an email account shows the email account', async () => {
+    subscribeAccount(() => {});
+    await flush();
+    act(() => mockEmit({ type: 'signed_in', user: anon }));
+    act(() => mockEmit({ type: 'signed_out', reason: 'switched_account' }));
+    act(() => mockEmit({ type: 'signed_in', user: sam }));
+    expect(getAccountState()).toEqual({ status: 'signed_in', user: sam });
+  });
+
+  test('the "account deleted" notice survives the anonymous scan session that follows', async () => {
+    subscribeAccount(() => {});
+    await flush();
+    act(() => mockEmit({ type: 'signed_in', user: sam }));
+    noteAccountDeleted();
+    act(() => mockEmit({ type: 'signed_out', reason: 'user' }));
+    expect(getAccountState()).toEqual({ status: 'guest', notice: 'deleted' });
+    act(() => mockEmit({ type: 'signed_in', user: anon }));
+    expect(getAccountState()).toEqual({ status: 'guest', notice: 'deleted' });
+  });
+});
+
+test('a scan making an anonymous session keeps the "session expired" notice (review #9)', async () => {
+  subscribeAccount(() => {});
+  await flush();
+  act(() => mockEmit({ type: 'signed_in', user: sam }));
+  act(() => mockEmit({ type: 'signed_out', reason: 'session_expired' }));
+  expect(getAccountState()).toEqual({ status: 'expired' });
+  act(() => mockEmit({ type: 'signed_in', user: { id: 'u-anon', email: null, provider: 'anonymous', isAnonymous: true } }));
+  expect(getAccountState()).toEqual({ status: 'expired' });
 });

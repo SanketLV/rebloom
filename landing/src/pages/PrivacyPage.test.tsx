@@ -39,6 +39,18 @@ describe('privacy page', () => {
     expect(text).toMatch(/stay on your phone/);
   });
 
+  // kindwise-diagnosis: scan photos now leave the phone; say where, without what, and for how long.
+  it('says scan photos go to Kindwise, without location, and that free scans are counted', () => {
+    render(<PrivacyPage />);
+    const text = section('App accounts').textContent ?? '';
+    expect(text).not.toMatch(/nothing about them is sent anywhere/);
+    expect(text).toMatch(/Kindwise/);
+    expect(text).toMatch(/without its location/);
+    expect(text).toMatch(/delete its copy/);
+    expect(text).toMatch(/no email or name/);
+    expect(text).toMatch(/how many free scans/);
+  });
+
   it('gives a way to delete an account without the app (Google Play needs it)', () => {
     render(<PrivacyPage />);
     const part = section('App accounts');

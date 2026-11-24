@@ -81,3 +81,4 @@ test('GET → 405', async () => {
   assert.equal(r.status, 405, await r.text());
   assert.equal((await whoIs(d.access_token)).status, 200);
 });
+

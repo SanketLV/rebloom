@@ -12,6 +12,8 @@ import { goBackOr, useAndroidBackOr } from '@/lib/goBack';
 import { useSingleFlight } from '@/lib/useSingleFlight';
 import { PermissionSheet } from '@/scan/components/PermissionSheet';
 import { TipsSheet } from '@/scan/components/TipsSheet';
+import { diagnoser } from '@/diagnosis/engine';
+import { KINDWISE_ID } from '@/diagnosis/kindwiseMap';
 import { useScanSession } from '@/scan/session';
 import { cameraColors, colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
 
@@ -156,10 +158,15 @@ export default function CameraScreen() {
               <HelpIcon color={cameraColors.buttonIcon} size={22} />
             </Pressable>
           </View>
-          <View style={styles.offline}>
-            <LockIcon color={cameraColors.caption} size={14} />
-            <Text style={[type.small, styles.caption]}>Runs on your phone · works offline</Text>
-          </View>
+          {/* Said before the shutter: with Kindwise the photo leaves the phone (PR #32 review). */}
+          {diagnoser.id === KINDWISE_ID ? (
+            <Text style={[type.small, styles.caption]}>Checked by our partner Kindwise · needs internet</Text>
+          ) : (
+            <View style={styles.offline}>
+              <LockIcon color={cameraColors.caption} size={14} />
+              <Text style={[type.small, styles.caption]}>Runs on your phone · works offline</Text>
+            </View>
+          )}
         </View>
       </View>
 

@@ -1,4 +1,5 @@
 import { Redirect, useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { AccessibilityInfo, Image, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,17 +8,34 @@ import { hiddenBehindSheet } from '@/components/BottomSheet';
 import { CheckIcon, LockIcon } from '@/components/icons';
 import { isDemoDiagnoser, isLowConfidence } from '@/diagnosis/confidence';
 import { diagnoser } from '@/diagnosis/engine';
+import { KINDWISE_ID } from '@/diagnosis/kindwiseMap';
 import type { PreparedPhoto } from '@/diagnosis/types';
 import { DemoTag } from '@/scan/components/DemoTag';
-import { ErrorState } from '@/scan/components/ErrorState';
+import { ErrorState, NO_CLEAR_PROBLEM } from '@/scan/components/ErrorState';
 import { LowConfidenceSheet } from '@/scan/components/LowConfidenceSheet';
-import { DiagnosisError, runDiagnosis, type Step } from '@/scan/runDiagnosis';
+import { TipsSheet } from '@/scan/components/TipsSheet';
+import { DiagnosisError, runDiagnosis, type DiagnosisErrorKind, type Step } from '@/scan/runDiagnosis';
+import { beginPendingScan, claimPendingScan, markScanReady } from '@/scan/saveScan';
 import { useScanSession } from '@/scan/session';
 import { cameraColors, colors, radius, spacing, type } from '@/theme/tokens';
 
-const STEPS = ['Photo ready', 'Checking color, spots and edges', 'Comparing likely causes'];
+// The fake checks on the phone; Kindwise gets the photo, so its copy says so (design 1).
+const DEMO_STEPS = ['Photo ready', 'Checking color, spots and edges', 'Comparing likely causes'];
+const KINDWISE_STEPS = ['Photo ready', 'Sending to our diagnosis service', 'Comparing likely causes'];
+const SLOW_MS = 8_000;
+const SLOW_TEXT = 'Still checking. This can take up to 20 seconds.';
 
 type Phase = 'running' | 'low' | 'error';
+type Failure = { kind: DiagnosisErrorKind | 'no_problem'; resetsAt: string | null };
+
+const NOT_COUNTED = "This didn't use a free scan.";
+
+// "1 December" in the phone's own format; the server sends UTC.
+function resetDay(resetsAt: string | null): string {
+  if (!resetsAt || Number.isNaN(Date.parse(resetsAt))) return 'at the start of next month';
+  const day = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long' });
+  return `on ${day.format(new Date(resetsAt))}`;
+}
 
 // Artboard 05 Analyzing. Replaces itself with Questions, so Back from there
 // never lands here again. Back while running cancels and returns to Camera.
@@ -25,7 +43,13 @@ export default function AnalyzingScreen() {
   const router = useRouter();
   const session = useScanSession();
   const insets = useSafeAreaInsets();
+  const db = useSQLiteContext();
   const [phase, setPhase] = useState<Phase>('running');
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const [slow, setSlow] = useState(false);
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const kindwise = diagnoser.id === KINDWISE_ID;
+  const STEPS = kindwise ? KINDWISE_STEPS : DEMO_STEPS;
   const [done, setDone] = useState(0);
   // Bumped by "Try again" to run once more.
   const [attempt, setAttempt] = useState(0);
@@ -44,21 +68,49 @@ export default function AnalyzingScreen() {
         step === 'prepared' ? `${STEPS[0]}. ${STEPS[1]}` : STEPS[2],
       );
     };
+    const scanId = state.scanId;
+    // Kindwise: the stored photo and a pending row exist before the photo leaves the phone, so a
+    // killed app can still finish this scan from My Plants (plan D5).
+    // A scan resumed from My Plants (or retried) already has its row and stored photo; it only
+    // needs an owner if it was stored before any session existed.
+    const beforeDiagnose = !kindwise
+      ? undefined
+      : state.stage === 'none'
+        ? async (photo: PreparedPhoto) => {
+            await beginPendingScan(db, scanId, diagnoser.id, photo);
+            session.markPending(scanId);
+          }
+        : () => claimPendingScan(db, scanId);
     runDiagnosis(
-      { scanId: state.scanId, sourceUri: state.sourceUri, prepared: state.photo },
-      { diagnoser, signal, onStep },
+      { scanId, sourceUri: state.sourceUri, prepared: state.photo },
+      { diagnoser, signal, onStep, beforeDiagnose },
     ).then(
-      ({ photo, diagnosis }) => {
+      async ({ photo, diagnosis }) => {
         if (signal.aborted) return;
+        if (kindwise) {
+          // If this write fails the row stays pending and My Plants fetches the result again.
+          await markScanReady(db, scanId, diagnosis).then(
+            () => session.markReady(),
+            () => {},
+          );
+          if (signal.aborted) return;
+        }
         session.setPrepared(photo);
         session.setDiagnosis(diagnosis);
-        if (isLowConfidence(diagnosis)) setPhase('low');
+        if (diagnosis.candidates.length === 0) {
+          setFailure({ kind: 'no_problem', resetsAt: null });
+          setPhase('error');
+        } else if (isLowConfidence(diagnosis)) setPhase('low');
         else router.replace('/scan/questions');
       },
       (error: unknown) => {
         if (signal.aborted || (error instanceof DiagnosisError && error.kind === 'aborted')) return;
         // Keep a prepared photo so Try again goes straight to diagnosing.
         if (error instanceof DiagnosisError && error.photo) session.setPrepared(error.photo);
+        const kind = error instanceof DiagnosisError ? error.kind : 'diagnose';
+        // Not a plant: nothing to finish later, and the server gave the scan back.
+        if (kind === 'not_plant') session.discard();
+        setFailure({ kind, resetsAt: error instanceof DiagnosisError ? error.resetsAt : null });
         setPhase('error');
       },
     );
@@ -72,19 +124,124 @@ export default function AnalyzingScreen() {
     // `hasPhoto` never changes while this screen is up; `attempt` drives retries.
   }, [attempt, hasPhoto]);
 
+  // Kindwise takes a while: after 8 s say so, once, to screen readers too (review.md rule).
+  useEffect(() => {
+    if (!kindwise || phase !== 'running') return;
+    const timer = setTimeout(() => {
+      setSlow(true);
+      AccessibilityInfo.announceForAccessibility(SLOW_TEXT);
+    }, SLOW_MS);
+    return () => clearTimeout(timer);
+  }, [kindwise, phase, attempt]);
+
   if (!hasPhoto) return <Redirect href="/scan" />;
 
   const backToCamera = () => router.dismissTo('/scan');
+  // Closes the scan; a pending one waits in My Plants.
+  const scanLater = () => router.dismissTo('/plants');
+  const retry = {
+    label: 'Try again',
+    onPress: () => {
+      setDone(0);
+      setSlow(false);
+      setFailure(null);
+      setPhase('running');
+      setAttempt((n) => n + 1);
+    },
+  };
 
   if (phase === 'error') {
+    const checked = state.photo?.uri ?? null;
+    switch (failure?.kind) {
+      case 'not_plant':
+        return (
+          <View style={styles.fill}>
+            <View style={styles.fill} {...hiddenBehindSheet(tipsOpen)}>
+              <ErrorState
+                photoUri={checked}
+                title="This doesn't look like a plant"
+                body={`Try again with a leaf filling most of the photo. ${NOT_COUNTED}`}
+                primary={{ label: 'Retake photo', onPress: backToCamera }}
+                secondary={{ label: 'Photo tips', onPress: () => setTipsOpen(true) }}
+              />
+            </View>
+            <TipsSheet visible={tipsOpen} onClose={() => setTipsOpen(false)} />
+          </View>
+        );
+      case 'quota':
+        return (
+          <ErrorState
+            photoUri={checked}
+            title="You've used your 3 free scans this month"
+            body={`They reset ${resetDay(failure.resetsAt)}. Your photo is saved on your phone, so you can check it then.`}
+            primary={{ label: 'Done', onPress: scanLater }}
+          />
+        );
+      case 'busy':
+        return (
+          <ErrorState
+            title="Diagnosis is busy today"
+            body={`Lots of people are scanning. Try again tomorrow. ${NOT_COUNTED}`}
+            primary={{ label: 'Done', onPress: scanLater }}
+          />
+        );
+      case 'no_problem':
+        return (
+          <ErrorState
+            photoUri={checked}
+            title={NO_CLEAR_PROBLEM.title}
+            body={NO_CLEAR_PROBLEM.body}
+            primary={{ label: 'Retake photo', onPress: backToCamera }}
+            secondary={{ label: 'Done', onPress: scanLater }}
+          />
+        );
+      case 'offline':
+        // The connection can drop after the server has started: don't promise it was free.
+        return (
+          <ErrorState
+            title="Can't diagnose without internet"
+            body="Your photo is saved on your phone. Connect and try again."
+            primary={retry}
+            secondary={{ label: 'Scan later', onPress: scanLater }}
+          />
+        );
+      case 'server':
+        return (
+          <ErrorState
+            title="We couldn't check this photo"
+            body={`Something went wrong on our side. Your photo is saved on your phone. ${NOT_COUNTED}`}
+            primary={retry}
+            secondary={{ label: 'Scan later', onPress: scanLater }}
+          />
+        );
+      case 'error':
+        return (
+          <ErrorState
+            title="We couldn't check this photo"
+            body="Something went wrong on our side. Your photo is saved on your phone."
+            primary={retry}
+            secondary={{ label: 'Scan later', onPress: scanLater }}
+          />
+        );
+      case 'pending':
+      case 'timeout':
+        // Kindwise may already have it (and counted it): don't promise it was free.
+        if (kindwise) {
+          return (
+            <ErrorState
+              title="Still checking your photo"
+              body="This is taking longer than usual. Your photo is saved on your phone, and the answer will wait for you in My Plants."
+              primary={retry}
+              secondary={{ label: 'Scan later', onPress: scanLater }}
+            />
+          );
+        }
+        break;
+    }
     return (
       <ErrorState
-        onRetry={() => {
-          setDone(0);
-          setPhase('running');
-          setAttempt((n) => n + 1);
-        }}
-        onScanAnother={backToCamera}
+        primary={retry}
+        secondary={{ label: 'Scan another plant', onPress: backToCamera }}
       />
     );
   }
@@ -103,7 +260,9 @@ export default function AnalyzingScreen() {
             />
           )}
           <View style={[styles.chip, { top: insets.top + spacing.xl }]}>
-            <Text style={[type.chip, styles.chipText]}>Analyzing on your phone</Text>
+            <Text style={[type.chip, styles.chipText]}>
+              {kindwise ? 'Checking your photo' : 'Analyzing on your phone'}
+            </Text>
           </View>
         </View>
 
@@ -123,11 +282,19 @@ export default function AnalyzingScreen() {
               />
             ))}
           </View>
+          {slow && <Text style={[type.small, styles.slow]}>{SLOW_TEXT}</Text>}
           <View style={styles.spacer} />
-          <View style={styles.footer}>
-            <LockIcon color={colors.textSecondary} size={16} />
-            <Text style={[type.caption, styles.footerText]}>Your photo stays on your phone</Text>
-          </View>
+          {kindwise ? (
+            <Text style={[type.caption, styles.footerText]}>
+              An automated check. Your photo is sent without its location, and we ask our
+              diagnosis partner to delete its copy once you have the result.
+            </Text>
+          ) : (
+            <View style={styles.footer}>
+              <LockIcon color={colors.textSecondary} size={16} />
+              <Text style={[type.caption, styles.footerText]}>Your photo stays on your phone</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -167,6 +334,8 @@ const DOT = 26;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: cameraColors.ground },
+  fill: { flex: 1, backgroundColor: colors.bg },
+  slow: { color: colors.textSecondary },
   photoArea: {
     height: '60%',
     backgroundColor: cameraColors.analyzing,
