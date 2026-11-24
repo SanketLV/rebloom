@@ -25,8 +25,17 @@ import {
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: BackendError };
 
-/** `provider`: how this sign-in was made ('email', 'google', 'apple'), not the first method used. */
-export type SessionUser = { id: string; email: string | null; provider: string | null };
+/**
+ * `provider`: how this sign-in was made ('email', 'google', 'apple', 'anonymous'), not the first
+ * method used. `isAnonymous`: the invisible account a scan makes (kindwise-diagnosis spec); the
+ * account screens treat it as signed out.
+ */
+export type SessionUser = {
+  id: string;
+  email: string | null;
+  provider: string | null;
+  isAnonymous: boolean;
+};
 
 export type SessionEvent =
   | { type: 'signed_in'; user: SessionUser }
@@ -78,7 +87,13 @@ function signInMethod(session: Session): string | null {
 }
 
 function toUser(session: Session): SessionUser {
-  return { id: session.user.id, email: session.user.email ?? null, provider: signInMethod(session) };
+  const isAnonymous = session.user.is_anonymous === true;
+  return {
+    id: session.user.id,
+    email: session.user.email || null,
+    provider: isAnonymous ? 'anonymous' : signInMethod(session),
+    isAnonymous,
+  };
 }
 
 // Listeners run inside supabase-js's event handling and inside sign-in calls: one that throws must
@@ -213,6 +228,7 @@ export async function setSessionFromAuth(
   // A sign-in is starting: let its session through (set before awaiting, so the SIGNED_IN that
   // supabase-js sends during the call isn't taken for the old session coming back).
   const generation = ++signInSequence;
+  stashAnonymousSession();
   const wasBlocked = blockedUntilSignIn;
   setBlocked(false);
   const fail = (error: BackendError): Result<SessionUser> => {
@@ -402,8 +418,93 @@ export async function signOut(): Promise<Result<null>> {
   return result;
 }
 
+// ---- anonymous scanning (kindwise-diagnosis spec, plan "App: session") ----
+
+/**
+ * Where the anonymous session waits while someone is signed in with email, so signing out goes
+ * back to it (and its used free scans) instead of making a new anonymous account. Not under the
+ * `rebloom-auth-` prefix: signOut removes every key there.
+ */
+export const ANON_STASH_KEY = 'rebloom-anon-session';
+
+// Called as a sign-in begins, before its answer replaces the stored session: if that session is
+// anonymous, keep its latest tokens aside. Never throws (a lost stash costs a new anonymous account).
+function stashAnonymousSession() {
+  try {
+    const raw = globalThis.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as { user?: { is_anonymous?: unknown } } | null;
+    if (parsed?.user?.is_anonymous === true) globalThis.localStorage.setItem(ANON_STASH_KEY, raw);
+  } catch {
+    // nothing to stash
+  }
+}
+
+function readStash(): { access_token: string; refresh_token: string } | null {
+  try {
+    const parsed = JSON.parse(globalThis.localStorage.getItem(ANON_STASH_KEY) ?? 'null') as Partial<StoredSession> | null;
+    return parsed && typeof parsed.access_token === 'string' && typeof parsed.refresh_token === 'string'
+      ? { access_token: parsed.access_token, refresh_token: parsed.refresh_token }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function dropStash() {
+  try {
+    globalThis.localStorage.removeItem(ANON_STASH_KEY);
+  } catch {
+    // left behind: the next restore fails and drops it again
+  }
+}
+
+// Errors that mean "try again later", not "this stash is dead".
+const isTransient = (error: BackendError) =>
+  error === 'offline' || error === 'rate_limited' || error === 'unknown';
+
+async function timed(pending: Promise<Result<SessionUser>>): Promise<Result<SessionUser>> {
+  try {
+    return await withTimeout(pending, SESSION_TIMEOUT_MS);
+  } catch (error) {
+    return { ok: false, error: error instanceof TimeoutError ? 'offline' : toBackendError(error) };
+  }
+}
+
+let ensuring: Promise<Result<SessionUser>> | null = null;
+
+/**
+ * A session to send a scan with: the current one; else the anonymous one kept aside at an email
+ * sign-in; else a new anonymous account. Only called when a scan is sent, never at app start.
+ * Calls at the same time share one attempt, so two scans never make two accounts.
+ */
+export function ensureScanSession(): Promise<Result<SessionUser>> {
+  ensuring ??= (async () => {
+    const supabase = client();
+    if (!supabase) return { ok: false, error: 'not_configured' } as const;
+    const current = await getCurrentUser();
+    if (!current.ok || current.value) return current as Result<SessionUser>;
+
+    const stash = readStash();
+    if (stash) {
+      const restored = await timed(setSessionFromAuth(supabase.auth.setSession(stash)));
+      if (restored.ok) {
+        dropStash();
+        return restored;
+      }
+      if (isTransient(restored.error)) return restored;
+      dropStash();
+    }
+    return timed(setSessionFromAuth(supabase.auth.signInAnonymously()));
+  })().finally(() => {
+    ensuring = null;
+  });
+  return ensuring;
+}
+
 /** Tests only. */
 export function resetSessionForTests(): void {
+  ensuring = null;
   subscription?.unsubscribe();
   subscription = null;
   listeners.clear();

@@ -7,12 +7,27 @@ import { Button, TextButton } from '@/components/Button';
 import { ChevronLeftIcon } from '@/components/icons';
 import { headerLabel, isDemoDiagnoser } from '@/diagnosis/confidence';
 import { QUESTIONS } from '@/diagnosis/questions';
+import type { QuestionAnswer } from '@/diagnosis/types';
 import { goBackOr } from '@/lib/goBack';
 import { DemoTag } from '@/scan/components/DemoTag';
 import { useScanSession } from '@/scan/session';
 import { colors, radius, spacing, touchTarget, type } from '@/theme/tokens';
 
-// Artboard 06 Follow-up questions: one question per step.
+type Step = {
+  key: string;
+  text: string;
+  options: { id: string; label: string }[];
+  answer: string | undefined;
+  choose: (id: string) => void;
+};
+
+const YES_NO: { id: QuestionAnswer; label: string }[] = [
+  { id: 'yes', label: 'Yes' },
+  { id: 'no', label: 'No' },
+];
+
+// Artboard 06 Follow-up questions: one question per step. Kindwise's own yes/no question, when it
+// sent one, comes first in the same layout (design 2).
 export default function QuestionsScreen() {
   const router = useRouter();
   const session = useScanSession();
@@ -21,10 +36,33 @@ export default function QuestionsScreen() {
   // Set once "See my diagnosis" navigates, so a double tap opens one Result.
   const leaving = useRef(false);
 
-  const { diagnosis, answers, photo } = session.state;
-  const question = QUESTIONS[step];
-  const isLast = step === QUESTIONS.length - 1;
-  const answer = answers[question.id];
+  const { diagnosis, answers, photo, questionAnswer } = session.state;
+  const kindwiseQuestion = diagnosis?.question ?? null;
+  const steps: Step[] = [
+    ...(kindwiseQuestion
+      ? [
+          {
+            key: 'kindwise',
+            text: kindwiseQuestion.text,
+            options: YES_NO,
+            answer: questionAnswer,
+            choose: (id: string) => session.answerQuestion(id as QuestionAnswer),
+          },
+        ]
+      : []),
+    ...QUESTIONS.map(
+      (q): Step => ({
+        key: q.id,
+        text: q.text,
+        options: q.options,
+        answer: answers[q.id],
+        choose: (id) => session.answer(q.id, id as (typeof q.options)[number]['id']),
+      }),
+    ),
+  ];
+  const question = steps[step];
+  const isLast = step === steps.length - 1;
+  const answer = question.answer;
 
   // Android Back steps back through the questions before leaving them.
   useFocusEffect(
@@ -61,7 +99,7 @@ export default function QuestionsScreen() {
   const back = () => (step === 0 ? goBackOr('/scan') : setStep(step - 1));
 
   const notSure = () => {
-    session.answer(question.id, 'not_sure');
+    question.choose('not_sure');
     next();
   };
 
@@ -80,13 +118,13 @@ export default function QuestionsScreen() {
         <View
           style={styles.bars}
           accessible
-          accessibilityLabel={`Question ${step + 1} of ${QUESTIONS.length}`}>
-          {QUESTIONS.map((q, i) => (
-            <View key={q.id} style={[styles.bar, i <= step && styles.barOn]} />
+          accessibilityLabel={`Question ${step + 1} of ${steps.length}`}>
+          {steps.map((q, i) => (
+            <View key={q.key} style={[styles.bar, i <= step && styles.barOn]} />
           ))}
         </View>
         <Text style={[type.chip, styles.count]}>
-          {step + 1} of {QUESTIONS.length}
+          {step + 1} of {steps.length}
         </Text>
       </View>
 
@@ -120,7 +158,7 @@ export default function QuestionsScreen() {
             return (
               <Pressable
                 key={option.id}
-                onPress={() => session.answer(question.id, option.id)}
+                onPress={() => question.choose(option.id)}
                 accessibilityRole="radio"
                 accessibilityLabel={option.label}
                 accessibilityState={{ checked }}

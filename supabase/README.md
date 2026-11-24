@@ -26,7 +26,8 @@ In CLI v3, `migration list`, `db diff`, `db push` and `db reset` act on the **lo
 | Compare production with the migrations | `npx -y supabase@3 migration list --remote`, `npx -y supabase@3 db diff --remote` |
 | Ship reviewed migrations | `npx -y supabase@3 db push --remote --dry-run`, then without `--dry-run` |
 | Serve Edge Functions locally (hot reload) | `npx -y supabase@3 functions serve` (the local API tests for `delete-account` need it) |
-| Ship a reviewed, merged function | `npx -y supabase@3 functions deploy delete-account` (reads `verify_jwt` from `config.toml`) |
+| Ship a reviewed, merged function | `npx -y supabase@3 functions deploy <name>` (reads `verify_jwt` from `config.toml`) |
+| Set a function secret on production | `npx -y supabase@3 secrets set KINDWISE_API_KEY=…` (after the PR is merged; never in the repo) |
 
 Local services: API `http://127.0.0.1:54321`, database `127.0.0.1:54322`, Mailpit (catches every auth email) `http://127.0.0.1:54324`. A phone running the app reaches the stack through this computer's LAN address, not `localhost` (see `app/README.md`).
 
@@ -34,14 +35,17 @@ Local services: API `http://127.0.0.1:54321`, database `127.0.0.1:54322`, Mailpi
 
 | Path | What |
 |---|---|
-| `config.toml` | Local stack settings: no anonymous accounts, no SMS, email sign-in by 6-digit code (10 min), seed off |
+| `config.toml` | Local stack settings: anonymous accounts on (30/h per IP, for scanning), no SMS, email sign-in by 6-digit code (10 min), seed off |
 | `templates/sign_in_code.html` | The sign-in email: the code only, no link |
 | `migrations/` | Every schema change, in order. The first four are the waitlist and keep the version numbers production recorded |
 | `tests/database/*.test.sql` | pgTAP: grants, the RLS template, a seeded random RLS property test |
 | `tests/local/*.test.mjs` | Through the local API. A guard refuses any non-local address before the first request |
 | `tests/*.test.mjs` | Static checks: migration names and order, config, keep-alive schedule, pgTAP files |
 | `tests/production/*.test.mjs` | The waitlist tests, against **production**, only with `REBLOOM_PROD_TESTS=1` and their own `PROD_SUPABASE_URL` / `PROD_SUPABASE_PUBLISHABLE_KEY`. They use reserved `example.com` addresses that are never stored |
+| `functions/_shared/caller.ts` | The caller check every user-facing function uses: token → user, 401 or 503 |
 | `functions/delete-account/` | Deletes the caller's account. The user comes only from their own token; the body is never read. 204 also when the user is already gone |
+| `functions/diagnose/` | Sends a scan's photo to Kindwise (plant.id) and counts free scans; the only holder of `KINDWISE_API_KEY`. `kindwise.ts` is its pure part (checks and mapping), tested without Deno |
+| `functions/.env.example` | Local function secrets: copy to `functions/.env` (gitignored) for `functions serve` |
 | `scripts/` | SQL-editor checks for the waitlist (run by hand; not part of `test db`) |
 
 `supabase test db` runs every `.sql` file under `tests/` as a pgTAP test, so only pgTAP files go there.
@@ -73,6 +77,18 @@ create index on public.example (user_id) where deleted_at is null;
 - Grants: revoke everything, then give `authenticated` exactly `select, insert, update`; `anon` gets nothing. Supabase's default grants would otherwise add delete and, before migration `20261104060000_default_privileges`, TRUNCATE (which ignores RLS: one user could empty everyone's rows), TRIGGER, REFERENCES and MAINTAIN. `grants.test.sql` fails if any table gives an API role those four. Column names are `snake_case`.
 - Storage buckets are private (`public = false`): a public bucket serves every file by URL with no RLS check, photos and their location metadata included. Paths start with the owner's id (`<user_id>/…`), with the same owner check on `storage.objects`. Storage files are **not** removed by the cascade: whatever deletes a user must remove them too.
 
+## Server-only tables
+
+`scan_usage`, `kindwise_daily_usage`, `diagnosis_requests` and `kindwise_deletions` (migration `20261120090000_kindwise_diagnosis`) are counters and work the `diagnose` function keeps, not app data, so they skip the template above:
+
+- No app-made `id` and no soft delete: the app never writes or syncs them. User rows go with the account through `on delete cascade`.
+- RLS on, everything revoked from `anon` and `authenticated`. Only `scan_usage` has a policy: a user may read their own rows.
+- Every change goes through security definer functions (`begin_diagnosis`, `attach_token`, `fail_diagnosis`, `end_diagnosis`, `expired_diagnoses`) that only `service_role` may execute. They take the user id as an argument because the function calls them with the secret key; no API role can call them, so nobody can pass someone else's id.
+- The limits (3 free scans a month, the daily credit cap) are constants in `begin_diagnosis`. Changing one is a reviewed migration.
+- `kindwise_deletions` holds Kindwise tokens whose copy still has to be deleted there. A trigger on `diagnosis_requests` queues a row's token whenever the row goes, the account cascade included, so it has no user column and outlives the account. A token leaves the queue only once Kindwise confirms the delete or answers 404; the `diagnose` sweep retries the rest.
+
+**Anonymous accounts are role `authenticated`.** Any future synced table built from the template lets them write rows too; the sync spec decides whether to check `is_anonymous`.
+
 ## Things that get around row level security
 
 `tests/database/grants.test.sql` fails on each of these:
@@ -101,7 +117,24 @@ Security definer functions: `set search_path = ''` and fully qualified names, as
 - A function reads its keys from the environment Supabase gives it: `SUPABASE_URL` and `SUPABASE_SECRET_KEYS` (JSON, key `default`; the legacy `SUPABASE_SERVICE_ROLE_KEY` as fallback). Nothing to set by hand, locally or in production. Never put a secret key in the app or the repo.
 - `verify_jwt = false` in `config.toml`: the platform's own check only understands the legacy JWT keys. Each function checks the caller itself (`delete-account` asks the Auth server with `auth.getUser(token)`, which refuses API keys and tokens with no user).
 - `delete-account` answers: 204 deleted or already gone; 401 only when Auth refuses the token (bad, forged, revoked, or an API key); 503 when Auth can't be asked (network error or 5xx), so an outage never reads as "signed out"; 500 when the delete itself fails; 405 for anything but POST.
-- **Auth settings in production are changed in the dashboard, never with `supabase config push`**: it would copy this file's local values (`site_url = "http://127.0.0.1:3000"`, the local redirect list) over production's. Each dashboard change is listed and ticked in its PR.
+- `diagnose` answers (`{ "error": { "code", "message" } }` on errors):
+
+  | Status | When |
+  |---|---|
+  | 200 | POST/GET: the result. POST adds `scans_left` and `resets_at` |
+  | 202 | Kindwise is still working: the scan is counted, ask again with GET |
+  | 204 | DELETE: the app has saved the result; the Kindwise copy and our row are gone |
+  | 400 / 413 | Bad body; a photo over 2 MB |
+  | 401 / 503 | Same split as `delete-account` (503 also when `KINDWISE_API_KEY` isn't set) |
+  | 404 | GET: nothing for this caller's scan (never another user's) |
+  | 409 | The same scan is already being checked: retry shortly |
+  | 422 | Not a plant (the free scan is given back) |
+  | 429 | 3 free scans used this month (`resets_at`) |
+  | 502 | Kindwise refused or couldn't be reached (nothing counted) |
+  | 503 `daily_cap` | Today's credit cap is reached (nothing counted) |
+
+- Locally, `diagnose` talks to a fake plant.id (`tests/local/fakeKindwise.mjs`) through `KINDWISE_BASE_URL` in `functions/.env`. Production never sets `KINDWISE_BASE_URL`.
+- **Auth settings in production are changed in the dashboard, never with `supabase config push`**: it would copy this file's local values (`site_url = "http://127.0.0.1:3000"`, the local redirect list) over production's. Each dashboard change is listed and ticked in its PR (for example "Allow anonymous sign-ins" for the Kindwise diagnosis).
 
 ## Windows
 

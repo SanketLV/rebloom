@@ -53,3 +53,48 @@ test('option ids are unique across all questions and every option has a chip lab
   expect(new Set(options.map((o) => o.id)).size).toBe(options.length);
   for (const option of options) expect(option.chip.length).toBeGreaterThan(0);
 });
+
+// Kindwise diagnoses (kindwise-diagnosis spec): a candidate is one of our conditions, or a disease
+// Kindwise named that we don't map.
+describe('candidate names', () => {
+  const { candidateName, candidateShortName, candidateSubtitle, candidateSeverity } =
+    jest.requireActual('../conditions') as typeof import('../conditions');
+  const disease = (name: string, description: string | null = null) => ({
+    id: 'd1',
+    name,
+    commonNames: [],
+    description,
+  });
+
+  test('our conditions keep their catalogue name, subtitle and severity', () => {
+    const c = { conditionId: 'overwatering' as const, confidence: 0.6, disease: disease('water excess') };
+    expect(candidateName(c)).toBe('Overwatering');
+    expect(candidateShortName(c)).toBe('overwatering');
+    expect(candidateSubtitle(c)).toBe('Roots stressed by soggy soil');
+    expect(candidateSeverity(c)).toBe('moderate');
+  });
+
+  test('an unmapped Kindwise disease shows its name in sentence case, its first sentence, no severity', () => {
+    const c = {
+      conditionId: null,
+      confidence: 0.2,
+      disease: disease('fungal leaf spot', 'Spots caused by fungi. They spread in damp air.'),
+    };
+    expect(candidateName(c)).toBe('Fungal leaf spot');
+    expect(candidateShortName(c)).toBe('fungal leaf spot');
+    expect(candidateSubtitle(c)).toBe('Spots caused by fungi.');
+    expect(candidateSeverity(c)).toBeNull();
+  });
+
+  test('a scientific name keeps its case; a missing description gives no subtitle', () => {
+    const c = { conditionId: null, confidence: 0.2, disease: disease('Pseudomonas syringae') };
+    expect(candidateName(c)).toBe('Pseudomonas syringae');
+    expect(candidateSubtitle(c)).toBeNull();
+  });
+
+  test('a candidate with neither a condition nor a disease never crashes', () => {
+    const c = { conditionId: null, confidence: 0.2 };
+    expect(candidateName(c)).toBe('Unknown problem');
+    expect(candidateSubtitle(c)).toBeNull();
+  });
+});

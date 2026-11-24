@@ -1,3 +1,4 @@
+import { SCHEMA_VERSION } from '@/storage/migrations';
 import { act, fireEvent, screen } from '@testing-library/react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { renderRouter } from 'expo-router/testing-library';
@@ -62,7 +63,7 @@ test('the database is migrated before any screen shows', async () => {
   await renderRouter({ _layout: RootLayout, index: Child });
   await screen.findByText('child screen');
   expect(await mockSqlite.db().getFirstAsync('PRAGMA user_version', [])).toEqual({
-    user_version: 1,
+    user_version: SCHEMA_VERSION,
   });
 });
 

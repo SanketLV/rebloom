@@ -48,6 +48,11 @@ export class FakeFile {
   create() {
     files.set(this.uri, { size: 0 });
   }
+  // A tiny JPEG (magic bytes) naming the file, so a test can tell which photo was sent.
+  async base64() {
+    if (!files.has(this.uri)) throw new Error(`File not found: ${this.uri}`);
+    return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from(this.name)]).toString('base64');
+  }
   delete() {
     takeFailure('delete');
     if (!files.has(this.uri)) throw new Error(`File not found: ${this.uri}`);

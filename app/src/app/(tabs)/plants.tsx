@@ -6,11 +6,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyPlants } from '@/plants/components/EmptyPlants';
 import { PlantRow } from '@/plants/components/PlantRow';
-import { listPlants, type PlantSummary } from '@/storage/plantsRepo';
+import { UnfinishedScanRow } from '@/plants/components/UnfinishedScanRow';
+import { finishPendingScans, type PassResult, type PendingState } from '@/scan/resumePending';
+import { removeUnfinishedScan } from '@/scan/saveScan';
+import {
+  listPlants,
+  listUnfinishedScans,
+  type PlantSummary,
+  type UnfinishedScan,
+} from '@/storage/plantsRepo';
 import { colors, spacing, type } from '@/theme/tokens';
 
 type Load =
-  { status: 'loading' } | { status: 'ready'; plants: PlantSummary[] } | { status: 'failed' };
+  | { status: 'loading' }
+  | { status: 'ready'; plants: PlantSummary[]; unfinished: UnfinishedScan[] }
+  | { status: 'failed' };
 
 // Artboard 11 My Plants (list rows only) and EmptyPlants.
 export default function MyPlantsScreen() {
@@ -18,20 +28,47 @@ export default function MyPlantsScreen() {
   const db = useSQLiteContext();
   const insets = useSafeAreaInsets();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
+  // What the last pass learned about each pending scan (kindwise-diagnosis plan D4).
+  const [pending, setPending] = useState<Record<string, PassResult>>({});
 
-  // Reload whenever the tab comes into view, e.g. right after a save.
+  // Reload whenever the tab comes into view, e.g. right after a save. Then finish scans whose call
+  // was cut off, and reload if any changed. Only here: an app start sends nothing.
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      listPlants(db).then(
-        (plants) => active && setLoad({ status: 'ready', plants }),
-        () => active && setLoad({ status: 'failed' }),
-      );
+      const read = () =>
+        Promise.all([listPlants(db), listUnfinishedScans(db)]).then(
+          ([plants, unfinished]) => active && setLoad({ status: 'ready', plants, unfinished }),
+          () => active && setLoad({ status: 'failed' }),
+        );
+      void read().then(async () => {
+        const states = await finishPendingScans(db);
+        if (!active) return;
+        setPending(states);
+        // A finished scan moves on; one that wasn't a plant is gone.
+        if (Object.values(states).some((state) => state === 'ready' || state === 'removed')) await read();
+      });
       return () => {
         active = false;
       };
     }, [db]),
   );
+
+  const stateOf = (scan: UnfinishedScan): PendingState => {
+    const known = pending[scan.id];
+    if (scan.status === 'ready') return 'ready';
+    return known && known !== 'removed' ? known : 'finishing';
+  };
+  const open = (scan: UnfinishedScan) =>
+    router.push({ pathname: '/scan/resume', params: { id: scan.id } });
+  const remove = (scan: UnfinishedScan) => {
+    setLoad((current) =>
+      current.status === 'ready'
+        ? { ...current, unfinished: current.unfinished.filter((s) => s.id !== scan.id) }
+        : current,
+    );
+    void removeUnfinishedScan(db, scan.id).catch(() => {});
+  };
 
   const header = (
     <Text accessibilityRole="header" style={[type.screenTitle, styles.title]}>
@@ -41,12 +78,25 @@ export default function MyPlantsScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + spacing.xl }]}>
-      {load.status === 'ready' && load.plants.length > 0 ? (
+      {load.status === 'ready' && (load.plants.length > 0 || load.unfinished.length > 0) ? (
         <FlatList
           data={load.plants}
           keyExtractor={(plant) => plant.id}
           renderItem={({ item }) => <PlantRow plant={item} />}
-          ListHeaderComponent={header}
+          ListHeaderComponent={
+            <View style={styles.headerBlock}>
+              {header}
+              {load.unfinished.map((scan) => (
+                <UnfinishedScanRow
+                  key={scan.id}
+                  scan={scan}
+                  state={stateOf(scan)}
+                  onOpen={() => open(scan)}
+                  onRemove={() => remove(scan)}
+                />
+              ))}
+            </View>
+          }
           contentContainerStyle={styles.list}
         />
       ) : (
@@ -70,5 +120,6 @@ const styles = StyleSheet.create({
   padded: { paddingHorizontal: spacing.lg },
   title: { color: colors.text, marginBottom: spacing.sm },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md },
+  headerBlock: { gap: spacing.md },
   error: { color: colors.severe, padding: spacing.lg },
 });

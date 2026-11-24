@@ -7,6 +7,8 @@ import { fakeLocalStorage } from '@/testing/fakeLocalStorage';
 import { fakeFs } from '@/testing/fileSystemFake';
 
 import {
+  ANON_STASH_KEY,
+  ensureScanSession,
   getCurrentUser,
   getSession,
   onSessionChange,
@@ -108,7 +110,7 @@ describe('reading the session', () => {
 
     const user = await getCurrentUser();
 
-    expect(user).toEqual({ ok: true, value: { id: 'u-1', email: 'sam@example.com', provider: 'google' } });
+    expect(user).toEqual({ ok: true, value: { id: 'u-1', email: 'sam@example.com', provider: 'google', isAnonymous: false } });
     expect(server.fetch).not.toHaveBeenCalled();
   });
 
@@ -122,17 +124,17 @@ describe('reading the session', () => {
         { provider: 'apple', last_sign_in_at: null },
       ],
     });
-    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'google' } });
+    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'google', isAnonymous: false } });
   });
 
   test('without identities, provider falls back to app_metadata.provider', async () => {
     storeSession({ provider: 'google', identities: [] });
-    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'google' } });
+    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'google', isAnonymous: false } });
   });
 
   test('identities with unreadable dates fall back to app_metadata.provider', async () => {
     storeSession({ provider: 'email', identities: [{ provider: 'google', last_sign_in_at: 'soon' }] });
-    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'email' } });
+    expect(await getCurrentUser()).toMatchObject({ ok: true, value: { provider: 'email', isAnonymous: false } });
   });
 
   test('backend not configured → not_configured everywhere', async () => {
@@ -158,11 +160,11 @@ describe('setSessionFromAuth', () => {
 
     const result = await signInWithCode();
 
-    expect(result).toEqual({ ok: true, value: { id: 'u-2', email: 'kim@example.com', provider: 'email' } });
+    expect(result).toEqual({ ok: true, value: { id: 'u-2', email: 'kim@example.com', provider: 'email', isAnonymous: false } });
     expect(JSON.parse(fakeLocalStorage.getItem(STORAGE_KEY)!).user.id).toBe('u-2');
     await Promise.resolve();
     expect(events.filter((e) => e.type === 'signed_in')).toEqual([
-      { type: 'signed_in', user: { id: 'u-2', email: 'kim@example.com', provider: 'email' } },
+      { type: 'signed_in', user: { id: 'u-2', email: 'kim@example.com', provider: 'email', isAnonymous: false } },
     ]);
   });
 
@@ -558,5 +560,103 @@ describe('adversarial review fixes (sign-out)', () => {
     expect(await signOut()).toEqual({ ok: true, value: null });
     await settle();
     expect(events).toEqual([]);
+  });
+});
+
+// kindwise-diagnosis: a scan needs a session the server trusts; with none, an anonymous one.
+describe('ensureScanSession (anonymous scanning)', () => {
+  const ANON = '00000000-0000-4000-8000-0000000000a0';
+  const storedUserId = () => JSON.parse(fakeLocalStorage.getItem(STORAGE_KEY) ?? 'null')?.user?.id ?? null;
+
+  async function signInByEmail(userId = 'u-email') {
+    server.sessionOptions = { userId, email: 'kim@example.com' };
+    const client = getSupabase()!;
+    // As auth.ts does it: the call itself, so the session it replaces is still stored.
+    return setSessionFromAuth(client.auth.verifyOtp({ email: 'kim@example.com', token: '123456', type: 'email' }));
+  }
+
+  test('a fresh install gets one anonymous account, heard as anonymous', async () => {
+    const events: SessionEvent[] = [];
+    onSessionChange((event) => events.push(event));
+    const result = await ensureScanSession();
+    expect(result).toEqual({ ok: true, value: { id: ANON, email: null, provider: 'anonymous', isAnonymous: true } });
+    expect(storedUserId()).toBe(ANON);
+    expect(events).toEqual([{ type: 'signed_in', user: { id: ANON, email: null, provider: 'anonymous', isAnonymous: true } }]);
+
+    expect(await ensureScanSession()).toMatchObject({ ok: true, value: { id: ANON } });
+    expect(server.callsTo('/auth/v1/signup')).toBe(1);
+  });
+
+  test('two scans at once make one anonymous account', async () => {
+    const [a, b] = await Promise.all([ensureScanSession(), ensureScanSession()]);
+    expect(a).toEqual(b);
+    expect(server.callsTo('/auth/v1/signup')).toBe(1);
+  });
+
+  test('an existing email session is used as is', async () => {
+    storeSession({ userId: 'u-email' });
+    expect(await ensureScanSession()).toMatchObject({ ok: true, value: { id: 'u-email', isAnonymous: false } });
+    expect(server.callsTo('/auth/v1/signup')).toBe(0);
+  });
+
+  test('offline on first run: offline, nothing stored', async () => {
+    server.next.signup = 'offline';
+    expect(await ensureScanSession()).toEqual({ ok: false, error: 'offline' });
+    expect(fakeLocalStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  test('email sign-in, then sign-out: the next scan is back on the same anonymous account', async () => {
+    await ensureScanSession();
+    expect((await signInByEmail()).ok).toBe(true);
+    expect(storedUserId()).toBe('u-email');
+    expect(JSON.parse(fakeLocalStorage.getItem(ANON_STASH_KEY)!).user.id).toBe(ANON);
+
+    await signOut();
+    // signOut clears every rebloom-auth key; the stash lives outside that prefix.
+    expect(ANON_STASH_KEY.startsWith(`${STORAGE_KEY}-`)).toBe(false);
+    expect(fakeLocalStorage.getItem(ANON_STASH_KEY)).not.toBeNull();
+
+    const restored = await ensureScanSession();
+    expect(restored).toMatchObject({ ok: true, value: { id: ANON, isAnonymous: true } });
+    expect(storedUserId()).toBe(ANON);
+    expect(server.callsTo('/auth/v1/signup')).toBe(1);
+    expect(fakeLocalStorage.getItem(ANON_STASH_KEY)).toBeNull();
+  });
+
+  test('signing in with email from no session stashes nothing', async () => {
+    await signInByEmail();
+    expect(fakeLocalStorage.getItem(ANON_STASH_KEY)).toBeNull();
+  });
+
+  test('a stash the server no longer accepts → a new anonymous account, stash dropped', async () => {
+    storeSession({ userId: 'old-anon', anonymous: true, expiresIn: -60 });
+    await signInByEmail();
+    await signOut();
+    server.next.refresh = 'rejected';
+    server.anonymousOptions = { userId: 'new-anon' };
+    expect(await ensureScanSession()).toMatchObject({ ok: true, value: { id: 'new-anon' } });
+    expect(fakeLocalStorage.getItem(ANON_STASH_KEY)).toBeNull();
+  });
+
+  test('restoring the stash offline: offline, the stash is kept for later', async () => {
+    storeSession({ userId: 'old-anon', anonymous: true, expiresIn: -60 });
+    await signInByEmail();
+    await signOut();
+    server.next.refresh = 'offline';
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask', 'nextTick', 'setImmediate'] });
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const pending = ensureScanSession();
+    await jest.advanceTimersByTimeAsync(SESSION_TIMEOUT_MS);
+    expect(await pending).toEqual({ ok: false, error: 'offline' });
+    expect(fakeLocalStorage.getItem(ANON_STASH_KEY)).not.toBeNull();
+    expect(server.callsTo('/auth/v1/signup')).toBe(0);
+  });
+
+  test('an expired stash is refreshed into the same anonymous account', async () => {
+    storeSession({ userId: 'old-anon', anonymous: true, expiresIn: -60 });
+    await signInByEmail();
+    await signOut();
+    server.refreshOptions = { userId: 'old-anon', anonymous: true };
+    expect(await ensureScanSession()).toMatchObject({ ok: true, value: { id: 'old-anon', isAnonymous: true } });
   });
 });

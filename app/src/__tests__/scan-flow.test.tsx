@@ -95,6 +95,7 @@ describe('Analyzing', () => {
         uri: expect.stringMatching(/^file:\/\/\/cache\/scans\/.+\.jpg$/),
         width: 800,
       }),
+      { scanId: expect.any(String) },
     );
   });
 
@@ -334,7 +335,7 @@ describe('Result', () => {
     expect(screen.getByText('Moderate')).toBeOnTheScreen();
     expect(screen.getByText('Roots stressed by soggy soil')).toBeOnTheScreen();
     expect(
-      screen.getByRole('progressbar', { name: 'Confidence' }).props.accessibilityValue.now,
+      screen.getByRole('progressbar', { name: 'Diagnosis confidence' }).props.accessibilityValue.now,
     ).toBeGreaterThanOrEqual(50);
     expect(screen.getByText('Underwatering')).toBeOnTheScreen();
     expect(screen.getByText('Not enough light')).toBeOnTheScreen();
