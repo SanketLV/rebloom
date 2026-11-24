@@ -76,6 +76,7 @@ const ALLOWED_BACKEND_IMPORTERS: string[] = [
   'app/account/email.tsx',
   'app/account/index.tsx',
   'app/scan/_layout.tsx',
+  'app/scan/index.tsx',
   'app/scan/analyzing.tsx',
   'app/scan/result.tsx',
   'app/scan/resume.tsx',

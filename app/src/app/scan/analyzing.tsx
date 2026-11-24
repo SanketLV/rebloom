@@ -78,7 +78,7 @@ export default function AnalyzingScreen() {
       : state.stage === 'none'
         ? async (photo: PreparedPhoto) => {
             await beginPendingScan(db, scanId, diagnoser.id, photo);
-            session.markPending();
+            session.markPending(scanId);
           }
         : () => claimPendingScan(db, scanId);
     runDiagnosis(
@@ -286,8 +286,8 @@ export default function AnalyzingScreen() {
           <View style={styles.spacer} />
           {kindwise ? (
             <Text style={[type.caption, styles.footerText]}>
-              An automated check. Your photo is sent without its location, and our diagnosis
-              partner deletes its copy once you have the result.
+              An automated check. Your photo is sent without its location, and we ask our
+              diagnosis partner to delete its copy once you have the result.
             </Text>
           ) : (
             <View style={styles.footer}>

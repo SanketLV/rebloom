@@ -142,7 +142,7 @@ export default function ResultScreen() {
             )}
             <View style={styles.photoChip}>
               <Text style={[type.small, styles.photoChipText]}>
-                {kindwise ? 'Saved on your phone only' : 'Scanned on your phone'}
+                {kindwise ? 'Saved on your phone' : 'Scanned on your phone'}
               </Text>
             </View>
           </View>

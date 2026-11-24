@@ -3,7 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect } from 'react';
 
 import { sweepTempPhotos } from '@/photos/photos';
-import { discardUnsavedScan } from '@/scan/saveScan';
+import { removeUnfinishedScan } from '@/scan/saveScan';
 import { ScanSessionProvider } from '@/scan/session';
 
 // The scan flow: camera → analyzing → questions → result, inside the
@@ -17,8 +17,9 @@ export default function ScanLayout() {
   }, []);
 
   return (
-    // A scan nobody saved goes with its row and stored photo (best effort: My Plants shows it otherwise).
-    <ScanSessionProvider onDiscard={(scanId) => void discardUnsavedScan(db, scanId).catch(() => {})}>
+    // A scan nobody saved goes with its row, its stored photo and the server's copy (best effort:
+    // My Plants shows it otherwise; the server sweeps its copy after 7 days).
+    <ScanSessionProvider onDiscard={(scanId) => void removeUnfinishedScan(db, scanId).catch(() => {})}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         {/* Back on Analyzing cancels the run; the swipe would race it. */}

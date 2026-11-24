@@ -33,19 +33,28 @@ type Call = { status: number; body: unknown } | { status: 'offline' };
 async function invoke(path: string, method: 'POST' | 'GET' | 'DELETE', body?: Record<string, unknown>): Promise<Call | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
-  const { data, error, response } = await supabase.functions.invoke(path, {
-    method,
-    body,
-    timeout: CALL_TIMEOUT_MS,
-  });
-  if (error instanceof FunctionsFetchError) return { status: 'offline' };
-  if (error instanceof FunctionsHttpError) {
-    const context = error.context as Response;
-    const parsed = await context.json().catch(() => null);
-    return { status: context.status, body: parsed };
+  // Our own deadline, not the SDK's `timeout`: that one stops before an error body is read, and a
+  // body that never finishes would then hang the call (PR #32 review).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CALL_TIMEOUT_MS);
+  try {
+    const { data, error, response } = await supabase.functions.invoke(path, {
+      method,
+      body,
+      signal: controller.signal,
+    });
+    if (error instanceof FunctionsFetchError) return { status: 'offline' };
+    if (error instanceof FunctionsHttpError) {
+      const context = error.context as Response;
+      const parsed = await context.json().catch(() => null);
+      if (controller.signal.aborted) return { status: 'offline' };
+      return { status: context.status, body: parsed };
+    }
+    if (error) return { status: 500, body: null };
+    return { status: response?.status ?? 200, body: data };
+  } finally {
+    clearTimeout(timer);
   }
-  if (error) return { status: 500, body: null };
-  return { status: response?.status ?? 200, body: data };
 }
 
 function outcome(call: Call): DiagnoseOutcome {

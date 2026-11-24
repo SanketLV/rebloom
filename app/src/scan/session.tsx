@@ -49,8 +49,9 @@ export type ScanSession = {
   finish(): void;
   markPhotoStored(): void;
   markPersisted(): void;
-  // The stored photo and pending row exist (written before the photo is sent).
-  markPending(): void;
+  // The stored photo and pending row exist (written before the photo is sent). Only for `scanId`:
+  // a late call for a scan the user already replaced changes nothing.
+  markPending(scanId: string): void;
   markReady(): void;
   // Drops this scan's row now (e.g. not a plant).
   discard(): void;
@@ -156,8 +157,12 @@ export function ScanSessionProvider({ children, onDiscard }: Props) {
     markPersisted() {
       update((current) => ({ ...current, persisted: true, stage: 'done' }));
     },
-    markPending() {
-      update((current) => ({ ...current, persisted: true, photoStored: true, stage: 'pending' }));
+    markPending(scanId) {
+      update((current) =>
+        current.scanId === scanId
+          ? { ...current, persisted: true, photoStored: true, stage: 'pending' }
+          : current,
+      );
     },
     markReady() {
       update((current) => (current.stage === 'pending' ? { ...current, stage: 'ready' } : current));

@@ -114,6 +114,15 @@ test('confirm sends DELETE and never throws, even offline', async () => {
   await expect(confirmDiagnose(SCAN)).resolves.toBeUndefined();
 });
 
+// PR #32 review: the deadline covers reading an error body too.
+test('an error whose body never finishes ends as offline after 25 s', async () => {
+  jest.useFakeTimers({ doNotFake: ['queueMicrotask', 'nextTick', 'setImmediate'] });
+  server.answers = ['hang_body'];
+  const pending = getDiagnose(SCAN);
+  await jest.advanceTimersByTimeAsync(CALL_TIMEOUT_MS + 100);
+  expect(await pending).toEqual({ kind: 'offline' });
+});
+
 test('a call that never answers ends as offline after 25 s', async () => {
   jest.useFakeTimers({ doNotFake: ['queueMicrotask', 'nextTick', 'setImmediate'] });
   server.answers = ['hang'];

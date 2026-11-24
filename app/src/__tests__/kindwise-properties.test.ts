@@ -88,7 +88,10 @@ test('answers re-order but never make the result more certain overall', () => {
       const model = fromServer(raw);
       const final = applyAnswers(applyQuestionAnswer(model, qa), ours);
       const total = (d: Diagnosis) => d.candidates.reduce((sum, c) => sum + c.confidence, 0);
-      expect(total(final)).toBeCloseTo(total(model), 9);
+      expect(total(final)).toBeLessThanOrEqual(total(model) + 1e-9);
+      const top = Math.max(0, ...model.candidates.map((c) => c.confidence));
+      for (const c of final.candidates) expect(c.confidence).toBeLessThanOrEqual(top + 1e-12);
+      expect(isLowConfidence(model) && !isLowConfidence(final)).toBe(false);
       expect(final.candidates.map((c) => c.disease?.id ?? c.conditionId).sort()).toEqual(
         model.candidates.map((c) => c.disease?.id ?? c.conditionId).sort(),
       );

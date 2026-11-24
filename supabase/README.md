@@ -79,12 +79,13 @@ create index on public.example (user_id) where deleted_at is null;
 
 ## Server-only tables
 
-`scan_usage`, `kindwise_daily_usage` and `diagnosis_requests` (migration `20261120090000_kindwise_diagnosis`) are counters the `diagnose` function keeps, not app data, so they skip the template above:
+`scan_usage`, `kindwise_daily_usage`, `diagnosis_requests` and `kindwise_deletions` (migration `20261120090000_kindwise_diagnosis`) are counters and work the `diagnose` function keeps, not app data, so they skip the template above:
 
 - No app-made `id` and no soft delete: the app never writes or syncs them. User rows go with the account through `on delete cascade`.
 - RLS on, everything revoked from `anon` and `authenticated`. Only `scan_usage` has a policy: a user may read their own rows.
 - Every change goes through security definer functions (`begin_diagnosis`, `attach_token`, `fail_diagnosis`, `end_diagnosis`, `expired_diagnoses`) that only `service_role` may execute. They take the user id as an argument because the function calls them with the secret key; no API role can call them, so nobody can pass someone else's id.
 - The limits (3 free scans a month, the daily credit cap) are constants in `begin_diagnosis`. Changing one is a reviewed migration.
+- `kindwise_deletions` holds Kindwise tokens whose copy still has to be deleted there. A trigger on `diagnosis_requests` queues a row's token whenever the row goes, the account cascade included, so it has no user column and outlives the account. A token leaves the queue only once Kindwise confirms the delete or answers 404; the `diagnose` sweep retries the rest.
 
 **Anonymous accounts are role `authenticated`.** Any future synced table built from the template lets them write rows too; the sync spec decides whether to check `is_anonymous`.
 

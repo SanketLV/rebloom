@@ -14,10 +14,12 @@ import { discardUnsavedScan, markScanReady } from './saveScan';
 // ready: the result is stored. other_account: sent with another account (signed in or out since):
 // only that account can fetch it, and sending it again would count it twice (review #2).
 export type PendingState = 'finishing' | 'retry' | 'ready' | 'other_account';
+// What one pass learned: a state, or `removed` (not a plant: the scan and its photo are gone).
+export type PassResult = PendingState | 'removed';
 
-let running: Promise<Record<string, PendingState>> | null = null;
+let running: Promise<Record<string, PassResult>> | null = null;
 
-async function finishOne(db: Db, scan: UnfinishedScan): Promise<PendingState | null> {
+async function finishOne(db: Db, scan: UnfinishedScan): Promise<PassResult> {
   const id = scan.id;
   try {
     const answer = await getDiagnose(id);
@@ -32,7 +34,7 @@ async function finishOne(db: Db, scan: UnfinishedScan): Promise<PendingState | n
     if (answer.kind === 'server') return 'retry';
     if (answer.kind === 'not_plant') {
       await discardUnsavedScan(db, id);
-      return null;
+      return 'removed';
     }
     return 'finishing';
   } catch {
@@ -41,15 +43,14 @@ async function finishOne(db: Db, scan: UnfinishedScan): Promise<PendingState | n
 }
 
 /** One pass over the pending scans, one at a time. Calls at the same time share the pass. */
-export function finishPendingScans(db: Db): Promise<Record<string, PendingState>> {
+export function finishPendingScans(db: Db): Promise<Record<string, PassResult>> {
   running ??= (async () => {
-    const states: Record<string, PendingState> = {};
+    const states: Record<string, PassResult> = {};
     try {
       const scans = await listUnfinishedScans(db);
       for (const scan of scans) {
         if (scan.status !== 'pending') continue;
-        const state = await finishOne(db, scan);
-        if (state) states[scan.id] = state;
+        states[scan.id] = await finishOne(db, scan);
       }
     } catch {
       // The list couldn't be read: nothing to report; the next visit tries again.

@@ -186,21 +186,21 @@ describe('Kindwise scans', () => {
 
   test('closing with a ready, unsaved scan discards it; a pending one is kept', async () => {
     const ready = await withDiscard();
-    await act(async () => ready.session().markPending());
+    await act(async () => ready.session().markPending(ready.session().state.scanId));
     await act(async () => ready.session().markReady());
     const readyId = ready.session().state.scanId;
     await ready.unmount();
     expect(ready.onDiscard).toHaveBeenCalledWith(readyId);
 
     const pending = await withDiscard();
-    await act(async () => pending.session().markPending());
+    await act(async () => pending.session().markPending(pending.session().state.scanId));
     await pending.unmount();
     expect(pending.onDiscard).not.toHaveBeenCalled();
   });
 
   test('a saved scan is never discarded', async () => {
     const { session, unmount, onDiscard } = await withDiscard();
-    await act(async () => session().markPending());
+    await act(async () => session().markPending(session().state.scanId));
     await act(async () => session().markReady());
     await act(async () => session().markPersisted());
     await unmount();
@@ -209,7 +209,7 @@ describe('Kindwise scans', () => {
 
   test('a retake discards the pending or ready scan it replaces', async () => {
     const { session, onDiscard } = await withDiscard();
-    await act(async () => session().markPending());
+    await act(async () => session().markPending(session().state.scanId));
     const first = session().state.scanId;
     await act(async () => session().startScan(shot('b')));
     expect(onDiscard).toHaveBeenCalledWith(first);
@@ -218,15 +218,23 @@ describe('Kindwise scans', () => {
 
   test('discard on purpose (not a plant) runs once and forgets the stage', async () => {
     const { session, unmount, onDiscard } = await withDiscard();
-    await act(async () => session().markPending());
+    await act(async () => session().markPending(session().state.scanId));
     await act(async () => session().discard());
     await unmount();
     expect(onDiscard).toHaveBeenCalledTimes(1);
   });
 
+  test('a late markPending for a scan that was replaced leaves the new scan alone', async () => {
+    const { session } = await setup();
+    const old = session().state.scanId;
+    await act(async () => session().startScan(shot('b')));
+    await act(async () => session().markPending(old));
+    expect(session().state).toMatchObject({ stage: 'none', photoStored: false, persisted: false });
+  });
+
   test('pending marks the photo as stored and the row as written', async () => {
     const { session } = await setup();
-    await act(async () => session().markPending());
+    await act(async () => session().markPending(session().state.scanId));
     expect(session().state).toMatchObject({ stage: 'pending', photoStored: true, persisted: true });
   });
 

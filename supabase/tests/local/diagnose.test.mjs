@@ -73,7 +73,8 @@ test('a sick plant: species, diseases, question; counted once; nothing private s
   const s = await anonymous();
   const id = scan();
   const creditsBefore = await credits();
-  const r = await diagnose(s.access_token, id);
+  const image = photo('plant');
+  const r = await call({ token: s.access_token, body: { scan_id: id, images: [image] } });
   const body = await r.json();
   assert.equal(r.status, 200, JSON.stringify(body));
   assert.equal(body.is_plant.binary, true);
@@ -85,7 +86,10 @@ test('a sick plant: species, diseases, question; counted once; nothing private s
   assert.equal(await usage(s.user.id), 1);
   assert.equal(await credits(), creditsBefore + 2);
 
-  const create = fake.calls.find((c) => c.method === 'POST' && c.body?.images?.[0]?.includes(''));
+  // This scan's create, picked by its photo (PR #32 review: `includes('')` matched any POST).
+  const sent = `data:image/jpeg;base64,${image}`;
+  const create = fake.calls.find((c) => c.method === 'POST' && c.body?.images?.[0] === sent);
+  assert.ok(create, 'the create call carried this photo');
   assert.equal(create.headers['api-key'], FAKE_KINDWISE_KEY);
   assert.equal(create.query.async, 'true');
   assert.equal(create.body.health, 'all');
@@ -246,6 +250,40 @@ test('deleting an account deletes its Kindwise copies first (delete-account)', a
   assert.deepEqual(await admin(`diagnosis_requests?scan_id=eq.${id}`), []);
 });
 
+test('a Kindwise copy that cannot be deleted with the account stays queued, and a later POST deletes it', async () => {
+  const s = await anonymous();
+  const id = scan();
+  assert.equal((await diagnose(s.access_token, id)).status, 200);
+  const token = (await admin(`diagnosis_requests?scan_id=eq.${id}&select=access_token`))[0].access_token;
+  fake.state.failDeletes = true;
+  try {
+    const r = await fetch(`${URL_}/functions/v1/delete-account`, {
+      method: 'POST',
+      headers: { apikey: KEY, Authorization: `Bearer ${s.access_token}` },
+    });
+    assert.equal(r.status, 204, 'the account is deleted anyway');
+  } finally {
+    fake.state.failDeletes = false;
+  }
+  assert.ok(fake.identifications.has(token), 'Kindwise was down');
+  assert.equal((await admin(`kindwise_deletions?access_token=eq.${encodeURIComponent(token)}`)).length, 1,
+    'the token outlives the account');
+
+  await drainedBy(await anonymous(), token);
+});
+
+// A later POST's sweep retries queued deletions (in the background: poll).
+async function drainedBy(session, token) {
+  assert.equal((await diagnose(session.access_token, scan())).status, 200);
+  for (let i = 0; i < 20 && fake.identifications.has(token); i += 1) await new Promise((r) => setTimeout(r, 250));
+  assert.ok(!fake.identifications.has(token), 'deleted at Kindwise on the retry');
+  for (let i = 0; i < 20; i += 1) {
+    if ((await admin(`kindwise_deletions?access_token=eq.${encodeURIComponent(token)}`)).length === 0) return;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  assert.fail('the queued token is gone once Kindwise confirms');
+}
+
 test('PUT → 405', async () => {
   const s = await anonymous();
   assert.equal((await call({ token: s.access_token, method: 'PUT', body: {} })).status, 405);
@@ -282,6 +320,38 @@ test('DELETE removes the Kindwise identification and the request; a repeat is st
   assert.equal(await usage(s.user.id), 1, 'still counted');
   assert.equal((await call({ token: s.access_token, method: 'DELETE', query: `?scan_id=${id}` })).status, 204);
   assert.equal((await call({ token: s.access_token, method: 'GET', query: `?scan_id=${id}` })).status, 404);
+});
+
+test('a failed Kindwise delete keeps the token queued; DELETE still answers 204; a later POST retries', async () => {
+  const s = await anonymous();
+  const id = scan();
+  assert.equal((await diagnose(s.access_token, id)).status, 200);
+  const token = (await admin(`diagnosis_requests?scan_id=eq.${id}&select=access_token`))[0].access_token;
+  fake.state.failDeletes = true;
+  try {
+    assert.equal((await call({ token: s.access_token, method: 'DELETE', query: `?scan_id=${id}` })).status, 204);
+  } finally {
+    fake.state.failDeletes = false;
+  }
+  assert.ok(fake.identifications.has(token));
+  assert.deepEqual(await admin(`diagnosis_requests?scan_id=eq.${id}`), []);
+  assert.equal((await admin(`kindwise_deletions?access_token=eq.${encodeURIComponent(token)}`)).length, 1);
+  await drainedBy(s, token);
+});
+
+test('a scan removed while Kindwise creates it: its identification is deleted, and no result comes back', async () => {
+  const s = await anonymous();
+  const id = scan();
+  const before = new Set(fake.identifications.keys());
+  const posting = diagnose(s.access_token, id, 'slowcreate');
+  for (let i = 0; i < 20 && (await admin(`diagnosis_requests?scan_id=eq.${id}`)).length === 0; i += 1) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.equal((await call({ token: s.access_token, method: 'DELETE', query: `?scan_id=${id}` })).status, 204);
+  const r = await posting;
+  assert.equal(r.status, 404, 'no result for a removed scan');
+  const created = [...fake.identifications.keys()].filter((t) => !before.has(t) && t.endsWith('-slowcreate'));
+  assert.deepEqual(created, [], 'the identification Kindwise just made is deleted');
 });
 
 test('a request row older than 7 days is cleaned up by a later POST', async () => {

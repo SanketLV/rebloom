@@ -9,9 +9,11 @@
 //   slow             never completes
 //   failed           Kindwise reports the identification FAILED
 //   hangcreate       create never answers (the function's 10 s limit runs out)
+//   slowcreate       create answers after 3 s (time to remove the scan meanwhile)
 //   fail             create → 500
 //   nocredits        create → 429 (Kindwise out of credits)
 // Every request is recorded in `calls` so tests can count Kindwise creates and check what was sent.
+// `state.failDeletes = true` makes every DELETE answer 503 (Kindwise down).
 
 import { createServer } from 'node:http';
 
@@ -61,6 +63,7 @@ const RESULTS = {
 export function startFakeKindwise() {
   const calls = [];
   const identifications = new Map(); // token → { word, gets }
+  const state = { failDeletes: false };
   let next = 0;
 
   const server = createServer((req, res) => {
@@ -88,13 +91,16 @@ export function startFakeKindwise() {
         if (word === 'hangcreate') return;
         const token = `tok-${(next += 1)}-${word}`;
         identifications.set(token, { word, gets: 0 });
-        return send(201, { access_token: token, status: 'CREATED', completed: null, result: null });
+        const created = () => send(201, { access_token: token, status: 'CREATED', completed: null, result: null });
+        if (word === 'slowcreate') return void setTimeout(created, 3_000);
+        return created();
       }
       const match = url.pathname.match(/^\/api\/v3\/identification\/([^/]+)$/);
       const found = match && identifications.get(decodeURIComponent(match[1]));
       if (!found) return send(404, { error: 'not found' });
       const token = decodeURIComponent(match[1]);
       if (req.method === 'DELETE') {
+        if (state.failDeletes) return send(503, { error: 'down' });
         identifications.delete(token);
         return send(200, true);
       }
@@ -115,6 +121,7 @@ export function startFakeKindwise() {
       resolve({
         calls,
         identifications,
+        state,
         creates: () => calls.filter((c) => c.method === 'POST').length,
         close: () => new Promise((done) => server.close(done)),
       }),

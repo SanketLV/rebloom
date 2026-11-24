@@ -51,24 +51,19 @@ test('the server has nothing → needs retry; the scan and photo stay', async ()
   expect(fakeFs.has(`${DOCUMENT}/photos/a.jpg`)).toBe(true);
 });
 
-test('still running, offline or a server error → still finishing', async () => {
-  for (const kind of ['pending', 'offline', 'error', 'busy', 'not_configured'] as const) {
+test.each(['pending', 'offline', 'error', 'busy', 'not_configured'] as const)(
+  '%s → still finishing',
+  async (kind) => {
     await pending(kind);
     backend.getDiagnose.mockResolvedValue({ kind });
-  }
-  expect(await finishPendingScans(db)).toEqual({
-    pending: 'finishing',
-    offline: 'finishing',
-    error: 'finishing',
-    busy: 'finishing',
-    not_configured: 'finishing',
-  });
-});
+    expect(await finishPendingScans(db)).toEqual({ [kind]: 'finishing' });
+  },
+);
 
 test('not a plant → the scan and its photo are discarded', async () => {
   await pending('a');
   backend.getDiagnose.mockResolvedValue({ kind: 'not_plant' });
-  expect(await finishPendingScans(db)).toEqual({});
+  expect(await finishPendingScans(db)).toEqual({ a: 'removed' });
   expect(await getScan(db, 'a')).toBeNull();
   expect(fakeFs.has(`${DOCUMENT}/photos/a.jpg`)).toBe(false);
 });

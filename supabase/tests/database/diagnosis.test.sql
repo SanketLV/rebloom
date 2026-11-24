@@ -3,7 +3,7 @@
 -- now() is fixed inside this transaction, so "older than" cases backdate rows instead of waiting.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(49);
+select plan(58);
 
 -- ---- shape and access ----
 select has_table('public', 'scan_usage', 'scan_usage exists');
@@ -21,6 +21,16 @@ select table_privs_are('public', 'diagnosis_requests', 'authenticated', array[]:
   'signed-in users have no rights on diagnosis_requests');
 select table_privs_are('public', 'diagnosis_requests', 'anon', array[]::text[],
   'anon has no rights on diagnosis_requests');
+select has_table('public', 'kindwise_deletions', 'kindwise_deletions exists');
+select table_privs_are('public', 'kindwise_deletions', 'authenticated', array[]::text[],
+  'signed-in users have no rights on kindwise_deletions');
+select table_privs_are('public', 'kindwise_deletions', 'anon', array[]::text[],
+  'anon has no rights on kindwise_deletions');
+select ok((select relrowsecurity from pg_class where oid = 'public.kindwise_deletions'::regclass),
+  'kindwise_deletions has row level security on');
+select ok(not has_function_privilege('authenticated', 'public.queue_kindwise_deletion()', 'execute')
+  and not has_function_privilege('anon', 'public.queue_kindwise_deletion()', 'execute'),
+  'no API role can call the queue trigger function');
 
 select ok(not has_function_privilege('authenticated', 'public.begin_diagnosis(uuid, uuid)', 'execute'),
   'signed-in users cannot call begin_diagnosis');
@@ -39,7 +49,8 @@ select ok(has_function_privilege('service_role', 'public.expired_diagnoses(integ
 select is_empty($$
   select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
-    and p.proname in ('begin_diagnosis', 'attach_token', 'fail_diagnosis', 'end_diagnosis', 'expired_diagnoses')
+    and p.proname in ('begin_diagnosis', 'attach_token', 'fail_diagnosis', 'end_diagnosis', 'expired_diagnoses',
+                      'queue_kindwise_deletion')
     and (not p.prosecdef or not coalesce(p.proconfig @> array['search_path=""'], false))
 $$, 'every diagnosis function is security definer with an empty search_path');
 
@@ -62,8 +73,10 @@ select is((select count from public.scan_usage where user_id = 'aaaaaaaa-0000-40
 select is((select credits from public.kindwise_daily_usage where day = (now() at time zone 'utc')::date), 2,
   'a repeat reserves no credits');
 
-select lives_ok($$select public.attach_token('aaaaaaaa-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-00000000a001', 'tok-1')$$,
-  'attach_token stores the Kindwise token');
+select is(public.attach_token('aaaaaaaa-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-00000000a001', 'tok-1'),
+  true, 'attach_token stores the Kindwise token and says so');
+select is(public.attach_token('aaaaaaaa-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-0000000000ff', 'tok-orphan'),
+  false, 'attach_token says when the request row is gone (removed while Kindwise worked)');
 select is(public.begin_diagnosis('aaaaaaaa-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-00000000a001'),
   jsonb_build_object('outcome', 'has_token', 'access_token', 'tok-1', 'scans_left', 2,
     'resets_at', to_jsonb((date_trunc('month', now() at time zone 'utc') + interval '1 month') at time zone 'utc')),
@@ -111,6 +124,11 @@ select lives_ok($$select public.end_diagnosis('aaaaaaaa-0000-4000-8000-000000000
 select ok(not exists (select 1 from public.diagnosis_requests where scan_id = '00000000-0000-4000-8000-00000000a001'),
   'end_diagnosis deletes the request row');
 
+select ok(exists (select 1 from public.kindwise_deletions where access_token = 'tok-1'),
+  'a deleted request row leaves its Kindwise token queued for deletion');
+select ok(not exists (select 1 from public.kindwise_deletions where created_at = now() and access_token <> 'tok-1'),
+  'rows without a token (failed scans) queue nothing');
+
 -- ---- daily cap and month rollover (user B) ----
 update public.kindwise_daily_usage set credits = 39 where day = (now() at time zone 'utc')::date;
 select is(public.begin_diagnosis('bbbbbbbb-0000-4000-8000-0000000000d2', '00000000-0000-4000-8000-00000000b001') ->> 'outcome',
@@ -139,7 +157,10 @@ select throws_ok('select 1 from public.diagnosis_requests', '42501', null, 'a us
 reset role;
 
 -- ---- account deletion ----
+select public.attach_token('aaaaaaaa-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-00000000a005', 'tok-a5');
 delete from auth.users where id = 'aaaaaaaa-0000-4000-8000-0000000000d1';
+select ok(exists (select 1 from public.kindwise_deletions where access_token = 'tok-a5'),
+  'the account cascade keeps its Kindwise tokens queued for deletion');
 select ok(not exists (select 1 from public.scan_usage where user_id = 'aaaaaaaa-0000-4000-8000-0000000000d1')
   and not exists (select 1 from public.diagnosis_requests where user_id = 'aaaaaaaa-0000-4000-8000-0000000000d1'),
   'deleting the account deletes its usage and request rows');

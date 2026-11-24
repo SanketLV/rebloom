@@ -90,7 +90,9 @@ test('a sick plant: Kindwise question first, then ours; the real result; saved w
   expect(screen.getByText(/Swiss cheese plant · species match 91%/)).toBeOnTheScreen();
   expect(screen.getByRole('header', { name: 'Overwatering' })).toBeOnTheScreen();
   expect(screen.getByText('Fungal leaf spot')).toBeOnTheScreen();
-  expect(screen.getByText('Saved on your phone only')).toBeOnTheScreen();
+  expect(screen.getByText('Saved on your phone')).toBeOnTheScreen();
+  // Kindwise may still hold its copy (its delete can fail): never claim "only" (PR #32 review).
+  expect(screen.queryByText('Saved on your phone only')).toBeNull();
   expect(screen.getByText('2 free scans left this month')).toBeOnTheScreen();
   expect(screen.queryByText('Demo')).toBeNull();
 
@@ -179,6 +181,31 @@ test('the app closed mid-call: the scan waits as pending with its photo', async 
   const [row] = await scans();
   expect(row.deleted_at).toBeNull();
   expect(fakeFs.has(`${DOCUMENT}/${row.photo_path}`)).toBe(true);
+});
+
+// PR #32 review: before the shutter, say the photo leaves the phone; never "works offline".
+test('the camera says the photo goes to Kindwise and needs internet', async () => {
+  await renderRouter('./src/app', { initialUrl: '/scan' });
+  expect(await screen.findByText('Checked by our partner Kindwise · needs internet', {}, { timeout: 5000 })).toBeOnTheScreen();
+  expect(screen.queryByText('Runs on your phone · works offline')).toBeNull();
+});
+
+// PR #32 review: a retake drops the waiting scan here and asks the server to drop its copy too.
+test('a retake of a scan still waiting removes it, and the server copy', async () => {
+  server.answers = ['hang', { status: 200, body: SICK_BODY }];
+  const view = await shoot();
+  await waitFor(async () => expect((await scans())[0]?.status).toBe('pending'));
+  const [first] = await scans();
+  await act(async () => router.back());
+  await fireEvent.press(await screen.findByRole('button', { name: 'Take photo' }));
+  await waitFor(() =>
+    expect(server.diagnoseCalls).toContainEqual(expect.objectContaining({ method: 'DELETE', scanId: first.id })),
+  );
+  await waitFor(async () =>
+    expect((await scans()).find((r) => r.id === first.id)?.deleted_at).not.toBeNull(),
+  );
+  // Let the new scan finish, so nothing is still in flight for the next test.
+  await waitFor(() => expect(view).toHavePathname('/scan/questions'));
 });
 
 // Last: after this manual dismiss the test router can't open the camera again.

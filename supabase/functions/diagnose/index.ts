@@ -6,12 +6,15 @@
 // GET    ?scan_id=… → 200 result | 202 pending | 404 (nothing for this caller)   (free: Kindwise GET)
 // DELETE ?scan_id=… → 204 (the app has saved the result: delete the Kindwise copy and our row)
 //
+// A request row's token is queued in `kindwise_deletions` (by trigger) when the row goes; it stays
+// there until Kindwise confirms the delete, and the sweep retries it (PR #32 review).
+//
 // Errors: { error: { code, message } }. 400 bad_request · 401 unauthorized · 405 · 409 in_progress ·
 // 413 image_too_large · 422 not_a_plant · 429 quota_exceeded (+ resets_at) · 502 upstream_failed ·
 // 503 daily_cap | unavailable. Stores no photo and no result; never logs the body.
 
 import { admin, caller } from '../_shared/caller.ts';
-import { deleteAtKindwise, kindwise, KINDWISE_BASE, KINDWISE_KEY } from '../_shared/kindwise.ts';
+import { discard, drainDeletions, forget, kindwise, KINDWISE_BASE, KINDWISE_KEY } from '../_shared/kindwise.ts';
 import { createBody, identificationUrl, kindwiseStatus, mapResult, validateBody } from './kindwise.ts';
 
 // 3 photos of 2 MB as base64, plus room for the JSON around them.
@@ -56,16 +59,20 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-/** Plan D7: rows older than 7 days (the app never confirmed). Best effort, never fails a request. */
+/**
+ * Plan D7: rows older than 7 days (the app never confirmed), then deletions that failed before.
+ * Best effort, never fails a request.
+ */
 async function sweep() {
   try {
     const rows = await rpc<{ user_id: string; scan_id: string; access_token: string | null }[]>(
       'expired_diagnoses', { p_limit: SWEEP_LIMIT },
     );
     for (const row of rows ?? []) {
-      if (row.access_token) await deleteAtKindwise(row.access_token);
-      await rpc('end_diagnosis', { p_user: row.user_id, p_scan: row.scan_id });
+      await rpc('end_diagnosis', { p_user: row.user_id, p_scan: row.scan_id }); // queues the token
+      if (row.access_token) await forget(row.access_token);
     }
+    await drainDeletions(SWEEP_LIMIT);
   } catch (error) {
     console.error('[diagnose] sweep failed', String(error));
   }
@@ -91,8 +98,8 @@ async function answer(
   } catch (error) {
     if (!(error instanceof Upstream)) throw error;
     console.error('[diagnose] kindwise gave up', error.message);
-    await deleteAtKindwise(token);
     await rpc('fail_diagnosis', { p_user: userId, p_scan: scanId, p_release_credits: false });
+    await forget(token);
     return fail(502, 'upstream_failed', "We couldn't check this photo.");
   }
   return done ? finish(userId, scanId, token, done, extra) : pending();
@@ -102,8 +109,8 @@ async function answer(
 async function finish(userId: string, scanId: string, token: string, raw: unknown, extra: Record<string, unknown>) {
   const mapped = mapResult(raw);
   if (!mapped.is_plant.binary) {
-    await deleteAtKindwise(token);
     await rpc('fail_diagnosis', { p_user: userId, p_scan: scanId, p_release_credits: false });
+    await forget(token);
     return fail(422, 'not_a_plant', "This doesn't look like a plant.");
   }
   return json(200, { ...mapped, ...extra });
@@ -188,7 +195,19 @@ async function post(request: Request, userId: string) {
     await rpc('fail_diagnosis', { p_user: userId, p_scan: scanId, p_release_credits: refused });
     return fail(502, 'upstream_failed', "We couldn't check this photo.");
   }
-  await rpc('attach_token', { p_user: userId, p_scan: scanId, p_token: token });
+  // Kindwise made an identification: from here its token must always end up in a row or the queue.
+  let attached: boolean;
+  try {
+    attached = await rpc<boolean>('attach_token', { p_user: userId, p_scan: scanId, p_token: token });
+  } catch (error) {
+    await discard(token);
+    throw error;
+  }
+  if (!attached) {
+    // Removed (or the account deleted) while Kindwise worked: delete what it just made.
+    await discard(token);
+    return fail(404, 'not_found', 'This scan was removed.');
+  }
 
   // Kindwise has accepted (and charged) it: from here only not-a-plant or a FAILED identification
   // gives the scan back (plan D2, D3).
@@ -215,8 +234,8 @@ async function get(userId: string, scanId: string) {
 
 async function remove(userId: string, scanId: string) {
   const row = await requestRow(userId, scanId);
-  if (row?.access_token) await deleteAtKindwise(row.access_token);
-  if (row) await rpc('end_diagnosis', { p_user: userId, p_scan: scanId });
+  if (row) await rpc('end_diagnosis', { p_user: userId, p_scan: scanId }); // queues the token
+  if (row?.access_token) await forget(row.access_token);
   return new Response(null, { status: 204 });
 }
 

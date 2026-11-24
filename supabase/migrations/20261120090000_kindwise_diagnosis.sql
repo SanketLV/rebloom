@@ -6,6 +6,10 @@
 --   kindwise_daily_usage  Kindwise credits spent per UTC day (the global cap); no app access.
 --   diagnosis_requests    one row per scan in progress: the lock against double charges, then the
 --                         Kindwise access token until the app confirms it has the result.
+--   kindwise_deletions    Kindwise tokens whose identification still has to be deleted there. A
+--                         token lands here, by trigger, whenever its request row goes (also with the
+--                         account), and leaves only once Kindwise confirms the delete (or says 404).
+--                         No user column, so it outlives the account (PR #32 review).
 --
 -- All counting goes through the security definer functions below, called only by the `diagnose`
 -- Edge Function with the secret key (service_role). They take the user id as an argument because
@@ -43,6 +47,33 @@ create table public.diagnosis_requests (
 );
 alter table public.diagnosis_requests enable row level security; -- no policies: no app access
 revoke all on table public.diagnosis_requests from anon, authenticated;
+
+create table public.kindwise_deletions (
+  access_token text primary key,
+  created_at timestamptz not null default now()
+);
+alter table public.kindwise_deletions enable row level security; -- no policies: no app access
+revoke all on table public.kindwise_deletions from anon, authenticated;
+
+-- Every request row that goes with a token queues it, in the same transaction: end_diagnosis,
+-- fail_diagnosis, the sweep and the account cascade alike. Security definer because the cascade runs
+-- as the Auth server's role, which has no rights on this table.
+create function public.queue_kindwise_deletion()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if old.access_token is not null then
+    insert into public.kindwise_deletions (access_token) values (old.access_token) on conflict do nothing;
+  end if;
+  return old;
+end;
+$$;
+
+create trigger queue_kindwise_deletion after delete on public.diagnosis_requests
+  for each row execute function public.queue_kindwise_deletion();
 
 -- Gives back one scan to the month the request was made in, and optionally its credits to that day.
 create function public.release_diagnosis(p_user uuid, p_created_at timestamptz, p_release_credits boolean)
@@ -118,14 +149,20 @@ end;
 $$;
 
 -- Kindwise accepted the create: keep its token so the result can be fetched again for free.
+-- False when the row is gone (removed, or the account deleted, while Kindwise worked): the caller
+-- must then delete that identification itself, since no row will ever hold its token.
 create function public.attach_token(p_user uuid, p_scan uuid, p_token text)
-returns void
+returns boolean
 language sql
 security definer
 set search_path = ''
 as $$
-  update public.diagnosis_requests set access_token = p_token
-  where user_id = p_user and scan_id = p_scan;
+  with attached as (
+    update public.diagnosis_requests set access_token = p_token
+    where user_id = p_user and scan_id = p_scan
+    returning 1
+  )
+  select exists (select 1 from attached);
 $$;
 
 -- The scan didn't produce a diagnosis: give the scan back and drop the row. Credits only when
@@ -181,7 +218,8 @@ begin
     'public.attach_token(uuid, uuid, text)',
     'public.fail_diagnosis(uuid, uuid, boolean)',
     'public.end_diagnosis(uuid, uuid)',
-    'public.expired_diagnoses(integer)'
+    'public.expired_diagnoses(integer)',
+    'public.queue_kindwise_deletion()'
   ] loop
     execute format('revoke execute on function %s from public, anon, authenticated', fn);
     execute format('grant execute on function %s to service_role', fn);

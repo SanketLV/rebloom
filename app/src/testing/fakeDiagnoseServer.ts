@@ -11,7 +11,8 @@ export type DiagnoseAnswer =
   | { status: 429; resetsAt: string }
   | { status: 503; code: 'daily_cap' }
   | 'offline'
-  | 'hang';
+  | 'hang'
+  | 'hang_body'; // a 503 whose body never finishes (until the caller aborts)
 
 export const SICK_BODY = {
   is_plant: { probability: 0.98, binary: true },
@@ -85,6 +86,17 @@ export class FakeDiagnoseServer extends FakeAuthServer {
         return new Promise<Response>((_, reject) =>
           init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))),
         );
+      }
+      if (answer === 'hang_body') {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"error":'));
+            init?.signal?.addEventListener('abort', () =>
+              controller.error(new DOMException('Aborted', 'AbortError')),
+            );
+          },
+        });
+        return new Response(body, { status: 503, headers: { 'Content-Type': 'application/json' } });
       }
       if (answer.status === 200) return json(200, answer.body);
       if (answer.status === 202) return json(202, { status: 'pending' });

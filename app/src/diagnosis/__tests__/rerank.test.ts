@@ -1,3 +1,4 @@
+import { isLowConfidence } from '../confidence';
 import { applyAnswers } from '../rerank';
 import type { Answers, ConditionId, Diagnosis, OptionId } from '../types';
 
@@ -55,7 +56,7 @@ test('watering every 2–3 days moves overwatering above underwatering', () => {
   ]);
 });
 
-test('keeps the same 3 conditions, the same total, values in [0, 1], sorted', () => {
+test('keeps the same 3 conditions, never a higher total or top, values in [0, 1], sorted', () => {
   const before = diagnosis(['overwatering', 0.5], ['root_rot', 0.3], ['low_light', 0.15]);
   const after = applyAnswers(before, {
     watering: 'water_2_3_days',
@@ -67,7 +68,8 @@ test('keeps the same 3 conditions, the same total, values in [0, 1], sorted', ()
     'overwatering',
     'root_rot',
   ]);
-  expect(sum(after)).toBeCloseTo(sum(before), 9);
+  expect(sum(after)).toBeLessThanOrEqual(sum(before) + 1e-12);
+  expect(after.candidates[0].confidence).toBeLessThanOrEqual(0.5);
   for (const c of after.candidates) {
     expect(c.confidence).toBeGreaterThanOrEqual(0);
     expect(c.confidence).toBeLessThanOrEqual(1);
@@ -119,17 +121,28 @@ describe('Kindwise follow-up question', () => {
   };
   const ids = (d: Diagnosis) => d.candidates.map((c) => c.disease?.id);
 
-  test('yes raises the yes disease over the no disease, keeping the total', () => {
+  test('yes keeps the yes disease above the no disease, never more certain than before', () => {
     const d = applyQuestionAnswer(base, 'yes');
     expect(ids(d)).toEqual(['wet', 'fungus', 'other']);
-    expect(d.candidates[0].confidence).toBeGreaterThan(0.4);
-    expect(sum(d)).toBeCloseTo(sum(base), 10);
+    expect(d.candidates[0].confidence).toBeLessThanOrEqual(0.4);
+    expect(sum(d)).toBeLessThanOrEqual(sum(base) + 1e-12);
   });
 
   test('no swaps them', () => {
     const d = applyQuestionAnswer(base, 'no');
     expect(ids(d)).toEqual(['fungus', 'wet', 'other']);
-    expect(sum(d)).toBeCloseTo(sum(base), 10);
+    expect(d.candidates[0].confidence).toBeLessThanOrEqual(0.4);
+    expect(sum(d)).toBeLessThanOrEqual(sum(base) + 1e-12);
+  });
+
+  // review.md: combining signals never raises confidence (PR #32 review).
+  test('an answer never lifts a low-confidence result over the bar, nor past 1', () => {
+    const low: Diagnosis = { ...base, candidates: [kw('wet', 0.45), kw('fungus', 0.35)] };
+    const d = applyQuestionAnswer(low, 'yes');
+    expect(d.candidates[0].confidence).toBeLessThanOrEqual(0.45);
+    expect(isLowConfidence(d)).toBe(isLowConfidence(low));
+    const sure: Diagnosis = { ...base, candidates: [kw('wet', 1), kw('fungus', 1)] };
+    for (const c of applyQuestionAnswer(sure, 'yes').candidates) expect(c.confidence).toBeLessThanOrEqual(1);
   });
 
   test('not sure, no answer, or no question changes nothing', () => {

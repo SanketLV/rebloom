@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmptyPlants } from '@/plants/components/EmptyPlants';
 import { PlantRow } from '@/plants/components/PlantRow';
 import { UnfinishedScanRow } from '@/plants/components/UnfinishedScanRow';
-import { finishPendingScans, type PendingState } from '@/scan/resumePending';
+import { finishPendingScans, type PassResult, type PendingState } from '@/scan/resumePending';
 import { removeUnfinishedScan } from '@/scan/saveScan';
 import {
   listPlants,
@@ -29,7 +29,7 @@ export default function MyPlantsScreen() {
   const insets = useSafeAreaInsets();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   // What the last pass learned about each pending scan (kindwise-diagnosis plan D4).
-  const [pending, setPending] = useState<Record<string, PendingState>>({});
+  const [pending, setPending] = useState<Record<string, PassResult>>({});
 
   // Reload whenever the tab comes into view, e.g. right after a save. Then finish scans whose call
   // was cut off, and reload if any changed. Only here: an app start sends nothing.
@@ -45,7 +45,8 @@ export default function MyPlantsScreen() {
         const states = await finishPendingScans(db);
         if (!active) return;
         setPending(states);
-        if (Object.values(states).some((state) => state === 'ready')) await read();
+        // A finished scan moves on; one that wasn't a plant is gone.
+        if (Object.values(states).some((state) => state === 'ready' || state === 'removed')) await read();
       });
       return () => {
         active = false;
@@ -53,8 +54,11 @@ export default function MyPlantsScreen() {
     }, [db]),
   );
 
-  const stateOf = (scan: UnfinishedScan): PendingState =>
-    scan.status === 'ready' ? 'ready' : (pending[scan.id] ?? 'finishing');
+  const stateOf = (scan: UnfinishedScan): PendingState => {
+    const known = pending[scan.id];
+    if (scan.status === 'ready') return 'ready';
+    return known && known !== 'removed' ? known : 'finishing';
+  };
   const open = (scan: UnfinishedScan) =>
     router.push({ pathname: '/scan/resume', params: { id: scan.id } });
   const remove = (scan: UnfinishedScan) => {
